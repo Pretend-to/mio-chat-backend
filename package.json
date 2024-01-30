@@ -1,0 +1,17 @@
+{
+  "name": "mio-chat-backend",
+  "version": "1.0.0",
+  "description": "The back-end of mio-chat.Powered by NodeJS",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test"
+  },
+  "keywords": [
+    "gpt"
+  ],
+  "author": "mio",
+  "license": "ISC",
+  "devDependencies": {
+    "eslint": "^8.56.0"
+  }
+}
