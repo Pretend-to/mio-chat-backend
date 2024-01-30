@@ -1,5 +1,6 @@
 {
   "name": "mio-chat-backend",
+  "type": "module",
   "version": "1.0.0",
   "description": "The back-end of mio-chat.Powered by NodeJS",
   "main": "index.js",
@@ -13,5 +14,9 @@
   "license": "ISC",
   "devDependencies": {
     "eslint": "^8.56.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "gpti": "2.0.0"
   }
 }
