@@ -1,16 +1,17 @@
-import { prodia } from "gpti";
-import fs from "fs";
+/* eslint-disable camelcase */
+import { prodia } from 'gpti';
+import fs from 'fs';
 
 prodia.stablediffusion({
-    prompt: "Friends gathered around a bonfire in an ancient forest. Laughter, stories, and a starry sky paint an unforgettable moment of connection beneath the shadows of the mountains.",
+    prompt: '(((best quality))),((masterpiece)),(((illustration))),(((an extremely delicate and beautiful girl))),(((1 girl))),((beautiful detailed eyes)),long hair,(((pink hair))),(high_ponytail),blue eyes,(black thighhighs),(((large breasts))),((business_suit)),((nsfw))',
     data: {
-        prompt_negative: "",
-        model: "anythingv3_0-pruned.ckpt [2700c435]",
-        sampling_method: "DPM++ 2M Karras",
-        sampling_steps: 25,
-        width: 512,
-        height: 512,
-        cfg_scale: 7
+        model: 'cuteyukimixAdorable_midchapter3.safetensors [04bdffe6]',
+        sampling_steps: 30,
+        cfg_scale: 7,
+        width: 768,
+        height: 1024,
+        sampling_method: 'DPM++ 2M Karras',
+        prompt_negative: 'EasyNegative, nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, lowquality, normal quality, jpeg artifacts, signature, watermark, username, blurry'
     }
 }, (err, data) => {
     if (err != null) {
