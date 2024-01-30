@@ -8,5 +8,5 @@ parserOptions:
 rules:
   camelcase: error
   semi: off
-  quotes: ['error', 'single']
+  quotes: ['error', 'double']
   indent: ['error', 4]
