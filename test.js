@@ -8,12 +8,12 @@ const config = {
     model: "cuteyukimixAdorable_midchapter3.safetensors [04bdffe6]"
 }
 
-// const result = await painter.draw("prodia.stablediffusion",prompt,config);
+const result = await painter.draw("prodia.stablediffusion",prompt,config);
 
-const info = painter.getEngineInfo("prodia.stablediffusion")
+// const info = painter.getEngineInfo("prodia.stablediffusion")
 
 
-console.log(info.methods);
+console.log(result);
 
 
 
