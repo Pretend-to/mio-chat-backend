@@ -5,7 +5,9 @@ const painter = new Drawer();
 const prompt = "general, (sensitive), questionable, explicit, (1girl: 1.2), (box: 1.2), (sweater: 1.1), (long_hair), (tail), (blue_sweater), (on_side), (solo), long_sleeves, animal_ears, closed_eyes, sleeves_past_wrists, off_shoulder, lying, in_box, in_container, cardboard_box, snowflakes, fur_trim, gift_box, white_hair, sleeping, bangs, off-shoulder_sweater, parted_lips, bare_shoulders, very_long_hair, blush, gift, bottomless, puffy_long_sleeves, puffy_sleeves, wolf_tail, snow, snowing, animal_ear_fluff, ahoge, hair_between_eyes, cable_knit, feet_out_of_frame, food, dog_tail,"
 
 const config = {
-    model: "cuteyukimixAdorable_midchapter3.safetensors [04bdffe6]"
+    model: "anything-v4.5-pruned.ckpt [65745d25]",
+    width:512,
+    height:512,
 }
 
 const result = await painter.draw("prodia.stablediffusion",prompt,config);
