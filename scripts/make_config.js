@@ -18,8 +18,23 @@ const list =  info.models.map(item => {
     }
 });
 
+const mjInfo = painter.getEngineInfo("pixart.a");
+
+const mjlist = mjInfo.models.map(item => {
+    item = item.split(" ")[0];
+    if (item === "(No") item = "Default";
+    item = "mj" + item;
+    return {
+        url: `http://127.0.0.1:3080/api/${item}`,
+        remark: item,
+        account_id: "",
+        account_password: "",
+        token: ""
+    }
+});
+
 const result = {
-    APIList: list,
+    APIList: list.concat(mjlist)
 }
 
 //write result to ./config.yaml

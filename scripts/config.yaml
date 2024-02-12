@@ -1,0 +1,341 @@
+APIList:
+  - url: http://127.0.0.1:3080/api/absolutereality_v181.safetensors
+    remark: absolutereality_v181.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/3Guofeng3_v34.safetensors
+    remark: 3Guofeng3_v34.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/absolutereality_V16.safetensors
+    remark: absolutereality_V16.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/amIReal_V41.safetensors
+    remark: amIReal_V41.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/analog-diffusion-1.0.ckpt
+    remark: analog-diffusion-1.0.ckpt
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/anythingv3_0-pruned.ckpt
+    remark: anythingv3_0-pruned.ckpt
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/anything-v4.5-pruned.ckpt
+    remark: anything-v4.5-pruned.ckpt
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/anythingV5_PrtRE.safetensors
+    remark: anythingV5_PrtRE.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/AOM3A3_orangemixs.safetensors
+    remark: AOM3A3_orangemixs.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/blazing_drive_v10g.safetensors
+    remark: blazing_drive_v10g.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/cetusMix_Version35.safetensors
+    remark: cetusMix_Version35.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/childrensStories_v13D.safetensors
+    remark: childrensStories_v13D.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/childrensStories_v1SemiReal.safetensors
+    remark: childrensStories_v1SemiReal.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/childrensStories_v1ToonAnime.safetensors
+    remark: childrensStories_v1ToonAnime.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/Counterfeit_v30.safetensors
+    remark: Counterfeit_v30.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/cuteyukimixAdorable_midchapter3.safetensors
+    remark: cuteyukimixAdorable_midchapter3.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/cyberrealistic_v33.safetensors
+    remark: cyberrealistic_v33.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/dalcefo_v4.safetensors
+    remark: dalcefo_v4.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/deliberate_v2.safetensors
+    remark: deliberate_v2.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/deliberate_v3.safetensors
+    remark: deliberate_v3.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/dreamlike-anime-1.0.safetensors
+    remark: dreamlike-anime-1.0.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/dreamlike-diffusion-1.0.safetensors
+    remark: dreamlike-diffusion-1.0.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/dreamlike-photoreal-2.0.safetensors
+    remark: dreamlike-photoreal-2.0.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/dreamshaper_6BakedVae.safetensors
+    remark: dreamshaper_6BakedVae.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/dreamshaper_7.safetensors
+    remark: dreamshaper_7.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/dreamshaper_8.safetensors
+    remark: dreamshaper_8.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/edgeOfRealism_eorV20.safetensors
+    remark: edgeOfRealism_eorV20.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/EimisAnimeDiffusion_V1.ckpt
+    remark: EimisAnimeDiffusion_V1.ckpt
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/elldreths-vivid-mix.safetensors
+    remark: elldreths-vivid-mix.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/epicrealism_naturalSinRC1VAE.safetensors
+    remark: epicrealism_naturalSinRC1VAE.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/ICantBelieveItsNotPhotography_seco.safetensors
+    remark: ICantBelieveItsNotPhotography_seco.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/juggernaut_aftermath.safetensors
+    remark: juggernaut_aftermath.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/lofi_v4.safetensors
+    remark: lofi_v4.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/lyriel_v16.safetensors
+    remark: lyriel_v16.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/majicmixRealistic_v4.safetensors
+    remark: majicmixRealistic_v4.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/mechamix_v10.safetensors
+    remark: mechamix_v10.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/meinamix_meinaV9.safetensors
+    remark: meinamix_meinaV9.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/meinamix_meinaV11.safetensors
+    remark: meinamix_meinaV11.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/neverendingDream_v122.safetensors
+    remark: neverendingDream_v122.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/openjourney_V4.ckpt
+    remark: openjourney_V4.ckpt
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/pastelMixStylizedAnime_pruned_fp16.safetensors
+    remark: pastelMixStylizedAnime_pruned_fp16.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/portraitplus_V1.0.safetensors
+    remark: portraitplus_V1.0.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/protogenx34.safetensors
+    remark: protogenx34.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/Realistic_Vision_V1.4-pruned-fp16.safetensors
+    remark: Realistic_Vision_V1.4-pruned-fp16.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/Realistic_Vision_V2.0.safetensors
+    remark: Realistic_Vision_V2.0.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/Realistic_Vision_V4.0.safetensors
+    remark: Realistic_Vision_V4.0.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/Realistic_Vision_V5.0.safetensors
+    remark: Realistic_Vision_V5.0.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/redshift_diffusion-V10.safetensors
+    remark: redshift_diffusion-V10.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/revAnimated_v122.safetensors
+    remark: revAnimated_v122.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/rundiffusionFX25D_v10.safetensors
+    remark: rundiffusionFX25D_v10.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/rundiffusionFX_v10.safetensors
+    remark: rundiffusionFX_v10.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/sdv1_4.ckpt
+    remark: sdv1_4.ckpt
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/v1-5-pruned-emaonly.safetensors
+    remark: v1-5-pruned-emaonly.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/v1-5-inpainting.safetensors
+    remark: v1-5-inpainting.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/shoninsBeautiful_v10.safetensors
+    remark: shoninsBeautiful_v10.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/theallys-mix-ii-churned.safetensors
+    remark: theallys-mix-ii-churned.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/timeless-1.0.ckpt
+    remark: timeless-1.0.ckpt
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/toonyou_beta6.safetensors
+    remark: toonyou_beta6.safetensors
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/mjDefault
+    remark: mjDefault
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/mjCinematic
+    remark: mjCinematic
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/mjPhotographic
+    remark: mjPhotographic
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/mjAnime
+    remark: mjAnime
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/mjManga
+    remark: mjManga
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/mjDigital
+    remark: mjDigital
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/mjPixel
+    remark: mjPixel
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/mjFantasy
+    remark: mjFantasy
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/mjNeonpunk
+    remark: mjNeonpunk
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/mj3D
+    remark: mj3D
+    account_id: ''
+    account_password: ''
+    token: ''

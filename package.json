@@ -7,7 +7,7 @@
   "scripts": {
     "start": "pm2 start ./config/pm2.json",
     "test": "node test",
-    "apconfig" : "node ./scripts/make_config.js"
+    "apconfig": "node ./scripts/make_config.js"
   },
   "keywords": [
     "gpt"
@@ -22,6 +22,7 @@
     "canvas": "^2.11.2",
     "express": "^4.18.2",
     "js-yaml": "^4.1.0",
-    "nan": "^2.18.0"
+    "nan": "^2.18.0",
+    "node-cron": "^3.0.3"
   }
 }
