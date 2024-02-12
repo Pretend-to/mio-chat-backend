@@ -218,32 +218,6 @@
                 "3D Model"
             ],
             "methods":[]
-        },
-        {
-            "name":"stablediffusion.v2",
-            "models":[],
-            "methods":[]
-        },
-        {
-            "name":"stablediffusion.xl",
-            "models":[
-                "(No style)", 
-                "Cinematic", 
-                "Photographic", 
-                "Anime", 
-                "Manga", 
-                "Digital Art", 
-                "Pixel art", 
-                "Fantasy art", 
-                "Neonpunk", 
-                "3D Model"
-            ],
-            "methods":[]
-        },
-        {
-            "name":"emi",
-            "models":["Emi"],
-            "methods":[]
         }
     ]
 }
