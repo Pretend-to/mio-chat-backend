@@ -1,11 +1,11 @@
 {
-    "apps": [
-      {
-        "name": "draw",
-        "script": "index.js",
-        "exec_mode": "fork",
-        "autorestart": true,
-        "max_memory_restart": "1G"
-      }
-    ]
-  }
+  "apps": [
+    {
+      "name": "draw",
+      "script": "index.js",
+      "exec_mode": "fork",
+      "autorestart": true,
+      "max_memory_restart": "1G"
+    }
+  ]
+}
