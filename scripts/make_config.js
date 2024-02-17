@@ -9,7 +9,6 @@ const painter = new Drawer();
 
 const list_2 = [
     "3Guofeng3_v34.safetensors [50f420de]",
-    "absolutereality_V16.safetensors [37db0fc3]",
     "anythingv3_0-pruned.ckpt [2700c435]",
     "anything-v4.5-pruned.ckpt [65745d25]",
     "anythingV5_PrtRE.safetensors [893e49b9]",
@@ -21,10 +20,7 @@ const list_2 = [
     "cuteyukimixAdorable_midchapter3.safetensors [04bdffe6]",
     "dalcefo_v4.safetensors [425952fe]",
     "pastelMixStylizedAnime_pruned_fp16.safetensors [793a26e8]",
-    "dreamshaper_6BakedVae.safetensors [114c8abb]",
     "EimisAnimeDiffusion_V1.ckpt [4f828a15]",
-    "elldreths-vivid-mix.safetensors [342d9d26]",
-    "lyriel_v16.safetensors [68fceea2]",
     "mechamix_v10.safetensors [ee685731]",
     "meinamix_meinaV9.safetensors [2ec66ab0]",
     "meinamix_meinaV11.safetensors [b56ce717]"
@@ -57,6 +53,9 @@ const list_25 = [
     "deliberate_v2.safetensors [10ec4b29]",
     "deliberate_v3.safetensors [afd9d2d4]",
     "dreamlike-anime-1.0.safetensors [4520e090]",
+    "dreamshaper_6BakedVae.safetensors [114c8abb]",
+    "elldreths-vivid-mix.safetensors [342d9d26]",
+    "lyriel_v16.safetensors [68fceea2]",
 ]
 
 const list_255 = list_25.map(item => {
@@ -71,6 +70,7 @@ const list_255 = list_25.map(item => {
 })
 
 const list_3 = [
+    "absolutereality_V16.safetensors [37db0fc3]",
     "epicrealism_naturalSinRC1VAE.safetensors [90a4c676]",
     "ICantBelieveItsNotPhotography_seco.safetensors [4e7a3dfd]",
     "juggernaut_aftermath.safetensors [5e20c455]",

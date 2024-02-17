@@ -54,11 +54,6 @@ APIList:
     account_id: ''
     account_password: ''
     token: ''
-  - url: http://127.0.0.1:3080/api/absolutereality_V16
-    remark: '[二次元][absolutereality_V16]'
-    account_id: ''
-    account_password: ''
-    token: ''
   - url: http://127.0.0.1:3080/api/anythingv3_0-pruned
     remark: '[二次元][anythingv3_0-pruned]'
     account_id: ''
@@ -114,23 +109,8 @@ APIList:
     account_id: ''
     account_password: ''
     token: ''
-  - url: http://127.0.0.1:3080/api/dreamshaper_6BakedVae
-    remark: '[二次元][dreamshaper_6BakedVae]'
-    account_id: ''
-    account_password: ''
-    token: ''
   - url: http://127.0.0.1:3080/api/EimisAnimeDiffusion_V1
     remark: '[二次元][EimisAnimeDiffusion_V1]'
-    account_id: ''
-    account_password: ''
-    token: ''
-  - url: http://127.0.0.1:3080/api/elldreths-vivid-mix
-    remark: '[二次元][elldreths-vivid-mix]'
-    account_id: ''
-    account_password: ''
-    token: ''
-  - url: http://127.0.0.1:3080/api/lyriel_v16
-    remark: '[二次元][lyriel_v16]'
     account_id: ''
     account_password: ''
     token: ''
@@ -221,6 +201,26 @@ APIList:
     token: ''
   - url: http://127.0.0.1:3080/api/dreamlike-anime-1
     remark: '[坤次元][dreamlike-anime-1]'
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/dreamshaper_6BakedVae
+    remark: '[坤次元][dreamshaper_6BakedVae]'
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/elldreths-vivid-mix
+    remark: '[坤次元][elldreths-vivid-mix]'
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/lyriel_v16
+    remark: '[坤次元][lyriel_v16]'
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/absolutereality_V16
+    remark: '[三次元][absolutereality_V16]'
     account_id: ''
     account_password: ''
     token: ''
