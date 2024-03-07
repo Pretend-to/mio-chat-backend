@@ -25,6 +25,7 @@
     "express-rate-limit": "^7.1.5",
     "js-yaml": "^4.1.0",
     "nan": "^2.18.0",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "node-fetch": "^3.3.2"
   }
 }

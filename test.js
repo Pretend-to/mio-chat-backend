@@ -1,6 +1,7 @@
 /* eslint-disable no-undef */
 // import Drawer from "./lib/draw.js";
 import api from "api";
+import { getPNGBase64 } from "./lib/imgtools.js";
 const sdk = api("@prodia/v1.3.0#be019b2kls0gqss3");
 
 
@@ -71,4 +72,6 @@ async function getJob(id) {
 }
 
 // await getJob("ca3bf262-0236-4c8c-8a1e-90e77188dda3");
-await main();
+// await main();
+const img = await getPNGBase64("https://images.prodia.xyz/7460625e-bfbe-43d8-9d1c-50f9036f1d2c.png");
+console.log(img);
