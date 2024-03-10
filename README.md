@@ -30,7 +30,7 @@ pnpm install
 
 ## 使用
 
-第一次运行会自动为你生成配置文件，画图的画需要一个Prodia的API Key，可以在[Prodia官网](https://www.prodia.com/)申请。
+第一次运行会自动为你生成配置文件，画图的画需要一个Prodia的API Key，可以在[Prodia官网](https://app.prodia.com/api/)申请。
 
 1. 使用 node 启动后端服务器：
 
