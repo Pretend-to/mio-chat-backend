@@ -2,7 +2,9 @@
 import Drawer from "../lib/draw.js";
 import yaml from "js-yaml";
 import fs from "fs";
+import config from "../lib/config.js";
 
+const port = config.config.server.port || 3080;
 const painter = new Drawer();
 
 // const info = painter.getEngineInfo("prodia.stablediffusion");
@@ -29,7 +31,7 @@ const list_2 = [
 const list_22 = list_2.map(item => {
     item = item.split(".")[0];
     return {
-        url: `http://127.0.0.1:3080/api/${item}`,
+        url: `http://127.0.0.1:${port}/api/${item}`,
         remark: "[二次元][" + item + "]",
         account_id: "",
         account_password: "",
@@ -61,7 +63,7 @@ const list_25 = [
 const list_255 = list_25.map(item => {
     item = item.split(".")[0];
     return {
-        url: `http://127.0.0.1:3080/api/${item}`,
+        url: `http://127.0.0.1:${port}/api/${item}`,
         remark: "[坤次元][" + item + "]",
         account_id: "",
         account_password: "",
@@ -82,7 +84,7 @@ const list_3 = [
 const list_33 = list_3.map(item => {
     item = item.split(".")[0];
     return {
-        url: `http://127.0.0.1:3080/api/${item}`,
+        url: `http://127.0.0.1:${port}/api/${item}`,
         remark: "[三次元][" + item + "]",
         account_id: "",
         account_password: "",
@@ -91,21 +93,6 @@ const list_33 = list_3.map(item => {
 })
 
 
-
-
-
-
-// const list =  info.models.map(item => {
-//     item = item.split(" [")[0];
-//     return {
-//         url: `http://127.0.0.1:3080/api/${item}`,
-//         remark: item,
-//         account_id: "",
-//         account_password: "",
-//         token: ""
-//     }
-// });
-
 const mjInfo = painter.getEngineInfo("pixart.a");
 
 const mjlist = mjInfo.models.map(item => {
@@ -113,7 +100,7 @@ const mjlist = mjInfo.models.map(item => {
     if (item === "(No") item = "Default";
     item = "mj" + item;
     return {
-        url: `http://127.0.0.1:3080/api/${item}`,
+        url: `http://127.0.0.1:${port}/api/${item}`,
         remark: "[PixArt][" + item + "]",
         account_id: "",
         account_password: "",
@@ -126,10 +113,10 @@ const result = {
 }
 
 //write result to ./config.yaml
-const config = yaml.dump(result);
+const file = yaml.dump(result);
 
 // creat the config.yaml file
-fs.writeFileSync("./scripts/config.yaml", config, "utf8");
+fs.writeFileSync("./scripts/config.yaml", file, "utf8");
 
 console.log("已将所有模型导出至 ./scripts/config.yaml , 复制此文件的内容粘贴到ap插件的配置文件对应部分以快捷导入。");
 
