@@ -1,0 +1,10 @@
+draw:
+  PRODIA_KEY: ""
+chat:
+  OPENAI_API_KEY: ""
+  OPENAI_BASE_URL: "https://api.openai.com"
+server:
+  PORT: 3080
+  HOST: "0.0.0.0"
+  MAX_RATE_PER_MINUTE: 100
+  SAVE_TO_FILE: false

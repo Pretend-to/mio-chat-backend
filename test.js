@@ -1,8 +1,8 @@
 /* eslint-disable no-undef */
 // import Drawer from "./lib/draw.js";
-import api from "api";
-import { getPNGBase64 } from "./lib/imgtools.js";
-const sdk = api("@prodia/v1.3.0#be019b2kls0gqss3");
+// import api from "api";
+import { getPNGBase64 } from "./lib/draw/imgtools.js";
+// const sdk = api("@prodia/v1.3.0#be019b2kls0gqss3");
 
 
 // const painter = new Drawer();
@@ -39,39 +39,39 @@ const sdk = api("@prodia/v1.3.0#be019b2kls0gqss3");
 //     model: model,
 // })
 
-async function main() {
-    sdk.auth("46aab1ff-0457-43f1-8e67-f9104e5f9e74");
-    sdk.transform({
-        imageUrl: "https://api.krumio.com/qava?qq=1099834705",
-        model: "revAnimated_v122.safetensors [3f4fefd9]",
-        prompt: "4k,high_quality"
-    })
-        .then(async ({ data }) => {
-            console.log(data);
-            const result = await getJob(data.job);
-            console.log(result);
+// async function main() {
+//     sdk.auth("46aab1ff-0457-43f1-8e67-f9104e5f9e74");
+//     sdk.transform({
+//         imageUrl: "https://api.krumio.com/qava?qq=1099834705",
+//         model: "revAnimated_v122.safetensors [3f4fefd9]",
+//         prompt: "4k,high_quality"
+//     })
+//         .then(async ({ data }) => {
+//             console.log(data);
+//             const result = await getJob(data.job);
+//             console.log(result);
             
-        })
-        .catch(err => console.error(err));
-}
+//         })
+//         .catch(err => console.error(err));
+// }
 
-async function getJob(id) {
-    sdk.auth("46aab1ff-0457-43f1-8e67-f9104e5f9e74");
-    return new Promise((resolve) => {
-        const checkStatus = async () => {
-            const { data } = await sdk.getJob({ jobId: id });
-            console.log(data);
-            if (data.status === "succeeded") {
-                resolve(data);
-            } else {
-                setTimeout(checkStatus, 250);
-            }
-        };
-        checkStatus();
-    });
-}
+// async function getJob(id) {
+//     sdk.auth("46aab1ff-0457-43f1-8e67-f9104e5f9e74");
+//     return new Promise((resolve) => {
+//         const checkStatus = async () => {
+//             const { data } = await sdk.getJob({ jobId: id });
+//             console.log(data);
+//             if (data.status === "succeeded") {
+//                 resolve(data);
+//             } else {
+//                 setTimeout(checkStatus, 250);
+//             }
+//         };
+//         checkStatus();
+//     });
+// }
 
-// await getJob("ca3bf262-0236-4c8c-8a1e-90e77188dda3");
-// await main();
+// // await getJob("ca3bf262-0236-4c8c-8a1e-90e77188dda3");
+// // await main();
 const img = await getPNGBase64("https://images.prodia.xyz/7460625e-bfbe-43d8-9d1c-50f9036f1d2c.png");
 console.log(img);

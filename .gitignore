@@ -2,5 +2,6 @@
 /lib/resources
 /output/*
 /backup/*
+/config/config/config.yaml
 
 /.vscode
