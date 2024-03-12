@@ -92,6 +92,29 @@ const list_33 = list_3.map(item => {
     }
 })
 
+const list_xl = [
+    "animagineXLV3_v30.safetensors [75f2f05b]",
+    "dreamshaperXL10_alpha2.safetensors [c8afe2ef]",
+    "dynavisionXL_0411.safetensors [c39cc051]",
+    "juggernautXL_v45.safetensors [e75f5471]",
+    "realismEngineSDXL_v10.safetensors [af771c3f]",
+    "realvisxlV40.safetensors [f7fdcb51]",
+    "sd_xl_base_1.0.safetensors [be9edd61]",
+    "sd_xl_base_1.0_inpainting_0.1.safetensors [5679a81a]",
+    "turbovisionXL_v431.safetensors [78890989]"
+]
+
+const list_xll = list_xl.map(item => {
+    item = item.split(".")[0];
+    item = "xl" + item;
+    return {
+        url: `http://127.0.0.1:${port}/api/${item}`,
+        remark: "[SDXL][" + item + "]",
+        account_id: "",
+        account_password: "",
+        token: ""
+    }
+})
 
 const mjInfo = painter.getEngineInfo("pixart.a");
 
@@ -109,7 +132,7 @@ const mjlist = mjInfo.models.map(item => {
 });
 
 const result = {
-    APIList: mjlist.concat(list_22, list_255, list_33)
+    APIList: mjlist.concat(list_22, list_255, list_33, list_xll)
 }
 
 //write result to ./config.yaml
