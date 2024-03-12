@@ -8,3 +8,6 @@ server:
   HOST: "0.0.0.0"
   MAX_RATE_PER_MINUTE: 100
   SAVE_TO_FILE: false
+proxy:
+  # 用来反代 https://images.prodia.xyz 的地址
+  PROXY_PASS: ""
