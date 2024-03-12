@@ -254,3 +254,48 @@ APIList:
     account_id: ''
     account_password: ''
     token: ''
+  - url: http://127.0.0.1:3080/api/xlanimagineXLV3_v30
+    remark: '[SDXL][xlanimagineXLV3_v30]'
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/xldreamshaperXL10_alpha2
+    remark: '[SDXL][xldreamshaperXL10_alpha2]'
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/xldynavisionXL_0411
+    remark: '[SDXL][xldynavisionXL_0411]'
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/xljuggernautXL_v45
+    remark: '[SDXL][xljuggernautXL_v45]'
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/xlrealismEngineSDXL_v10
+    remark: '[SDXL][xlrealismEngineSDXL_v10]'
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/xlrealvisxlV40
+    remark: '[SDXL][xlrealvisxlV40]'
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/xlsd_xl_base_1
+    remark: '[SDXL][xlsd_xl_base_1]'
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/xlsd_xl_base_1
+    remark: '[SDXL][xlsd_xl_base_1]'
+    account_id: ''
+    account_password: ''
+    token: ''
+  - url: http://127.0.0.1:3080/api/xlturbovisionXL_v431
+    remark: '[SDXL][xlturbovisionXL_v431]'
+    account_id: ''
+    account_password: ''
+    token: ''
