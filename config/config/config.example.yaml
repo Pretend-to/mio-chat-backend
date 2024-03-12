@@ -10,4 +10,4 @@ server:
   SAVE_TO_FILE: false
 proxy:
   # 用来反代 https://images.prodia.xyz 的地址
-  PROXY_PASS: ""
+  PROXY_PASS: "https://api.krumio.com/prodia"
