@@ -47,7 +47,7 @@ PS: 对于 Bot 建议搭配[云崽](https://github.com/yoimiya-kokomi/Miao-Yunza
 
 ```bash
 # 在本项目的根目录运行
-npm run apconnfig
+npm run apconfig
 ```
 
 2. 配置好云崽并且安装 ap 后，先跟 bot 发一句`#ap添加接口https://666备注测试`以生成配置文件。然后再到ap插件的 /config/config/config.yaml 中找到与本项目生成配置文件对应的部分(以 `APIList: `开头),进行替换。
