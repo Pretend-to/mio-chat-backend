@@ -51,7 +51,7 @@ npm start
 ## Prodia 画图服务器在云崽的使用
 PS: 对于 Bot 建议搭配[云崽](https://github.com/yoimiya-kokomi/Miao-Yunzai)+我魔改的[ap-plugin](https://github.com/Pretend-to/ap-plugin/)食用。
 
-1. 生成ap配置文件。没问题的话会在 scripts 目录下生成 config.yaml 文件，全部复制到剪贴板。
+1. 生成ap配置文件。没问题的话会在 scripts 目录下生成 config.yaml 文件，全部复制到剪贴板。(或者直接白嫖我的，在[Wiki-接口列表](https://github.com/Pretend-to/mio-chat-backend/wiki/Prodia%E2%80%90AP%E6%8E%A5%E5%8F%A3%E5%88%97%E8%A1%A8))
 
 ```bash
 # 在本项目的根目录运行
