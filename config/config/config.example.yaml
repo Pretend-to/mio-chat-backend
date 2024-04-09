@@ -1,3 +1,4 @@
+debug: false
 draw:
   PRODIA_KEY: ""
 chat:
@@ -11,3 +12,11 @@ server:
 proxy:
   # 用来反代 https://images.prodia.xyz 的地址
   PROXY_PASS: "https://api.krumio.com/prodia"
+onebot:
+  # 反向 ws 链接地址
+  REVERSE_WS_URL: ""
+  # 机器人 QQ 号
+  BOT_QQ: ''
+  # 主人 QQ 号
+  MASTER_QQ: ''
+

@@ -10,3 +10,4 @@ rules:
   semi: off
   quotes: ['error', 'double']
   indent: ['error', 4]
+  no-undef: off
