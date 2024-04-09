@@ -1,8 +1,8 @@
 {
-  "name": "mio-chat-backend",
+  "name": "mio-chat",
   "type": "module",
-  "version": "1.0.0",
-  "description": "The back-end of mio-chat.Powered by NodeJS",
+  "version": "0.0.1",
+  "description": "AI-Powered chat platform,support ONEBOT v11",
   "main": "index.js",
   "scripts": {
     "start": "pm2 start ./config/pm2.json",
@@ -25,6 +25,7 @@
     "js-yaml": "^4.1.0",
     "nan": "^2.18.0",
     "node-cron": "^3.0.3",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "ws": "^8.16.0"
   }
 }
