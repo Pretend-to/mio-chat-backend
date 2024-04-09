@@ -1,14 +1,18 @@
 debug: false
 draw:
   PRODIA_KEY: ""
+  # 用来反代 https://images.prodia.xyz 的地址
+  REVERSE_PROXY_URL: "https://api.krumio.com/prodia"
+  # 是否把画图结果保存到文件
+  SAVE_TO_FILE: false
 chat:
   OPENAI_API_KEY: ""
   OPENAI_BASE_URL: "https://api.openai.com"
 server:
   PORT: 3080
   HOST: "0.0.0.0"
+  # 单独 IP 每分钟最大请求数
   MAX_RATE_PER_MINUTE: 100
-  SAVE_TO_FILE: false
 proxy:
   # 用来反代 https://images.prodia.xyz 的地址
   PROXY_PASS: "https://api.krumio.com/prodia"
@@ -19,4 +23,3 @@ onebot:
   BOT_QQ: ''
   # 主人 QQ 号
   MASTER_QQ: ''
-
