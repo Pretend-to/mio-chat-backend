@@ -9,6 +9,8 @@
   构建基本框架。
 - 2023-3-10
   完善了基于 Prodia 的 API 接口，画图功能应该没问题了。前端还在重构中，所以现在也只能当个画图服务器用,暂时可以无限制嫖几十个sd高速接口。
+- 2023-4-10
+  继续完善后端，对于云崽 Lain 的对接基本完成，遗憾的是 Lain 跑路了。但是总是还有一些 fork 的，想用也能用。后续可能会顺带做一个云崽的插件？？？
 
 
 ## 安装
@@ -43,6 +45,10 @@ node index
 # 后台运行(基于 pm2)
 npm start
 ```
+
+2. 修改配置文件，按提示修改即可。
+   
+## Prodia 画图服务器在云崽的使用
 PS: 对于 Bot 建议搭配[云崽](https://github.com/yoimiya-kokomi/Miao-Yunzai)+我魔改的[ap-plugin](https://github.com/Pretend-to/ap-plugin/)食用。
 
 1. 生成ap配置文件。没问题的话会在 scripts 目录下生成 config.yaml 文件，全部复制到剪贴板。
