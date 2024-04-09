@@ -1,4 +1,4 @@
-import { startServer } from "./lib/server.js";
+import { startServer } from "./lib/server/http.js";
 import taskScheduler from "./lib/corn.js";
 import { statusCheck } from "./lib/check.js";
 

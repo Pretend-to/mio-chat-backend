@@ -141,5 +141,5 @@ const file = yaml.dump(result);
 // creat the config.yaml file
 fs.writeFileSync("./scripts/config.yaml", file, "utf8");
 
-console.log("已将所有模型导出至 ./scripts/config.yaml , 复制此文件的内容粘贴到ap插件的配置文件对应部分以快捷导入。");
+logger.debug("已将所有模型导出至 ./scripts/config.yaml , 复制此文件的内容粘贴到ap插件的配置文件对应部分以快捷导入。");
 
