@@ -2,7 +2,7 @@
 
 主要是个AI平台，会对接一些著名的bot框架兼容原生态圈。
 
-企鹅群: 798543340
+[Mio-Chat 前端](https://github.com/Pretend-to/mio-chat-frontend)
 
 ## 日志
 - 2023-3-01
