@@ -1,0 +1,62 @@
+{
+    request_id: 1234567890,
+    protocol: "onebot",
+    data：{
+        id: "1234567890",
+        type: "message"，
+        content: [
+            {
+                type: "text",
+                data: {
+                    text: "Hello, world!"
+                }
+            },
+            {
+                type: "image",
+                data: {
+                    image: "https://example.com/image.jpg"
+                }
+            }
+        ]
+    }
+}
+
+{
+    request_id: 1234567890,
+    code: 0,
+    message: "success",
+    data：{
+
+    }
+
+}
+
+/api/system/login
+{   
+    protocol: "system",
+    type: "login",
+    request_id: 1234567890,
+    data： {
+        mio-chat-id: "1234567890",
+        mio-chat-token: "1234567890"
+    }
+}
+{
+    request_id: 1234567890,
+    code: 0,
+    message: "success",
+    data：{
+        is_admin: true,
+        admin_qq: "123456789",
+        bot_qq: "987654321"
+    }
+}
+{
+    request_id: 1234567890,
+    code: 1,
+    message: "failed",
+    data：{
+        reason: "invalid code"
+    }
+}
+

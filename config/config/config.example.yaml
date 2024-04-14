@@ -1,25 +1,27 @@
 debug: false
 draw:
-  PRODIA_KEY: ""
+  prodia_key: ""
   # 用来反代 https://images.prodia.xyz 的地址
-  REVERSE_PROXY_URL: "https://api.krumio.com/prodia"
+  reverse_proxy_url: "https://api.krumio.com/prodia"
   # 是否把画图结果保存到文件
-  SAVE_TO_FILE: false
+  stroge: false
 chat:
-  OPENAI_API_KEY: ""
-  OPENAI_BASE_URL: "https://api.openai.com"
+  openai_api_key: ""
+  openai_base_url: "https://api.openai.com"
 server:
-  PORT: 3080
-  HOST: "0.0.0.0"
+  port: 3080
+  host: "0.0.0.0"
   # 单独 IP 每分钟最大请求数
-  MAX_RATE_PER_MINUTE: 100
-proxy:
-  # 用来反代 https://images.prodia.xyz 的地址
-  PROXY_PASS: "https://api.krumio.com/prodia"
+  max_rate_pre_min: 100
 onebot:
   # 反向 ws 链接地址
-  REVERSE_WS_URL: ""
+  reverse_ws_url: ""
   # 机器人 QQ 号
-  BOT_QQ: ''
+  bot_qq: ''
   # 主人 QQ 号
-  MASTER_QQ: ''
+  admin_qq: ''
+web:
+  # 管理员访问码
+  admin_code: ""
+  # 普通用户访问码,留空则允许游客登陆
+  user_code: ""
