@@ -1,0 +1,1 @@
+import{_ as e,a as s,o,b as t}from"./index-Cn9eLi52.js";const c={},n={class:"blank-view"},a=t("h1",null,"Blank View",-1),_=[a];function r(i,l){return o(),s("div",n,_)}const f=e(c,[["render",r]]);export{f as default};

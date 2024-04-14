@@ -4,7 +4,7 @@ import yaml from "js-yaml";
 import fs from "fs";
 import config from "../lib/config.js";
 
-const port = config.config.server.port || 3080;
+const port = config.server.port || 3080;
 const painter = new Drawer();
 
 // const info = painter.getEngineInfo("prodia.stablediffusion");
