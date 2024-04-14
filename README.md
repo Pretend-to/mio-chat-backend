@@ -3,6 +3,7 @@
 主要是个AI平台，会对接一些著名的bot框架兼容原生态圈。
 
 [Mio-Chat 前端](https://github.com/Pretend-to/mio-chat-frontend)
+[qq 群](https://qm.qq.com/q/Eqv9Z6iSB4)
 
 ## 日志
 - 2023-3-01
