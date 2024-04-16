@@ -1,3 +1,4 @@
+/api/onebot/message
 {
     request_id: 1234567890,
     protocol: "onebot",
@@ -20,15 +21,50 @@
         ]
     }
 }
-
 {
     request_id: 1234567890,
     code: 0,
     message: "success",
     data：{
-
+        message_id: "1234567890"
     }
 
+}
+
+/api/onebot/del_message
+{
+    request_id: 1234567890,
+    protocol: "onebot",
+    data：{
+        id: "1234567890",
+        type: "message",
+        content:{
+            message_id: "1234567890"
+        }
+    }
+}
+{
+    request_id: 1234567890,
+    code: 0,
+    message: "success"
+}
+
+/api/onebot/forward_msg
+{
+    request_id: 1234567890,
+    protocol: "onebot",
+    data：{
+        id: "1234567890",
+        type:"forward_msg"
+        content:[
+            
+        ]
+    }
+}
+{
+    request_id: 1234567890,
+    code: 0,
+    message: "success"
 }
 
 /api/system/login
@@ -57,6 +93,24 @@
     message: "failed",
     data：{
         reason: "invalid code"
+    }
+}
+
+/api/system/heartbeat
+{   
+    protocol: "system",
+    type: "heartbeat",
+    request_id: 1234567890,
+    data： {
+        timestmp:
+    }
+}
+{   
+    request_id: 1234567890,
+    code: 0,
+    message: "success",
+    data： {
+        delay:
     }
 }
 

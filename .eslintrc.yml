@@ -7,7 +7,7 @@ parserOptions:
   sourceType: module
 rules:
   camelcase: error
-  semi: off
-  quotes: ['error', 'double']
-  indent: ['error', 4]
-  no-undef: off
+  semi: ['error', 'never']
+  quotes: ['error', 'single']
+  indent: ['error', 2 ,{ "SwitchCase": 1 }]
+  no-undef: error

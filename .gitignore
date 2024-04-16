@@ -4,6 +4,7 @@
 /backup/*
 /config/config/config.yaml
 
+/.VSCodeCounter
 /.vscode
 
 test.js
