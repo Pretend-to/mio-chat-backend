@@ -5,7 +5,8 @@
     data：{
         id: "1234567890",
         type: "message"，
-        content: [
+        content: {
+            message:[
             {
                 type: "text",
                 data: {
@@ -19,6 +20,8 @@
                 }
             }
         ]
+        message_id: 1234567890
+        }
     }
 }
 {
@@ -26,7 +29,7 @@
     code: 0,
     message: "success",
     data：{
-        message_id: "1234567890"
+        message_id: 1234567890
     }
 
 }
@@ -57,7 +60,10 @@
         id: "1234567890",
         type:"forward_msg"
         content:[
-            
+            message_id: 1234567890,
+            message: [
+                
+            ]
         ]
     }
 }
