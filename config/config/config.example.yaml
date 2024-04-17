@@ -13,6 +13,7 @@ server:
   host: "0.0.0.0"
   # 单独 IP 每分钟最大请求数
   max_rate_pre_min: 100
+  enable_sd_server: true
 onebot:
   # 反向 ws 链接地址
   reverse_ws_url: ""
