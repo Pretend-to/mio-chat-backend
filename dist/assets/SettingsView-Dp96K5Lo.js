@@ -1,1 +1,0 @@
-import{_ as s,c as n,a,b as o,o as r}from"./index-CkDbp715.js";const c={name:"SettingsView",data(){return{}},methods:{reset(){n.reset()}}},i={id:"settings-view"};function d(_,e,p,f,l,t){return r(),a("div",i,[o("button",{onClick:e[0]||(e[0]=m=>t.reset())},"点我重置")])}const v=s(c,[["render",d],["__scopeId","data-v-ca14471f"]]);export{v as default};
