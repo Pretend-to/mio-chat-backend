@@ -2,8 +2,11 @@
 
 主要是个AI平台，会对接一些著名的bot框架兼容原生态圈。
 
-[Mio-Chat 前端](https://github.com/Pretend-to/mio-chat-frontend)
-[qq 群](https://qm.qq.com/q/Eqv9Z6iSB4)
+前端部分：[Mio-Chat 前端](https://github.com/Pretend-to/mio-chat-frontend)
+
+QQ交流群：[qq 群](https://qm.qq.com/q/Eqv9Z6iSB4)
+
+预览地址：[Mio-Chat](https://ai.krumio.com)
 
 ## 日志
 - 2023-3-01
