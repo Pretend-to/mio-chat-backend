@@ -1,0 +1,1 @@
+import{_ as e,a as o,o as s,b as t}from"./index-BZjjj696.js";import"//at.alicdn.com/t/c/font_4459318_ioeido0jcz.js";const c={},n={class:"blank-view"},a=t("h1",null,"Blank View",-1),_=[a];function r(i,l){return s(),o("div",n,_)}const h=e(c,[["render",r]]);export{h as default};
