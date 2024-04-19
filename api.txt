@@ -5,7 +5,7 @@
     data：{
         id: "1234567890",
         type: "message"，
-        content: {
+        data: {
             message:[
             {
                 type: "text",
