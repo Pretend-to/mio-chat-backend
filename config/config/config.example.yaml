@@ -5,9 +5,11 @@ draw:
   reverse_proxy_url: "https://api.krumio.com/prodia"
   # 是否把画图结果保存到文件
   stroge: false
-chat:
+openai:
   openai_api_key: ""
   openai_base_url: "https://api.openai.com"
+  guest_engines:
+    - gpt
 server:
   port: 3080
   host: "0.0.0.0"
