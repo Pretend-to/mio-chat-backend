@@ -1,0 +1,1 @@
+import{_ as e,a as c,o}from"./index-CzTNpfWp.js";import"//at.alicdn.com/t/c/font_4459318_ioeido0jcz.js";const t={},a={class:"blank-view"};function s(n,_){return o(),c("div",a)}const i=e(t,[["render",s],["__scopeId","data-v-73dfdbd0"]]);export{i as default};
