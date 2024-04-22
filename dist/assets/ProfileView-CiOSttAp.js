@@ -1,0 +1,1 @@
+import{_ as e,a as o,o as r}from"./index-Dpl8bIm-.js";import"//at.alicdn.com/t/c/font_4459318_ioeido0jcz.js";const t={},c={id:"profile"};function n(s,_){return r(),o("div",c)}const f=e(t,[["render",n]]);export{f as default};
