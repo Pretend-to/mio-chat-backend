@@ -18,7 +18,7 @@ QQ交流群：[qq 群](https://qm.qq.com/q/Eqv9Z6iSB4)
 - 2024-4-23
   后端基本接入OpenAI。昨天还是前天，与诸位队友用这个项目参加了某计算机设计大赛。OpenAI对话以及流式响应基于js异步迭代器实现，但还是存在一些问题。
 - 2024-4-24(5.14 补档)
-  跟 [NextWeb](https://github.com/ChatGPTNextWeb/ChatGPT-Next-Web) 作者 [Yda](https://github.com/Yidadaa) 先生在半夜打了一小时视频，在Yda哥的帮助下帮我把流式问题解决了，感谢Yda。
+  跟 [NextWeb](https://github.com/ChatGPTNextWeb/ChatGPT-Next-Web) 作者 [Yda](https://github.com/Yidadaa) 先生在半夜打了一小时视频，在Yda哥的帮助下把流式问题解决了，感谢Yda。
 - 2024-5-14
   嗯，之前的日期年份都误写成2023了qwq。最近考试周挺忙的没啥更新，之后会补补联系人管理界面啥的。
 
