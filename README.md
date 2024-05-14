@@ -9,15 +9,18 @@ QQ交流群：[qq 群](https://qm.qq.com/q/Eqv9Z6iSB4)
 预览地址：[Mio-Chat](https://ai.krumio.com)
 
 ## 日志
-- 2023-3-01
+- 2024-3-01
   构建基本框架。
-- 2023-3-10
+- 2024-3-10
   完善了基于 Prodia 的 API 接口，画图功能应该没问题了。前端还在重构中，所以现在也只能当个画图服务器用,暂时可以无限制嫖几十个sd高速接口。
-- 2023-4-10
+- 2024-4-10
   继续完善后端，对于云崽 Lain 的对接基本完成，遗憾的是 Lain 跑路了。但是总是还有一些 fork 的，想用也能用。后续可能会顺带做一个云崽的插件？？？
-- 2023-4-23
+- 2024-4-23
   后端基本接入OpenAI。昨天还是前天，与诸位队友用这个项目参加了某计算机设计大赛。OpenAI对话以及流式响应基于js异步迭代器实现，但还是存在一些问题。
-
+- 2024-4-24(5.14 补档)
+  跟 [NextWeb](https://github.com/ChatGPTNextWeb/ChatGPT-Next-Web) 作者 [Yda](https://github.com/Yidadaa) 先生在半夜打了一小时视频，在Yda哥的帮助下帮我把流式问题解决了，感谢Yda。
+- 2024-5-14
+  嗯，之前的日期年份都误写成2023了qwq。最近考试周挺忙的没啥更新，之后会补补联系人管理界面啥的。
 
 ## 安装
 
@@ -33,7 +36,7 @@ git clone https://github.com/Pretend-to/mio-chat-backend
 cd mio-chat-backend
 ```
 
-3. 安装依赖项：
+3. 安装依赖项：(请先确保你安装了NodeJS与Pnpm)
 
 ```bash
 pnpm install
