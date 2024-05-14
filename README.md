@@ -73,6 +73,11 @@ npm run apconfig
    1. 多图由轮询改为并发请求，因为 prodia 与本地部署 sd 不同，具有高并发的特性;
    2. 增加了绘制多图的方式，`#绘图xxx 接口1-16 `或者 `接口1，5，6 `都是可以的(两种写法不可混用)，也可以加张数如` #绘图xxx 接口23，15 2张 `实际张数则是张数 * 接口数，不会超出20张。
 
+## 关联项目
+[NextWeb](https://github.com/ChatGPTNextWeb/ChatGPT-Next-Web) by [Yda](https://github.com/Yidadaa)
+[云崽相关内容](https://gitee.com/yhArcadia/Yunzai-Bot-plugins-index) by 云崽社区
+[chatgpt-mirai-qq-bot](https://github.com/lss233/chatgpt-mirai-qq-bot) by [lss233](https://github.com/lss233)
+
 ## 贡献
 
 欢迎贡献！如果您发现任何错误或有改进建议，请提出问题或提交拉取请求。
