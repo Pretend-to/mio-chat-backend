@@ -7,6 +7,8 @@
 /.VSCodeCounter
 /.vscode
 
+/plugins/*
+
 test.js
 image.jpg
 imageBase64.txt
