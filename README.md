@@ -1,4 +1,4 @@
-# Mio-Chat-Backend
+8# Mio-Chat-Backend
 
 主要是个AI平台，兼容OpenAI与**部分**Onebot协议v11。兼容原生态圈。
 
@@ -20,7 +20,7 @@ QQ交流群：[qq 群](https://qm.qq.com/q/Eqv9Z6iSB4)
 - 2024-4-24(5.14 补档)
   跟 [NextWeb](https://github.com/ChatGPTNextWeb/ChatGPT-Next-Web) 作者 [Yda](https://github.com/Yidadaa) 先生在半夜打了一小时视频，在Yda哥的帮助下把流式问题解决了，感谢Yda。
 - 2024-5-14
-  嗯，之前的日期年份都误写成2023了qwq。最近考试周挺忙的没啥更新，之后会补补联系人管理界面啥的。
+  没更新但是我突然想写点日志。最近考试周挺忙的没啥更新，之后会补补联系人管理界面啥的。
 
 ## 安装
 
@@ -52,7 +52,7 @@ pnpm install
 # 如果你要前台调试
 node index
 # 后台运行(基于 pm2)
-npm start
+npm run start
 ```
 
 2. 修改配置文件，按提示修改即可。
