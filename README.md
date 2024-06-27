@@ -21,7 +21,7 @@ QQ交流群：[qq 群](https://qm.qq.com/q/Eqv9Z6iSB4)
   跟 [NextWeb](https://github.com/ChatGPTNextWeb/ChatGPT-Next-Web) 作者 [Yda](https://github.com/Yidadaa) 先生在半夜打了一小时视频，在Yda哥的帮助下把流式问题解决了，感谢Yda。
 - 2024-5-14
   没更新但是我突然想写点日志。最近考试周挺忙的没啥更新，之后会补补联系人管理界面啥的。
-- 2024-5-14
+- 2024-6-27
   没更新但是我突然想写点日志。最近考试周挺忙的没啥更新，之后会补补联系人管理界面啥的。x2
 
 ## 安装
