@@ -6,15 +6,19 @@ draw:
   # 是否把画图结果保存到文件
   stroge: false
 openai:
+  # openai api key
   openai_api_key: ""
-  openai_base_url: "https://api.openai.com"
+  # openai 基础地址
+  openai_base_url: "https://api.openai.com/v1"
+  # 允许的用户使用的模型
   guest_engines:
-    - gpt
+    - "gpt"
 server:
   port: 3080
   host: "0.0.0.0"
   # 单独 IP 每分钟最大请求数
   max_rate_pre_min: 100
+  # 是否开启 sd 绘图服务器
   enable_sd_server: true
 onebot:
   # 反向 ws 链接地址
@@ -28,3 +32,9 @@ web:
   admin_code: ""
   # 普通用户访问码,留空则允许游客登陆
   user_code: ""
+  # 备案号
+  beian: ""
+  # 是否默认全屏模式
+  full_screen: true
+  # 网页标题
+  title: "蜜柚——MioChat"

@@ -1,7 +1,7 @@
 {
   "apps": [
     {
-      "name": "draw",
+      "name": "Mio-Chat",
       "script": "index.js",
       "exec_mode": "fork",
       "autorestart": true,
