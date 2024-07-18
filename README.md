@@ -49,7 +49,7 @@ pnpm install
 
 ```bash
 # 如果你要前台调试
-node index
+node app
 # 后台运行(基于 pm2)
 npm run start
 ```
