@@ -1,50 +1,43 @@
 import { MioFunction,Param } from '../../lib/functions.js'
 
-export class drawPainting extends MioFunction {
+export class manageLED extends MioFunction {
   constructor() {
     super({
-      name: 'drawPainting',
-      description: 'A tool that help you to draw a painting,you can adjust the style and orientation of the painting',
+      name: 'manageLED',
+      description: 'A tool that help you to manage some LED',
       params: [
         new Param({
-            name: 'prompt',
+            name: 'color',
             type:'string',
-            description: 'the prompt of the painting,the prompt must be in english',
-
-            required: true
+            description: 'the color of the LED that you wanna manage',
+            required: true,
+            enumeration:['red','green']
         }),
         new Param({
-            name:'style',
+            name:'action',
             type:'string',
-            description: 'the style of the painting',
-            required: false,
-            enumeration:['anime','realistic']
-        }),
-        new Param({
-            name:'orientation',
-            type:'string',
-            description: 'the orientation of the painting',
-            required: false,
-            enumeration:['vertical','horizontal','square']
+            description: 'the status that you wanna the LED to be',
+            required: true,
+            enumeration:['on','off']
         }),
       ],
     })
-    this.func = this.drawPainting
+    this.func = this.manageLED
   }
 
-  async drawPainting(e) {
-    const config = e.params
-    const painter = new Drawer()
+  async manageLED(e) {
 
-    const drawConfig = {
-        model: config.style == 'anime' ? 'animagineXLV3_v30.safetensors [75f2f05b]' : 'devlishphotorealism_sdxl15.safetensors [77cba69f]',
-        width: config.orientation =='vertical'? 1 : 
-            config.orientation =='horizontal'? 2 : 1 ,
-        height: config.orientation =='vertical'? 2 : 
-            config.orientation =='horizontal'? 1 : 1 ,
-    }
+    const baseUrl = 'http://4.raspi.com:5000'
+    const color = e.params.color
+    const action = e.params.action
 
-    const result = await painter.draw('prodia.xl',config.prompt,drawConfig)
+    const path = `/${color}/${action}`
+
+    const response = await fetch(`${baseUrl}${path}`)
+
+    logger.debug('请求地址：' + `${baseUrl}${path}`)
+
+    const result = await response.json()
 
     return result
   }
