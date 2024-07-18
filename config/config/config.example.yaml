@@ -1,9 +1,12 @@
 debug: false
 draw:
+  # 是否开启 sd 绘图服务器
+  enable_sd_server: true
+  # prodia api key
   prodia_key: ""
   # 用来反代 https://images.prodia.xyz 的地址
   reverse_proxy_url: "https://api.krumio.com/prodia"
-  # 是否把画图结果保存到文件
+  # 是否把画图结果保存到本地
   stroge: false
 openai:
   # openai api key
@@ -18,8 +21,7 @@ server:
   host: "0.0.0.0"
   # 单独 IP 每分钟最大请求数
   max_rate_pre_min: 100
-  # 是否开启 sd 绘图服务器
-  enable_sd_server: true
+
 onebot:
   # 反向 ws 链接地址
   reverse_ws_url: ""
