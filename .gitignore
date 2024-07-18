@@ -8,6 +8,9 @@
 /.vscode
 
 /plugins/*
+!/plugins/example/
+!/plugins/amap-plugin/
+!/plugins/prodia-plugin/
 
 test.js
 image.jpg

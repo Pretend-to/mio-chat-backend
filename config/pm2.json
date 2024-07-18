@@ -2,7 +2,7 @@
   "apps": [
     {
       "name": "Mio-Chat",
-      "script": "index.js",
+      "script": "app.js",
       "exec_mode": "fork",
       "autorestart": true,
       "max_memory_restart": "1G"
