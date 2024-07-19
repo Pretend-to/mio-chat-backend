@@ -11,7 +11,14 @@ export class getIP extends MioFunction {
   }
 
   async getIP(e) {
-    const ip = e.user.IP
+    let ip = e.user.ip
+    if(ip == '127.0.0.1') {
+      // 从外部API获取本机ip
+      const response = await fetch('https://api.ipify.org?format=json')
+      const data = await response.json()
+      ip = data.ip
+    }
+
     return ip
   }
 }
