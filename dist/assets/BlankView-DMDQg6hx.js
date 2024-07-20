@@ -1,1 +1,0 @@
-import{_ as e,a as c,o as a}from"./index-u0AnPEp3.js";const o={},s={class:"blank-view"};function t(n,_){return a(),c("div",s)}const d=e(o,[["render",t],["__scopeId","data-v-73dfdbd0"]]);export{d as default};
