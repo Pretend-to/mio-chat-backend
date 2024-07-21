@@ -1,6 +1,6 @@
 const config = {
   baseUrl: 'https://restapi.amap.com/v3',
-  apiKey: '98af9bba2e5bf960c64811bb2481e0e8',
+  apiKey: '',
 }
 
 export default config
