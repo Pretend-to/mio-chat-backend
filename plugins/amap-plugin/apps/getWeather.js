@@ -28,9 +28,17 @@ export class getWeather extends MioFunction {
       const response = await fetch(`${baseUrl}${path}?city=${adcode}&key=${apiKey}&extensions=all`)
       const data = await response.json()
       if (data.status === 0) throw new Error('获取天气失败' + data)
+<<<<<<< HEAD
       return data
 
     } catch (error) {
+=======
+      logger.debug()
+      return data
+
+    } catch (error) {
+      logger.error(error)
+>>>>>>> dev
       e.error(error)
     }
   }
