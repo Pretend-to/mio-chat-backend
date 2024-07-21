@@ -8,18 +8,19 @@ QQ交流群：[qq 群](https://qm.qq.com/q/Eqv9Z6iSB4)
 
 预览地址：[Mio-Chat](https://ai.krumio.com)
 
-## 日志
-- 2024-3-01
-  构建基本框架。
-- 2024-3-10
-  完善了基于 Prodia 的 API 接口，画图功能应该没问题了。前端还在重构中，所以现在也只能当个画图服务器用,暂时可以无限制嫖几十个sd高速接口。
-- 2024-4-10
-  继续完善后端，对于云崽 Lain 的对接基本完成，遗憾的是 Lain 跑路了。但是总是还有一些 fork 的，想用也能用。后续可能会顺带做一个云崽的插件？？？
-- 2024-4-23
-  后端基本接入OpenAI。昨天还是前天，与诸位队友用这个项目参加了某计算机设计大赛。OpenAI对话以及流式响应基于js异步迭代器实现，但还是存在一定问题。
-- 2024-4-24(5.14 补档)
-  跟 [NextWeb](https://github.com/ChatGPTNextWeb/ChatGPT-Next-Web) 作者 [Yda](https://github.com/Yidadaa) 先生在半夜打了一小时视频，在Yda哥的帮助下把流式问题解决了，感谢Yda。
+## 预览
+![Mio-Chat](https://api.krumio.com/static/images/miopriview1.png)
+![Mio-Chat](https://api.krumio.com/static/images/miopriview2.png)
+![Mio-Chat](https://api.krumio.com/static/images/miopreview3.png)
 
+## 特性
+
+- [X] 支持 OpenAI 协议的对话功能
+- [X] 支持 OpenAI 协议的 FunctionCall(ToolCall) 功能
+- [X] 支持 OpenAI 协议下的图片或文件上传分析
+- [X] 支持 Onebot 协议的对话功能
+- [X] 支持 Onebot 协议的多种消息类型
+- [X] 对于 OpenAI 协议具备可定制拓展的插件系统
 
 ## 安装
 
@@ -43,7 +44,7 @@ pnpm install
 
 ## 使用
 
-第一次运行会自动为你生成配置文件，画图的画需要一个Prodia的API Key，可以在[Prodia官网](https://app.prodia.com/api/)申请。
+第一次运行会自动为你生成配置文件，画图的话需要一个Prodia的API Key，可以在[Prodia官网](https://app.prodia.com/api/)申请。
 
 1. 使用 node 启动后端服务器：
 
@@ -54,8 +55,9 @@ node app
 npm run start
 ```
 
-2. 修改配置文件，按提示修改即可。
-   
+2. 修改配置文件，按配置文件的注释修改即可。
+
+
 ## Prodia 画图服务器在云崽的使用
 PS: 对于 Bot 建议搭配[云崽](https://github.com/yoimiya-kokomi/Miao-Yunzai)+我魔改的[ap-plugin](https://github.com/Pretend-to/ap-plugin/)食用。
 
@@ -78,6 +80,18 @@ npm run apconfig
 [云崽相关内容](https://gitee.com/yhArcadia/Yunzai-Bot-plugins-index) by 云崽社区
 
 [chatgpt-mirai-qq-bot](https://github.com/lss233/chatgpt-mirai-qq-bot) by [lss233](https://github.com/lss233)
+
+## 日志
+- 2024-3-01
+  构建基本框架。
+- 2024-3-10
+  完善了基于 Prodia 的 API 接口，画图功能应该没问题了。前端还在重构中，所以现在也只能当个画图服务器用,暂时可以无限制嫖几十个sd高速接口。
+- 2024-4-10
+  继续完善后端，对于云崽 Lain 的对接基本完成，遗憾的是 Lain 跑路了。但是总是还有一些 fork 的，想用也能用。后续可能会顺带做一个云崽的插件？？？
+- 2024-4-23
+  后端基本接入OpenAI。昨天还是前天，与诸位队友用这个项目参加了某计算机设计大赛。OpenAI对话以及流式响应基于js异步迭代器实现，但还是存在一定问题。
+- 2024-4-24(5.14 补档)
+  跟 [NextWeb](https://github.com/ChatGPTNextWeb/ChatGPT-Next-Web) 作者 [Yda](https://github.com/Yidadaa) 先生在半夜打了一小时视频，在Yda哥的帮助下把流式问题解决了，感谢Yda。
 
 ## 贡献
 
