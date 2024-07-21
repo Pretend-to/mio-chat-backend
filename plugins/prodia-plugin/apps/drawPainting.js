@@ -5,7 +5,8 @@ export class drawPainting extends MioFunction {
   constructor() {
     super({
       name: 'drawPainting',
-      description: 'A tool that help you to draw a painting,you can adjust the style and orientation of the painting',
+      description: 'A tool that help you to draw a painting,you can adjust the style and orientation of the painting.After got the url of the picture,send the picture to user by markdown format directly,instead of sending the picture by image url',
+
       params: [
         new Param({
             name: 'prompt',
