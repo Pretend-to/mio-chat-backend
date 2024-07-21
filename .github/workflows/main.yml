@@ -1,0 +1,43 @@
+name: Deploy to Mio Chat Backend
+
+on:
+  push:
+    branches:
+      - main  # 触发动作的分支
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14'  # 设置 Node.js 版本
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build the project
+        run: npm run build
+
+      - name: Clone Mio Chat Backend repository
+        run: |
+          git clone https://github.com/Pretend-to/mio-chat-backend.git
+          cp -r ./dist/* ./mio-chat-backend/dist/
+        env:
+          GIT_TERMINAL_PROMPT: 0  # 避免交互式的输入提示
+
+      - name: Commit and push changes
+        run: |
+          cd mio-chat-backend
+          git config --global user.name "GitHub Action"
+          git config --global user.email "your-email@example.com"  # 替换为您的邮箱
+          git add dist/*
+          git commit -m "Deploy changes from main branch"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用 GitHub 提供的令牌进行身份验证
