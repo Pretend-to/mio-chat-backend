@@ -46,7 +46,7 @@ options:
             label: "基于Claude"
             preset: "#claude{xxx}"
       - value: "Genshin"
-        label: "二字游戏"
+        label: "娱乐功能"
         children:
           - value: "genshinHelp"
             label: "帮助"
@@ -69,8 +69,14 @@ options:
           - value: "genshinOb"
             label: "角色养成材料"
             preset: "#{xxx}材料"
+      - value: "Study"
+        label: "学习功能"
+        children:
+          - value: "delayWord"
+            label: "每日单词"
+            preset: "#每日单词"
       - value: "led"
-        label: "LED灯光控制"
+        label: "物联网控制"
         children:
           - value: "ledStatus"
             label: "状态"
