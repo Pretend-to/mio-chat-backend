@@ -1,7 +1,7 @@
 debug: false
 draw:
   # 是否开启 sd 绘图服务器
-  enable_sd_server: true
+  enable_sd_server: false
   # prodia api key
   prodia_key: ""
   # 用来反代 https://images.prodia.xyz 的地址
@@ -16,6 +16,9 @@ openai:
   # 允许的用户使用的模型
   guest_engines:
     - "gpt"
+  # 默认使用的模型
+  default_engine: "gpt-4o-mini"
+
 server:
   port: 3080
   host: "0.0.0.0"
