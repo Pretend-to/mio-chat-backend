@@ -1,0 +1,1 @@
+import{_ as e,a,o as c}from"./index-BTOwo_CS.js";const o={},s={class:"blank-view"};function t(n,_){return c(),a("div",s)}const d=e(o,[["render",t],["__scopeId","data-v-1aa6694c"]]);export{d as default};
