@@ -1,5 +1,4 @@
 // import MioFunction from '../../lib/functions.js'
-/* global logger */
 import fs from 'node:fs'
 
 logger.info('--------- >_< ---------')

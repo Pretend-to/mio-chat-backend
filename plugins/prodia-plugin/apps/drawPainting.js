@@ -9,25 +9,25 @@ export class drawPainting extends MioFunction {
 
       params: [
         new Param({
-            name: 'prompt',
-            type:'string',
-            description: 'the prompt of the painting,the prompt must be in english',
+          name: 'prompt',
+          type:'string',
+          description: 'the prompt of the painting,the prompt must be in english',
 
-            required: true
+          required: true
         }),
         new Param({
-            name:'style',
-            type:'string',
-            description: 'the style of the painting',
-            required: false,
-            enumeration:['anime','realistic']
+          name:'style',
+          type:'string',
+          description: 'the style of the painting',
+          required: false,
+          enumeration:['anime','realistic']
         }),
         new Param({
-            name:'orientation',
-            type:'string',
-            description: 'the orientation of the painting',
-            required: false,
-            enumeration:['vertical','horizontal','square']
+          name:'orientation',
+          type:'string',
+          description: 'the orientation of the painting',
+          required: false,
+          enumeration:['vertical','horizontal','square']
         }),
       ],
     })
@@ -39,11 +39,11 @@ export class drawPainting extends MioFunction {
     const painter = new Drawer()
 
     const drawConfig = {
-        model: config.style == 'anime' ? 'animagineXLV3_v30.safetensors [75f2f05b]' : 'devlishphotorealism_sdxl15.safetensors [77cba69f]',
-        width: config.orientation =='vertical'? 1 : 
-            config.orientation =='horizontal'? 2 : 1 ,
-        height: config.orientation =='vertical'? 2 : 
-            config.orientation =='horizontal'? 1 : 1 ,
+      model: config.style == 'anime' ? 'animagineXLV3_v30.safetensors [75f2f05b]' : 'devlishphotorealism_sdxl15.safetensors [77cba69f]',
+      width: config.orientation =='vertical'? 1 : 
+        config.orientation =='horizontal'? 2 : 1 ,
+      height: config.orientation =='vertical'? 2 : 
+        config.orientation =='horizontal'? 1 : 1 ,
     }
 
     const result = await painter.draw('prodia.xl',config.prompt,drawConfig)
