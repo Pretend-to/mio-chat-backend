@@ -1,0 +1,4 @@
+{ 
+    "baseUrl": "https://restapi.amap.com/v3", 
+    "apiKey": "your_api_key" 
+}
