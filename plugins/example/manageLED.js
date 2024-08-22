@@ -7,18 +7,18 @@ export class manageLED extends MioFunction {
       description: 'A tool that help you to manage some LED',
       params: [
         new Param({
-            name: 'color',
-            type:'string',
-            description: 'the color of the LED that you wanna manage',
-            required: true,
-            enumeration:['red','green']
+          name: 'color',
+          type:'string',
+          description: 'the color of the LED that you wanna manage',
+          required: true,
+          enumeration:['red','green']
         }),
         new Param({
-            name:'action',
-            type:'string',
-            description: 'the status that you wanna the LED to be',
-            required: true,
-            enumeration:['on','off']
+          name:'action',
+          type:'string',
+          description: 'the status that you wanna the LED to be',
+          required: true,
+          enumeration:['on','off']
         }),
       ],
     })

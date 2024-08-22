@@ -11,7 +11,7 @@ rules:
   quotes: ['error', 'single']
   indent: ['error', 2 ,{ "SwitchCase": 1 }]
   no-undef: error
-global:
-  middleware: true
-  logger: true
+globals:
+  middleware: "readonly"
+  logger: "readonly"
 
