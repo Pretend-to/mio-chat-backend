@@ -33,7 +33,7 @@ export class executeCommand extends MioFunction {
         exec(command, (error, stdout, stderr) => {
           if (error) {
             logger.error('Command execution failed: ' + error.message)
-            return reject({ error: error.message })
+            return resolve({ error: error.message })
           }
           if (stderr) {
             logger.warn('Command executed with warnings: ' + stderr)
