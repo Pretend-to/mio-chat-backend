@@ -2,11 +2,11 @@
 import fs from 'node:fs'
 
 logger.info('--------- >_< ---------')
-logger.info('web-plugin初始化v1.0')
+logger.info('led-plugin初始化v1.0')
 logger.info('-----------------------')
 
 const files = fs
-  .readdirSync('./plugins/amap-plugin/apps')
+  .readdirSync('./plugins/led-plugin/apps')
   .filter((file) => file.endsWith('.js'))
 
 let ret = []
@@ -29,8 +29,8 @@ for (let i in files) {
   apps[name] = new (ret[i].value[Object.keys(ret[i].value)[0]])()
 }
 
-logger.mark('amap-plugin加载成功~ by Krumio')
-logger.mark('欢迎使用amap-plugin 当前版本号v1.0')
+logger.mark('led-plugin加载成功~ by Krumio')
+logger.mark('欢迎使用led-plugin 当前版本号v1.0')
 
 export {apps} 
 
