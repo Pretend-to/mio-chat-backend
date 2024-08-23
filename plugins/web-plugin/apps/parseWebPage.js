@@ -5,7 +5,7 @@ export class parseWebPage extends MioFunction {
   constructor() {
     super({
       name: 'parseWebPage',
-      description: 'A tool to scrape all text content from a specified website while preserving links.',
+      description: 'A tool to scrape all text content from a specified website while preserving images and hyperlinks.',
       params: [
         new Param({
           name: 'url',
@@ -22,32 +22,52 @@ export class parseWebPage extends MioFunction {
     const { url } = e.params
     const browser = await puppeteer.launch()
     const page = await browser.newPage()
+        
     try {
       await page.goto(url, { waitUntil: 'networkidle2' })
-      const { textContent, links } = await page.evaluate(() => {
-        // 获取所有的文本内容，同时保留 <a> 标签并记录超链接信息
-        const elements = Array.from(document.body.querySelectorAll('*'))
-        const links = []
-        
-        const textContent = elements.map(el => {
-          if (el.tagName === 'A' && el.href) {
-            const linkInfo = {
-              text: el.innerText?.trim(),
-              href: el.href
-            }
-            links.push(linkInfo)
-            return `[${linkInfo.text}](${linkInfo.href})`
-          } else {
-            return el.innerText?.trim()
-          }
-        }).join('\n').trim()
-        
-        return { textContent, links }
+      const result = await page.evaluate(() => {
+        const texts = []
+        const images = []
+        const hyperLinks = []
+
+        // 模拟用户选择所有文本
+        const selection = window.getSelection()
+        const range = document.createRange()
+        range.selectNodeContents(document.body)
+        selection.removeAllRanges()
+        selection.addRange(range)
+
+        // 获取选中的文本
+        const selectedText = selection.toString().trim()
+        if (selectedText) {
+          texts.push(selectedText)
+        }
+
+        // 收集图像
+        const imgElements = document.querySelectorAll('img')
+        imgElements.forEach(img => {
+          images.push({ title: img.alt || '', url: img.src })
+        })
+
+        // 收集超链接
+        const linkElements = document.querySelectorAll('a')
+        linkElements.forEach(link => {
+          const title = link.innerText.trim() || link.title || link.href // 优先选择其他来源
+          hyperLinks.push({ title: title, url: link.href })
+        })
+
+        return {
+          pureText: texts.join('\n'),
+          images: images,
+          hyperLinks: hyperLinks
+        }
       })
+
       return {
         success: true,
-        text: textContent,
-        links: links // 返回超链接数组
+        pureText: result.pureText,
+        images: result.images,
+        hyperLinks: result.hyperLinks,
       }
     } catch (error) {
       return {
