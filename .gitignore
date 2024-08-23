@@ -10,6 +10,9 @@
 /plugins/*
 !/plugins/example/
 !/plugins/amap-plugin/
+!plugins/web-plugin/
+!plugins/bili-plugin/
+!/plugins/led-plugin/
 !/plugins/prodia-plugin/
 
 test.js
