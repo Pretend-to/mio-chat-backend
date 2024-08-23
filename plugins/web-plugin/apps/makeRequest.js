@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-import { MioFunction, Param } from '../../lib/functions.js'
+import { MioFunction, Param } from '../../../lib/functions.js'
 import fetch from 'node-fetch'
 
 export class makeRequest extends MioFunction {
   constructor() {
     super({
-      name: 'httpRequest',
+      name: 'makeRequest',
       description: 'A tool that performs HTTP requests and returns the response data.',
       params: [
         new Param({

@@ -4,7 +4,7 @@ import puppeteer from 'puppeteer'
 export class searchInternet extends MioFunction {
   constructor() {
     super({
-      name: 'webSearch',
+      name: 'searchInternet',
       description: 'A tool to scrape web data from Bing search results.',
       params: [
         new Param({

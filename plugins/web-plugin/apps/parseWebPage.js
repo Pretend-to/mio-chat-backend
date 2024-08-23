@@ -1,4 +1,4 @@
-import { MioFunction, Param } from '../../lib/functions.js'
+import { MioFunction, Param } from '../../../lib/functions.js'
 import puppeteer from 'puppeteer'
 
 export class parseWebPage extends MioFunction {
