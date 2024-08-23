@@ -1,10 +1,10 @@
-import { MioFunction, Param } from '../../lib/functions.js'
+import { MioFunction, Param } from '../../../lib/functions.js'
 import puppeteer from 'puppeteer'
 
-export class webScraper extends MioFunction {
+export class searchInternet extends MioFunction {
   constructor() {
     super({
-      name: 'webScraper',
+      name: 'webSearch',
       description: 'A tool to scrape web data from Bing search results.',
       params: [
         new Param({

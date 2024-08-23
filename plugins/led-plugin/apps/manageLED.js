@@ -1,4 +1,4 @@
-import { MioFunction,Param } from '../../lib/functions.js'
+import { MioFunction,Param } from '../../../lib/functions.js'
 
 export class manageLED extends MioFunction {
   constructor() {
