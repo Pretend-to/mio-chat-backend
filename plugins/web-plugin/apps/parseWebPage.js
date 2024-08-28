@@ -46,14 +46,14 @@ export class parseWebPage extends MioFunction {
         // 收集图像
         const imgElements = document.querySelectorAll('img')
         imgElements.forEach(img => {
-          images.push({ title: img.alt || '', url: img.src })
+          images.push({ title: img.alt || '', url: encodeURIComponent(img.src) })
         })
 
         // 收集超链接
         const linkElements = document.querySelectorAll('a')
         linkElements.forEach(link => {
           const title = link.innerText.trim() || link.title || link.href // 优先选择其他来源
-          hyperLinks.push({ title: title, url: link.href })
+          hyperLinks.push({ title: title, url: encodeURIComponent(link.href) })
         })
 
         return {
