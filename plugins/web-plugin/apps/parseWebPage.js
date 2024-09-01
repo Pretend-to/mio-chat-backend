@@ -30,6 +30,12 @@ export class parseWebPage extends MioFunction {
         const images = []
         const hyperLinks = []
 
+        // 先把所有summary都展开
+        const summaryElements = document.querySelectorAll('summary')
+        summaryElements.forEach(summary => {
+          summary.click()
+        })
+
         // 模拟用户选择所有文本
         const selection = window.getSelection()
         const range = document.createRange()
