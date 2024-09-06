@@ -9,18 +9,18 @@ QQ交流群：[qq 群](https://qm.qq.com/q/Eqv9Z6iSB4)
 预览地址：[Mio-Chat](https://ai.krumio.com)
 
 ## 预览
-![Mio-Chat](https://api.krumio.com/static/images/miopriview1.png)
-![Mio-Chat](https://api.krumio.com/static/images/miopriview2.png)
-![Mio-Chat](https://api.krumio.com/static/images/miopreview3.png)
+![Mio-Chat](.github/preview/preview_1.png)
+![Mio-Chat](.github/preview/preview_2.png)
+![Mio-Chat](.github/preview/preview_3.png)
 
 ## 特性
 
-- [X] 支持 OpenAI 协议的对话功能
-- [X] 支持 OpenAI 协议的 FunctionCall(ToolCall) 功能
-- [X] 支持 OpenAI 协议下的图片或文件上传分析
-- [X] 支持 Onebot 协议的对话功能
-- [X] 支持 Onebot 协议的多种消息类型
-- [X] 对于 OpenAI 协议具备可定制拓展的插件系统
+- ✅ 支持 OpenAI 协议的对话功能
+- ✅ 支持 OpenAI 协议的 FunctionCall(ToolCall) 功能
+- ✅ 支持 OpenAI 协议下的图片或文件上传分析
+- ✅ 支持 Onebot 协议的对话功能
+- ✅ 支持 Onebot 协议的多种消息类型
+- ✅ 对于 OpenAI 协议具备可定制拓展的插件系统
 
 ## 安装
 
@@ -91,7 +91,7 @@ npm run apconfig
 - 2024-4-23
   后端基本接入OpenAI。昨天还是前天，与诸位队友用这个项目参加了某计算机设计大赛。OpenAI对话以及流式响应基于js异步迭代器实现，但还是存在一定问题。
 - 2024-4-24(5.14 补档)
-  跟 [NextWeb](https://github.com/ChatGPTNextWeb/ChatGPT-Next-Web) 作者 [Yda](https://github.com/Yidadaa) 先生在半夜打了一小时视频，在Yda哥的帮助下把流式问题解决了，感谢Yda。
+  跟 [NextWeb](https://github.com/ChatGPTNextWeb/ChatGPT-Next-Web) 作者 [Yda](https://github.com/Yidadaa) 在半夜打了一小时视频，在Yda的帮助下把流式问题解决了，感谢Yda。
 
 ## 贡献
 
