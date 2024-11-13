@@ -25,19 +25,33 @@ export class manageLED extends MioFunction {
     this.func = this.manageLED
   }
 
+  // async manageLED(e) {
+
+  //   const baseUrl = 'http://4.raspi.com:5000'
+  //   const color = e.params.color
+  //   const action = e.params.action
+
+  //   const path = `/${color}/${action}`
+
+  //   const response = await fetch(`${baseUrl}${path}`)
+
+  //   logger.debug('请求地址：' + `${baseUrl}${path}`)
+
+  //   const result = await response.json()
+
+  //   return result
+  // }
+
   async manageLED(e) {
 
-    const baseUrl = 'http://4.raspi.com:5000'
-    const color = e.params.color
+    const baseUrl = 'http://192.168.179.191/led'
     const action = e.params.action
+    const url = `${baseUrl}?state=${action}`
+    const response = await fetch(url)
 
-    const path = `/${color}/${action}`
+    logger.debug('请求地址：' + `${url}`)
 
-    const response = await fetch(`${baseUrl}${path}`)
-
-    logger.debug('请求地址：' + `${baseUrl}${path}`)
-
-    const result = await response.json()
+    const result = await response.text()
 
     return result
   }

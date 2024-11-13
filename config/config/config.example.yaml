@@ -17,7 +17,7 @@ openai:
   openai_api_key: ""
   # openai 基础地址
   openai_base_url: "https://api.openai.com/v1"
-  # 允许的用户使用的模型
+  # 允许用户使用的模型,包含关键字的均可使用。如填入"gpt"即可访问gpt全家桶
   guest_engines:
     - "gpt"
   # 默认使用的模型

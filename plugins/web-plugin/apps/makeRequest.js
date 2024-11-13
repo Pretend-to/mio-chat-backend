@@ -23,8 +23,8 @@ export class makeRequest extends MioFunction {
         }),
         new Param({
           name: 'data',
-          type: 'object',
-          description: 'The data to send with the request (for POST requests)',
+          type: 'string',
+          description: 'The stringfied data to send with the request (for POST requests)',
           required: false,
         }),
       ],
