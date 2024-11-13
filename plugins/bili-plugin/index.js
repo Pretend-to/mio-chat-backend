@@ -1,36 +1,15 @@
-// import MioFunction from '../../lib/functions.js'
-import fs from 'node:fs'
-
-logger.info('--------- >_< ---------')
-logger.info('bili-plugin初始化v1.0')
-logger.info('-----------------------')
-
-const files = fs
-  .readdirSync('./plugins/bili-plugin/apps')
-  .filter((file) => file.endsWith('.js'))
-
-let ret = []
-
-files.forEach((file) => {
-  ret.push(import(`./apps/${file}`))
-})
-
-ret = await Promise.allSettled(ret)
-
-let apps = {}
-for (let i in files) {
-  let name = files[i].replace('.js', '')
-
-  if (ret[i].status != 'fulfilled') {
-    logger.error(`载入插件错误：${logger.warn(name)}`)
-    logger.error(ret[i].reason)
-    continue
-  }
-  apps[name] = new (ret[i].value[Object.keys(ret[i].value)[0]])()
+const pluginInfo = {
+  name: new URL(import.meta.url).pathname.split('/').pop(),
+  description: '帮AI玩B站的插件',
+  version: '0.0.1',
+  author: 'Krumio',
 }
 
-logger.mark('bili-plugin加载成功~ by Krumio')
-logger.mark('欢迎使用bili-plugin 当前版本号v1.0')
+const initPlugin = async () => {
+  // 必要时在这里添加代码以初始化插件
+}
 
-export {apps} 
-
+export  {
+  pluginInfo,
+  initPlugin
+}
