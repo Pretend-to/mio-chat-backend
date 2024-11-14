@@ -26,7 +26,7 @@ export class searchInternet extends MioFunction {
 
     // Navigate to Bing search with the provided query
     await page.goto(
-      `https://cn.bing.com/search?q=${encodeURIComponent(query)}`,
+      `https://www.bing.com/search?q=${encodeURIComponent(query)}`,
       { waitUntil: 'networkidle2' }
     )
 
@@ -43,7 +43,63 @@ export class searchInternet extends MioFunction {
       }))
     })
 
+    // results 只取前五个
+    results.splice(5)
+
+    const parsedPages = []
+
+    const parse = async (url) => {
+      try {
+        await page.goto(url, { waitUntil: 'networkidle2' })
+        const result = await page.evaluate(() => {
+          const texts = []
+
+          // 先把所有summary都展开
+          const summaryElements = document.querySelectorAll('summary')
+          summaryElements.forEach(summary => {
+            summary.click()
+          })
+  
+          // 模拟用户选择所有文本
+          const selection = window.getSelection()
+          const range = document.createRange()
+          range.selectNodeContents(document.body)
+          selection.removeAllRanges()
+          selection.addRange(range)
+  
+          // 获取选中的文本
+          const selectedText = selection.toString().trim()
+          if (selectedText) {
+            texts.push(selectedText)
+          }
+  
+          return {
+            pureText: texts.join('\n'),
+          }
+        })
+        return result
+      } catch (error) {
+        console.error('Error parsing page:', error)
+        return null
+      }
+    }
+
+    logger.debug(results)
+
+    // 使用promise.all()来等待所有解析操作完成
+    await Promise.all(
+      results.map(async (result) => {
+        const text = await parse(result.url)
+        parsedPages.push({
+          title: result.title,
+          url: result.url,
+          snippet: result.snippet,
+          content: text,
+        })
+      })
+    )
+
     await browser.close()
-    return results // Returns the scraped results
+    return parsedPages // Returns the scraped results
   }
 }

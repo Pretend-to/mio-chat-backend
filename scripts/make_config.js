@@ -1,13 +1,10 @@
 /* eslint-disable camelcase */
-import Drawer from '../lib/draw.js'
 import yaml from 'js-yaml'
 import fs from 'fs'
 import config from '../lib/config.js'
+import logger from '../lib/logger.js'
 
 const port = config.server.port || 3080
-const painter = new Drawer()
-
-// const info = painter.getEngineInfo("prodia.stablediffusion");
 
 const list_2 = [
   '3Guofeng3_v34.safetensors [50f420de]',
@@ -116,23 +113,8 @@ const list_xll = list_xl.map((item) => {
   }
 })
 
-const mjInfo = painter.getEngineInfo('pixart.a')
-
-const mjlist = mjInfo.models.map((item) => {
-  item = item.split(' ')[0]
-  if (item === '(No') item = 'Default'
-  item = 'mj' + item
-  return {
-    url: `http://127.0.0.1:${port}/api/${item}`,
-    remark: '[PixArt][' + item + ']',
-    account_id: '',
-    account_password: '',
-    token: '',
-  }
-})
-
 const result = {
-  APIList: mjlist.concat(list_22, list_255, list_33, list_xll),
+  APIList: list_22.concat(list_255, list_33, list_xll),
 }
 
 //write result to ./config.yaml
