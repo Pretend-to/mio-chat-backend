@@ -250,7 +250,23 @@
     "message": "update",
     "data": {
         "index": 0,
-        "chunk": ""
+        "chunk": "",
+        "tool_call": null
+    }
+}
+
+{
+    "request_id": 1234567890,
+    "code": 0,
+    "message": "update",
+    "data": {
+        "index": 0,
+        "chunk": "",
+        "tool_call": {
+            "name": "search",
+            "action":"started" || "pending" || "running" || "finished",
+            "params":""
+        }
     }
 }
 
