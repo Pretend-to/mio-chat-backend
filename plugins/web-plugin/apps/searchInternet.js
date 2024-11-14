@@ -50,6 +50,7 @@ export class searchInternet extends MioFunction {
 
     const parse = async (url) => {
       try {
+        const page = await browser.newPage()
         await page.goto(url, { waitUntil: 'networkidle2' })
         const result = await page.evaluate(() => {
           const texts = []
