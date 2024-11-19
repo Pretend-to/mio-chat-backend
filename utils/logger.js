@@ -75,4 +75,5 @@ const logger = {
   },
 }
 
+global.logger = logger
 export default logger
