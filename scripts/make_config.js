@@ -2,7 +2,6 @@
 import yaml from 'js-yaml'
 import fs from 'fs'
 import config from '../lib/config.js'
-import logger from '../lib/logger.js'
 
 const port = config.server.port || 3080
 
