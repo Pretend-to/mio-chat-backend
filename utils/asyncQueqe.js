@@ -73,3 +73,5 @@ class AsyncQueue {
 }
 // A sentinel value returned by dequeue() to mark "end of stream" when closed
 AsyncQueue.EOS = Symbol('end-of-stream')
+
+export default AsyncQueue

@@ -19,6 +19,9 @@ export class searchInternet extends MioFunction {
   }
 
   async scrapeData(e) {
+    const startTime = Date.now() // 记录开始时间
+    logger.debug('Starting scrapeData function...')
+
     const { query } = e.params
 
     const browser = await puppeteer.launch()
@@ -27,7 +30,7 @@ export class searchInternet extends MioFunction {
     // Navigate to Bing search with the provided query
     await page.goto(
       `https://www.bing.com/search?q=${encodeURIComponent(query)}`,
-      { waitUntil: 'networkidle2' }
+      { waitUntil: 'domcontentloaded' }
     )
 
     // Wait for the search result items to load
@@ -49,9 +52,10 @@ export class searchInternet extends MioFunction {
     const parsedPages = []
 
     const parse = async (url) => {
+      const pageStartTime = Date.now() // 记录页面开始时间
       try {
         const page = await browser.newPage()
-        await page.goto(url, { waitUntil: 'networkidle2' })
+        await page.goto(url, { waitUntil: 'domcontentloaded' })
         const result = await page.evaluate(() => {
           const texts = []
 
@@ -60,24 +64,26 @@ export class searchInternet extends MioFunction {
           summaryElements.forEach(summary => {
             summary.click()
           })
-  
+
           // 模拟用户选择所有文本
           const selection = window.getSelection()
           const range = document.createRange()
           range.selectNodeContents(document.body)
           selection.removeAllRanges()
           selection.addRange(range)
-  
+
           // 获取选中的文本
           const selectedText = selection.toString().trim()
           if (selectedText) {
             texts.push(selectedText)
           }
-  
+
           return {
             pureText: texts.join('\n'),
           }
         })
+        const pageEndTime = Date.now() // 记录页面结束时间
+        logger.debug(`Parsed page ${url} in ${pageEndTime - pageStartTime} ms`)
         return result
       } catch (error) {
         console.error('Error parsing page:', error)
@@ -101,6 +107,8 @@ export class searchInternet extends MioFunction {
     )
 
     await browser.close()
+    const endTime = Date.now() // 记录结束时间
+    logger.debug(`Finished scrapeData function. Time taken: ${endTime - startTime} ms`)
     return parsedPages // Returns the scraped results
   }
 }
