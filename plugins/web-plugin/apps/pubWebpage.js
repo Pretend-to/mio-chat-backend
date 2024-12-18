@@ -7,7 +7,7 @@ export class pubWebpage extends MioFunction {
     super({
       name: 'pubWebpage',
       description:
-        'A tool to help you create a webpage with the given HTML content.After public,you should show the webPage in iframe',
+        'A tool to help you create a webpage with the given HTML content.After public,you should show the webPage both in iframe and hyperlink.',
       params: [
         new Param({
           name: 'html',
@@ -47,6 +47,7 @@ export class pubWebpage extends MioFunction {
     return {
       // iframe
       iframe: `<iframe src="${origin}/api/uploaded/file?name=${e.user.id}.html" width="100%" height="auto"></iframe>`,
+      hyperlink: `<a href="${origin}/api/uploaded/file?name=${e.user.id}.html" target="_blank">点击这里在新窗口直接访问链接</a>`,
     }
   }
 }

@@ -1,5 +1,6 @@
 import { MioFunction, Param } from '../../lib/functions.js'
 import os from 'node:os'
+import exec from 'node:child_process'
 
 export class executeCommand extends MioFunction {
   constructor() {
@@ -20,20 +21,18 @@ export class executeCommand extends MioFunction {
 
   async executeCommand(e) {
     const command = e.params.command
-    // 如果用户不是管理员，拒绝执行
-    if (!e.user.isAdmin) {
-      return 'Only administrators can execute commands.'
-    }
+
     try {
-      // 使用 child_process 模块执行命令并读取输出,esm写法
-      const { exec } = await import('child_process')
-
-
+      // 如果用户不是管理员，拒绝执行
+      if (!e.user.isAdmin) {
+        throw new Error('Only administrators can execute commands.')
+      }
+      
       return new Promise((resolve, reject) => {
         exec(command, (error, stdout, stderr) => {
           if (error) {
             logger.error('Command execution failed: ' + error.message)
-            return resolve({ error: error.message })
+            reject('Command execution failed: ' + error.message)
           }
           if (stderr) {
             logger.warn('Command executed with warnings: ' + stderr)
