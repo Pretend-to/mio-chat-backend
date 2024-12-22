@@ -7,7 +7,7 @@ export class pubWebpage extends MioFunction {
     super({
       name: 'pubWebpage',
       description:
-        'A tool to help you create a webpage with the given HTML content.After public,you should show the webPage both in iframe and hyperlink.',
+        'A tool to help you create a webpage with the given HTML content.After public,you should show the webPage both in iframe and hyperlink.the iframe can be shown directly in this chat system.',
       params: [
         new Param({
           name: 'html',
@@ -33,7 +33,7 @@ export class pubWebpage extends MioFunction {
       process.cwd(),
       `./output/uploaded/file/${e.user.id}.html`
     )
-    const html = e.params.html
+    const html = e.params.html.replace('\\n', '\n')
 
     // 检查路径是否存在
     const dirPath = path.dirname(savePath)

@@ -44,7 +44,7 @@ export class manageLED extends MioFunction {
 
   async manageLED(e) {
 
-    const baseUrl = 'http://192.168.179.191/led'
+    const baseUrl = 'http://192.168.27.173/led'
     const action = e.params.action
     const url = `${baseUrl}?state=${action}`
     const response = await fetch(url)

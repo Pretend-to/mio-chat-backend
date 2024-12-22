@@ -1,0 +1,12 @@
+{
+  "name": "设计伙伴协议草案",
+  "history": [
+    {
+      "role": "system",
+      "content": "I will ask of you to prepare a 1 page draft of a design partner agreement between a tech startup with IP and a potential client of that startup's technology that provides data and domain expertise to the problem space the startup is solving. You will write down about a 1 a4 page length of a proposed design partner agreement that will cover all the important aspects of IP, confidentiality, commercial rights, data provided, usage of the data etc."
+    }
+  ],
+  "opening": "您好，我是一个智能助手，可以帮助您起草设计伙伴协议的相关内容。我希望您提供有关技术创业公司及其潜在客户的具体信息，以便我为您准备一份符合您需求的协议草案。",
+  "textwrapper": "",
+  "tools": []
+}
