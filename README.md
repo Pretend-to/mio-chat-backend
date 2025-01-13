@@ -44,8 +44,6 @@ pnpm install
 
 ## 使用
 
-第一次运行会自动为你生成配置文件，画图的话需要一个Prodia的API Key，可以在[Prodia官网](https://app.prodia.com/api/)申请。
-
 1. 使用 node 启动后端服务器：
 
 ```bash
@@ -57,22 +55,6 @@ npm run start
 
 2. 修改配置文件，按配置文件的注释修改即可。
 
-
-## Prodia 画图服务器在云崽的使用
-PS: 对于 Bot 建议搭配[云崽](https://github.com/yoimiya-kokomi/Miao-Yunzai)+我魔改的[ap-plugin](https://github.com/Pretend-to/ap-plugin/)食用。
-
-1. 生成ap配置文件。没问题的话会在 scripts 目录下生成 config.yaml 文件，全部复制到剪贴板。(或者直接白嫖我的，在[Wiki-接口列表](https://github.com/Pretend-to/mio-chat-backend/wiki/Prodia%E2%80%90AP%E6%8E%A5%E5%8F%A3%E5%88%97%E8%A1%A8))
-
-```bash
-# 在本项目的根目录运行
-npm run apconfig
-```
-
-2. 配置好云崽并且安装 ap 后，先跟 bot 发一句`#ap添加接口https://666备注测试`以生成配置文件。然后再到ap插件的 /config/config/config.yaml 中找到与本项目生成配置文件对应的部分(以 `APIList: `开头),进行替换。
-
-3. 在云崽里应该就可以用了。魔改ap与原版不同的部分在于:
-   1. 多图由轮询改为并发请求，因为 prodia 与本地部署 sd 不同，具有高并发的特性;
-   2. 增加了绘制多图的方式，`#绘图xxx 接口1-16 `或者 `接口1，5，6 `都是可以的(两种写法不可混用)，也可以加张数如` #绘图xxx 接口23，15 2张 `实际张数则是张数 * 接口数，不会超出20张。
 
 ## 关联项目
 [NextWeb](https://github.com/ChatGPTNextWeb/ChatGPT-Next-Web) by [Yda](https://github.com/Yidadaa)
@@ -91,8 +73,9 @@ npm run apconfig
 - 2024-4-23
   后端基本接入OpenAI。昨天还是前天，与诸位队友用这个项目参加了某计算机设计大赛。OpenAI对话以及流式响应基于js异步迭代器实现，但还是存在一定问题。
 - 2024-4-24(5.14 补档)
-  跟 [NextWeb](https://github.com/ChatGPTNextWeb/ChatGPT-Next-Web) 作者 [Yda](https://github.com/Yidadaa) 在半夜打了一小时视频，在Yda的帮助下把流式问题解决了，感谢Yda。
-
+  在 [NextWeb](https://github.com/ChatGPTNextWeb/ChatGPT-Next-Web) 作者 [Yda](https://github.com/Yidadaa) 的帮助下把流式问题解决了，感谢Yda。
+- 2025-1-13
+  Prodia 大更新，把 V1 的官方 API 给砍掉了，故本项目移除 prodia 相关内容。
 ## 贡献
 
 欢迎贡献！如果您发现任何错误或有改进建议，请提出问题或提交拉取请求。

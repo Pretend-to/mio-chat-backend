@@ -6,8 +6,7 @@
   "main": "index.js",
   "scripts": {
     "start": "pm2 start ./config/pm2.json",
-    "test": "node test",
-    "apconfig": "node ./scripts/make_config.js"
+    "test": "node test"
   },
   "keywords": [
     "gpt"
