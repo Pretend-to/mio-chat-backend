@@ -102,5 +102,26 @@ async function imgUrlToBase64(url, id = 'default') {
   })
 }
 
+async function bufferToUrl(buffer, url) {
+  // 随机生成一段序列号
+  const random = Math.random().toString(36).substr(2)
+  
+  // 定义输出目录路径
+  const outputDir = path.join(process.cwd(), './output', 'uploaded', 'prodia')
+  
+  // 如果目录不存在，则创建目录
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true })
+  }
+  
+  // 定义输出文件的完整路径
+  const outPath = path.join(outputDir, `${random}.jpeg`)
 
-export { getPNGBase64, savePic, imgUrlToBase64 }
+  // 写入文件
+  await fs.promises.writeFile(outPath, new Uint8Array(buffer))
+
+  // 构建并返回完整的URL
+  const fullUrl = `${url}/api/uploaded/prodia?name=${random}.jpeg`
+  return fullUrl
+}
+export { bufferToUrl,getPNGBase64, savePic, imgUrlToBase64 }
