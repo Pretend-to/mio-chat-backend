@@ -15,12 +15,6 @@ export class pubWebpage extends MioFunction {
           description: 'The html content to be rendered in the webpage.',
           required: true,
         }),
-        new Param({
-          name: 'title',
-          type: 'string',
-          description: 'The title of the webpage.',
-          required: true,
-        }),
       ],
     })
     this.func = this.pubWebpage
@@ -33,7 +27,9 @@ export class pubWebpage extends MioFunction {
       process.cwd(),
       `./output/uploaded/file/${e.user.id}.html`
     )
-    const html = e.params.html.replace('\\n', '\n')
+    const html = e.params.html
+      .replace(/\\+n/g, '\n')          // 处理任意数量反斜杠的换行符
+      .replace(/\\+"/g, '"')           // 处理任意数量反斜杠的引号
 
     // 检查路径是否存在
     const dirPath = path.dirname(savePath)
