@@ -8,6 +8,7 @@
   "opening": "您好！我是您的数学专家。我会用清晰的步骤和严谨的LaTeX公式符号为您详细解答数学问题。请直接告诉我您的问题，我会一次性提供完整的解题思路和过程。",
   "textwrapper": "",
   "tools": [],
+  "recommendedModel": "gemini-2.0-flash-exp",
   "recommended": true,
   "name": "数学专家"
 }
