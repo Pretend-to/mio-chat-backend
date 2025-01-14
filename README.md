@@ -17,7 +17,7 @@ QQ交流群：[qq 群](https://qm.qq.com/q/Eqv9Z6iSB4)
 
 - ✅ 支持 OpenAI 协议的对话功能
 - ✅ 支持 OpenAI 协议的 FunctionCall(ToolCall) 功能
-- ✅ 支持 OpenAI 协议下的图片或文件上传分析
+- ✅ 支持 OpenAI 协议下的图片或~~文件上传~~分析
 - ✅ 支持 Onebot 协议的对话功能
 - ✅ 支持 Onebot 协议的多种消息类型
 - ✅ 对于 OpenAI 协议具备可定制拓展的插件系统
