@@ -1,6 +1,6 @@
 # Mio-Chat-Backend
 
-ChatBot对话平台，兼容OpenAI与**部分**Onebot协议v11。兼容原生态圈。
+一款基于Websocket的ChatBot对话平台，兼容OpenAI与**部分**Onebot协议v11。兼容流行的Onebot生态圈。
 
 前端部分：[Mio-Chat 前端](https://github.com/Pretend-to/mio-chat-frontend)
 
