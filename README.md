@@ -75,7 +75,7 @@ npm run start
 - 2024-4-24(5.14 补档)
   在 [NextWeb](https://github.com/ChatGPTNextWeb/ChatGPT-Next-Web) 作者 [Yda](https://github.com/Yidadaa) 的帮助下把流式问题解决了，感谢Yda。
 - 2025-1-13
-  Prodia 大更新，把 V1 的官方 API 给砍掉了，故本项目移除 prodia 相关内容。
+  Prodia 大更新，把 V1 的官方 API 给砍掉了，~~故本项目移除 prodia 相关内容~~ 放进插件里了。
 ## 贡献
 
 欢迎贡献！如果您发现任何错误或有改进建议，请提出问题或提交拉取请求。
