@@ -71,7 +71,7 @@ npm run start
 - 2024-4-10
   继续完善后端，对于云崽 Lain 的对接基本完成，遗憾的是 Lain 跑路了。但是总是还有一些 fork 的，想用也能用。后续可能会顺带做一个云崽的插件？？？
 - 2024-4-23
-  后端基本接入OpenAI。昨天还是前天，与诸位队友用这个项目参加了某计算机设计大赛。OpenAI对话以及流式响应基于js异步迭代器实现，但还是存在一定问题。
+  后端基本接入OpenAI。流式响应基于异步迭代器实现，但还是存在一定响应式问题。
 - 2024-4-24(5.14 补档)
   在 [NextWeb](https://github.com/ChatGPTNextWeb/ChatGPT-Next-Web) 作者 [Yda](https://github.com/Yidadaa) 的帮助下把流式问题解决了，感谢Yda。
 - 2025-1-13
