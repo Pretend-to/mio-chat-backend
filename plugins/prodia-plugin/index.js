@@ -32,16 +32,13 @@ const initPlugin = async () => {
       logger.warn('配置文件缺少 token 字段，请前往 https://app.prodia.com/api 获取 token 并填入配置文件')
       return
     }
-    if (!config.apiKey || config.apiKey === 'your_apiKey_here') {
-      logger.warn('配置文件缺少 apiKey 字段，将无法使用 sd 1.5 模型')
-    }
+
     logger.info('prodia-plugin 配置完整，初始化成功')
     pluginInfo.config = config
   } catch (error) {
     logger.warn('prodia-plugin 配置文件不存在，将创建默认配置文件...')
     const defaultConfig = {
       token: 'your_token_here',
-      apiKey: 'your_apiKey_here'
     }
     await fs.writeFile(configFilePath, JSON.stringify(defaultConfig, null, 2))
     logger.warn('配置文件缺少 token 字段，请前往 https://app.prodia.com/api 获取 token 并填入配置文件')
