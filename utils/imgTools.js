@@ -121,7 +121,7 @@ async function bufferToUrl(buffer, url) {
   await fs.promises.writeFile(outPath, new Uint8Array(buffer))
 
   // 构建并返回完整的URL
-  const fullUrl = `${url}/api/uploaded/prodia?name=${random}.jpeg`
+  const fullUrl = `${url}/api/uploaded/prodia/${random}.jpeg`
   return fullUrl
 }
 export { bufferToUrl,getPNGBase64, savePic, imgUrlToBase64 }
