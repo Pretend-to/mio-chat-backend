@@ -25,11 +25,10 @@ export class pubWebpage extends MioFunction {
     const savePath = path.join(
       // eslint-disable-next-line no-undef
       process.cwd(),
-      `./output/uploaded/file/${e.user.id}.html`
+      `./output/generated/html/${e.user.id}.html`
     )
     const html = e.params.html
-      .replace(/\\+n/g, '\n')          // 处理任意数量反斜杠的换行符
-      .replace(/\\+"/g, '"')           // 处理任意数量反斜杠的引号
+
 
     // 检查路径是否存在
     const dirPath = path.dirname(savePath)
@@ -42,8 +41,8 @@ export class pubWebpage extends MioFunction {
 
     return {
       // iframe
-      iframe: `<iframe src="${origin}/api/uploaded/file/${e.user.id}.html" width="100%" height="auto"></iframe>`,
-      hyperlink: `<a href="${origin}/api/uploaded/file/${e.user.id}.html" target="_blank">点击这里在新窗口直接访问链接</a>`,
+      iframe: `<iframe src="${origin}/api/generated/html/${e.user.id}.html" width="100%" height="auto"></iframe>`,
+      hyperlink: `<a href="${origin}/api/generated/html/${e.user.id}.html" target="_blank">点击这里在新窗口直接访问链接</a>`,
     }
   }
 }
