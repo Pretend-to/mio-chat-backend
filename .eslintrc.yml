@@ -1,5 +1,6 @@
 env:
-  browser: true
+  browser: flase
+  node: true
   es2021: true
 extends: eslint:recommended
 parserOptions:
