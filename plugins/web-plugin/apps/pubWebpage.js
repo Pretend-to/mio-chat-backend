@@ -42,8 +42,8 @@ export class pubWebpage extends MioFunction {
 
     return {
       // iframe
-      iframe: `<iframe src="${origin}/api/uploaded/file?name=${e.user.id}.html" width="100%" height="auto"></iframe>`,
-      hyperlink: `<a href="${origin}/api/uploaded/file?name=${e.user.id}.html" target="_blank">点击这里在新窗口直接访问链接</a>`,
+      iframe: `<iframe src="${origin}/api/uploaded/file/${e.user.id}.html" width="100%" height="auto"></iframe>`,
+      hyperlink: `<a href="${origin}/api/uploaded/file/${e.user.id}.html" target="_blank">点击这里在新窗口直接访问链接</a>`,
     }
   }
 }
