@@ -17,9 +17,17 @@ openai:
   openai_api_key: ""
   # openai 基础地址
   openai_base_url: "https://api.openai.com/v1"
-  # 允许用户使用的模型,包含关键字的均可使用。如填入"gpt"即可访问gpt全家桶
+  # 允许游客使用的模型
   guest_engines:
-    - "gpt"
+    # 包含关键字的均可使用。如填入"gpt"即可访问gpt全家桶
+    - keywords:
+      - "gpt-4o-mini"
+    # 符合模型全名的才能使用
+    - full_name:
+      - "gemini-2.0-flash"
+      - "command-r-plus"
+      - "o3-mini"
+      - "deepseek-chat"
   # 默认使用的模型
   default_engine: "gpt-4o-mini"
   model_owners:
