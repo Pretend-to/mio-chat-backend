@@ -63,7 +63,12 @@ const logger = {
     return '[unknown]'
   },
   getIP(req) {
-    return req?.headers['x-real-ip'] || req?.connection.remoteAddress || null
+    try {
+      return req.headers['x-real-ip'] || req.connection.remoteAddress || null
+    } catch (error) {
+      console.error('Error getting IP:', error)
+      return null
+    }
   },
   getTime() {
     const currentDate = new Date()
