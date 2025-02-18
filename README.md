@@ -9,9 +9,10 @@ QQ交流群：[qq 群](https://qm.qq.com/q/Eqv9Z6iSB4)
 预览地址：[Mio-Chat](https://ai.krumio.com)
 
 ## 预览
-![Mio-Chat](.github/preview/preview_1.png)
-![Mio-Chat](.github/preview/preview_2.png)
-![Mio-Chat](.github/preview/preview_3.png)
+![Mio-Chat](.github/preview/1.png)
+![Mio-Chat](.github/preview/2.png)
+![Mio-Chat](.github/preview/3.png)
+![Mio-Chat](.github/preview/4.png)
 
 ## 特性
 
