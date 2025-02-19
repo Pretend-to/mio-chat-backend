@@ -1,13 +1,14 @@
-import { MioFunction, Param } from '../../../lib/functions.js'
-import path from 'path'
-import fs from 'fs'
+import { MioFunction, Param } from '../../../lib/functions.js';
+import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
 
 export class pubWebpage extends MioFunction {
   constructor() {
     super({
       name: 'pubWebpage',
       description:
-        'A tool to help you create a webpage with the given HTML content.After public,you should show the webPage both in iframe and hyperlink.the iframe can be shown directly in this chat system.',
+        'A tool to help you create a webpage with the given HTML content. After public, you should show the webPage both in iframe and hyperlink. The iframe can be shown directly in this chat system.',
       params: [
         new Param({
           name: 'html',
@@ -16,33 +17,36 @@ export class pubWebpage extends MioFunction {
           required: true,
         }),
       ],
-    })
-    this.func = this.pubWebpage
+    });
+    this.func = this.pubWebpage;
   }
+
   async pubWebpage(e) {
-    const origin = e.user.origin
-
+    const origin = e.user.origin;
+    const uid = e.user.id;
+    const timestamp = Date.now().toString();
+    
+    // Generate MD5 hash using uid and timestamp
+    const hash = crypto.createHash('md5').update(`${uid}${timestamp}`).digest('hex');
     const savePath = path.join(
-      // eslint-disable-next-line no-undef
       process.cwd(),
-      `./output/generated/html/${e.user.id}.html`
-    )
-    const html = e.params.html
+      `./output/generated/html/${hash}.html`
+    );
+    const html = e.params.html;
 
-
-    // 检查路径是否存在
-    const dirPath = path.dirname(savePath)
+    // Check if the directory exists
+    const dirPath = path.dirname(savePath);
     if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true })
+      fs.mkdirSync(dirPath, { recursive: true });
     }
 
-    // 创建或覆盖文件
-    fs.writeFileSync(savePath, html)
+    // Create or overwrite file
+    fs.writeFileSync(savePath, html);
 
     return {
       // iframe
-      iframe: `<iframe src="${origin}/api/generated/html/${e.user.id}.html" width="100%" height="auto"></iframe>`,
-      hyperlink: `<a href="${origin}/api/generated/html/${e.user.id}.html" target="_blank">点击这里在新窗口直接访问链接</a>`,
-    }
+      iframe: `<iframe src="${origin}/api/generated/html/${hash}.html" width="100%" height="auto"></iframe>`,
+      hyperlink: `<a href="${origin}/api/generated/html/${hash}.html" target="_blank">点击这里在新窗口直接访问链接</a>`,
+    };
   }
 }
