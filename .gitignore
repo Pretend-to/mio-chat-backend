@@ -16,7 +16,7 @@
 !plugins/bili-plugin/
 !/plugins/led-plugin/
 !/plugins/prodia-plugin/
-!/plugins/file-plugin/
+!/plugins/glm-plugin/
 
 test.js
 image.jpg
