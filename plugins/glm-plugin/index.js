@@ -26,17 +26,17 @@ const initPlugin = async () => {
   try {
     // 检查 config.json 是否存在
     await fs.access(configFilePath)
-    logger.info('prodia-plugin 配置文件存在，检查配置完整性...')
+    logger.info('配置文件存在，检查配置完整性...')
     const config = JSON.parse(await fs.readFile(configFilePath, 'utf-8'))
     if (!config.api_key || config.api_key === 'your_api_key_here') {
       logger.warn('配置文件缺少 api_key 字段，请前往 https://open.bigmodel.cn/ 获取 api_key 并填入配置文件')
       return
     }
 
-    logger.info('prodia-plugin 配置完整，初始化成功')
+    logger.info('配置完整，初始化成功')
     pluginInfo.config = config
   } catch (error) {
-    logger.warn('prodia-plugin 配置文件不存在，将创建默认配置文件...')
+    logger.warn('配置文件不存在，将创建默认配置文件...')
     const defaultConfig = {
       api_key: 'your_api_key_here',
     }
