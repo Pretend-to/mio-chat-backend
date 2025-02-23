@@ -1,7 +1,5 @@
-import { MioFunction, Param } from '../../../lib/functions.js';
-import path from 'path';
-import fs from 'fs';
-import crypto from 'crypto';
+import { MioFunction, Param } from '../../../lib/functions.js'
+import crypto from 'crypto'
 
 export class pubWebpage extends MioFunction {
   constructor() {
@@ -17,36 +15,27 @@ export class pubWebpage extends MioFunction {
           required: true,
         }),
       ],
-    });
-    this.func = this.pubWebpage;
+    })
+    this.func = this.pubWebpage
   }
 
   async pubWebpage(e) {
-    const origin = e.user.origin;
-    const uid = e.user.id;
-    const timestamp = Date.now().toString();
+    const baseUrl = e.user.origin
+    const uid = e.user.id
+    const timestamp = Date.now().toString()
     
     // Generate MD5 hash using uid and timestamp
-    const hash = crypto.createHash('md5').update(`${uid}${timestamp}`).digest('hex');
-    const savePath = path.join(
-      process.cwd(),
-      `./output/generated/html/${hash}.html`
-    );
-    const html = e.params.html;
+    const hash = crypto.createHash('md5').update(`${uid}${timestamp}`).digest('hex')
+    const pageName = `${hash}.html`
 
-    // Check if the directory exists
-    const dirPath = path.dirname(savePath);
-    if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true });
-    }
+    const html = e.params.html
 
-    // Create or overwrite file
-    fs.writeFileSync(savePath, html);
-
+    const url = this.saveTextFile(baseUrl, html, pageName)
+    
     return {
       // iframe
-      iframe: `<iframe src="${origin}/api/generated/html/${hash}.html" width="100%" height="auto"></iframe>`,
-      hyperlink: `<a href="${origin}/api/generated/html/${hash}.html" target="_blank">点击这里在新窗口直接访问链接</a>`,
-    };
+      iframe: `<iframe src="${url}" width="100%" height="auto"></iframe>`,
+      hyperlink: `<a href="${url}" target="_blank">点击这里在新窗口直接访问链接</a>`,
+    }
   }
 }
