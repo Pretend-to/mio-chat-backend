@@ -7,7 +7,7 @@ options:
         label: "画图"
         children:
           - value: "apDraw"
-            label: "绘图"
+            label: "绘个图"
             preset: "#绘个图{xxx}"
       - value: "GPT"
         label: "AI对话"
