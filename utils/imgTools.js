@@ -1,70 +1,8 @@
 /* eslint-disable camelcase */
-/* eslint-disable no-undef */
-import fetch from 'node-fetch'
-import fs from 'fs'
-import path from 'path'
+
 import https from 'https'
 import http from 'http'
 
-const savePic = async (pic, engine, model) => {
-  try {
-    const shortModel = model.includes('[') ? model.split(' [')[0] : model
-    let buffer
-    let type
-    if (pic.startsWith('data:image/jpeg;base64,')) {
-      type = 'jpeg'
-    } else if (pic.startsWith('data:image/png;base64,')) {
-      type = 'png'
-    } else {
-      type = 'jpg'
-    }
-
-    if (pic.startsWith('http')) {
-      const response = await fetch(pic)
-      const arrayBuffer = await response.arrayBuffer()
-      buffer = Buffer.from(arrayBuffer)
-    } else {
-      // 传入的pic是个base64
-      buffer = Buffer.from(pic.split(',')[1], 'base64')
-    }
-
-    const outputDir = path.join('./output', engine, shortModel)
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true })
-    }
-
-    const timestamp = new Date().getTime()
-    const outPath = path.join(outputDir, timestamp + '.' + type)
-    fs.writeFileSync(outPath, buffer)
-
-    return { error: false, path: outPath, name:timestamp + '.' + type }
-  } catch (error) {
-    logger.debug(error)
-    return { error: error, path: null }
-  }
-}
-
-const getPNGBase64 = async (url, id) => {
-  try {
-    if (url.startsWith('http')) {
-      return await imgUrlToBase64(url, id)
-    } else {
-      const response = await fetch(url)
-      const startTime2 = Date.now()
-      const arrayBuffer = await response.arrayBuffer()
-      const endTime2 = Date.now()
-      const elapsedTime2 = endTime2 - startTime2
-      logger.info(`[${id}] PNG-Base64转换耗时：${elapsedTime2}ms`)
-      const buffer = Buffer.from(arrayBuffer)
-      const base64String = 'data:image/png;base64,' + buffer.toString('base64')
-
-      return base64String
-    }
-  } catch (error) {
-    logger.error(error)
-    return null
-  }
-}
 
 async function imgUrlToBase64(url, id = 'default') {
   let final_url = url
@@ -102,26 +40,4 @@ async function imgUrlToBase64(url, id = 'default') {
   })
 }
 
-async function bufferToUrl(buffer, url) {
-  // 随机生成一段序列号
-  const random = Math.random().toString(36).substr(2)
-  
-  // 定义输出目录路径
-  const outputDir = path.join(process.cwd(), './output', 'uploaded', 'prodia')
-  
-  // 如果目录不存在，则创建目录
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true })
-  }
-  
-  // 定义输出文件的完整路径
-  const outPath = path.join(outputDir, `${random}.jpeg`)
-
-  // 写入文件
-  await fs.promises.writeFile(outPath, new Uint8Array(buffer))
-
-  // 构建并返回完整的URL
-  const fullUrl = `${url}/api/uploaded/prodia/${random}.jpeg`
-  return fullUrl
-}
-export { bufferToUrl,getPNGBase64, savePic, imgUrlToBase64 }
+export { imgUrlToBase64 }

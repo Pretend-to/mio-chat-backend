@@ -1,15 +1,5 @@
 debug: false
 
-draw:
-  # 是否开启 sd 绘图服务器
-  enable_sd_server: false
-  # prodia api key
-  prodia_key: ""
-  # 用来反代 https://images.prodia.xyz 的地址
-  reverse_proxy_url: "https://api.krumio.com/prodia"
-  # 是否把画图结果保存到本地
-  stroge: false
-
 openai:
   # 是否开启 openai 协议
   enable: true

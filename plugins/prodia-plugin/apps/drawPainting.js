@@ -1,7 +1,6 @@
 import { MioFunction, Param } from '../../../lib/functions.js'
 import { pluginInfo } from '../index.js'
 import { createProdia } from 'prodia/v2'
-import { bufferToUrl } from '../../../utils/imgTools.js'
 
 export class drawPainting extends MioFunction {
   constructor() {
@@ -72,9 +71,9 @@ export class drawPainting extends MioFunction {
     }, {
       accept: 'image/jpeg'
     })
-
+  
     const image = await job.arrayBuffer()
-    const result = await bufferToUrl(image, url)
+    const result = await this.saveImage(url, image)
     return {
       url: result
     }
