@@ -6,9 +6,16 @@ options:
       - value: "AP"
         label: "画图"
         children:
-          - value: "apDraw"
+          - value: "eDraw"
             label: "绘个图"
             preset: "#绘个图{xxx}"
+          - value: "apDraw"
+            label: "绘图"
+            preset: "#绘图{xxx}"
+          - value: "noDraw"
+            label: "绘画"
+            preset: "/绘画{xxx}"
+          
       - value: "GPT"
         label: "AI对话"
         children:
