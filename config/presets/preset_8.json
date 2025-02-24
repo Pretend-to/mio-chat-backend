@@ -1,5 +1,5 @@
 {
-  "name": "DeepSeek-R1-满血671B",
+  "name": "DeepSeek-R1-671b-sf",
   "max_messages_num": 4,
   "recommendedModel": "deepseek-r1-c",
   "recommended" : true
