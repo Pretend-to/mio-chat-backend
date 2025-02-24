@@ -11,6 +11,8 @@
     "recommendedModel": "command-r-plus",
     "recommended": false,
     "hidden": true,
+    "temprature": 0.8,
+    "presence_penalty": 0.2,
     "name": "孙狗"
 }
   
