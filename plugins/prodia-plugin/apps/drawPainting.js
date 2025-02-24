@@ -73,7 +73,8 @@ export class drawPainting extends MioFunction {
     })
   
     const image = await job.arrayBuffer()
-    const result = await this.saveImage(url, image)
+    const buffer = Buffer.from(image)
+    const result = await this.getImgUrlFromBuffer(url, buffer)
     return {
       url: result
     }
