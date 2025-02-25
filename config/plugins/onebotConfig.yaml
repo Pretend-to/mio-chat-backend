@@ -16,8 +16,8 @@ options:
         label: "sf对话"
         children:
           - value: "sfgemini"
-          - label: "sf #gg"
-          - preset: "#gg{xxx}"
+            label: "sf #gg"
+            preset: "#gg{xxx}"
       - value: "GPT"
         label: "AI对话"
         children:
