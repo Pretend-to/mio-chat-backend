@@ -6,9 +6,18 @@ options:
       - value: "AP"
         label: "画图"
         children:
-          - value: "apDraw"
+          - value: "eDraw"
             label: "绘个图"
             preset: "#绘个图{xxx}"
+          - value: "apDraw"
+            label: "绘图"
+            preset: "#绘图{xxx}"
+      - value: "SF"
+        label: "sf对话"
+        children:
+          - value: "sfgemini"
+          - label: "sf #gg"
+          - preset: "#gg{xxx}"
       - value: "GPT"
         label: "AI对话"
         children:
@@ -54,4 +63,3 @@ options:
           - value: "genshinOb"
             label: "角色养成材料"
             preset: "#{xxx}材料"
- 
