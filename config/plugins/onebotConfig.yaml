@@ -63,3 +63,4 @@ options:
           - value: "genshinOb"
             label: "角色养成材料"
             preset: "#{xxx}材料"
+ 
