@@ -24,7 +24,7 @@ export class parseWebPage extends MioFunction {
     const page = await browser.newPage()
         
     try {
-      await page.goto(url, { waitUntil: 'networkidle2' })
+      await page.goto(url, { waitUntil: 'domcontentloaded' })
       const result = await page.evaluate(() => {
         const texts = []
         const images = []
