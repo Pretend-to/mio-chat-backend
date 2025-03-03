@@ -10,13 +10,10 @@
 /.idea
 
 /plugins/*
-!/plugins/example/
-!/plugins/amap-plugin/
-!plugins/web-plugin/
-!plugins/bili-plugin/
-!/plugins/led-plugin/
-!/plugins/prodia-plugin/
-!/plugins/glm-plugin/
+!/plugins/custom/
+/plugins/custom/*
+!/plugins/custom/exec.js
+
 
 test.js
 image.jpg
