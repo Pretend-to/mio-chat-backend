@@ -1,29 +1,28 @@
 /* eslint-disable no-undef */
 const logger = {
-  info(msg, req = null) {
-    this.log('INFO', msg, req)
+  info(msg, extra = {}) {
+    this.log('INFO', msg, extra)
   },
-  mark(msg, req = null) {
-    this.log('MARK', msg, req)
+  mark(msg, extra = {}) {
+    this.log('MARK', msg, extra)
   },
-  warn(msg, req = null) {
-    this.log('WARN', msg, req)
+  warn(msg, extra = {}) {
+    this.log('WARN', msg, extra)
   },
-  error(msg, req = null) {
+  error(msg, extra = {}) {
     console.log(msg) // Print the error message first
-    this.log('ERROR', msg, req)
+    this.log('ERROR', msg, extra)
   },
-  debug(msg, req = null) {
+  debug(msg, extra = {}) {
     if (global.debug) {
-      this.log('DEBUG', msg, req)
+      this.log('DEBUG', msg, extra)
       console.log(msg)
       console.log('\x1b[0m')
     }
   },
-  log(level, msg, req) {
-    const ip = req ? this.getIP(req) : null
+  log(level, msg, extra) {
+    const ip = extra.ip
     const callerInfo = this.getCallerInfo()
-
     console.log(
       `\x1b[${this.getColor(level)}m[Mio-Chat][${this.getTime()}][${level}]\x1b[0m${
         ip ? `\x1b[35m[${ip}]\x1b[0m` : ''
@@ -51,7 +50,6 @@ const logger = {
     const stackLines = stack.split('\n')
     const callerLine = stackLines[4] || '' // Get the 5th line for the actual caller
     const match = callerLine.match(/\((.*):(\d+):\d+\)/)
-
     if (match) {
       const fullPath = match[1]
       const pathSegments = fullPath.split('/')
@@ -59,16 +57,7 @@ const logger = {
       const shortPath = pathSegments.slice(-2).join('/')
       return `[${shortPath}:${match[2]}]`
     }
-
     return '[unknown]'
-  },
-  getIP(req) {
-    try {
-      return req.headers['x-real-ip'] || req.connection.remoteAddress || null
-    } catch (error) {
-      console.error('Error getting IP:', error)
-      return null
-    }
   },
   getTime() {
     const currentDate = new Date()
@@ -79,6 +68,5 @@ const logger = {
     return `${hours}:${minutes}:${seconds}.${milliseconds}`
   },
 }
-
 global.logger = logger
 export default logger
