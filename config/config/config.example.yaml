@@ -8,7 +8,7 @@ openai:
   # openai 基础地址
   openai_base_url: "https://api.openai.com/v1"
   # 允许游客使用的模型
-  guest_engines:
+  guest_models:
     keywords:
         - gpt-4o-mini
     full_name:
@@ -18,43 +18,6 @@ openai:
         - deepseek-chat
   # 默认使用的模型
   default_engine: "gpt-4o-mini"
-  model_owners:
-  - owner: OpenAI
-    keywords:
-      - "gpt"
-      - "o1"
-      - "o3"
-  - owner: Cohere
-    keywords:
-      - "command"
-  - owner: Anthropic
-    keywords:
-      - "claude"
-  - owner: Google
-    keywords:
-      - "gemini"
-      - "PaLM"
-  - owner: DeepSeek
-    keywords:
-      - "deepseek"
-  - owner: 智谱清言
-    keywords:
-      - "glm"
-  - owner: 豆包
-    keywords:
-      - "doubao"
-  - owner: 月之暗面 (kimi)
-    keywords:
-      - "mootshot"
-  - owner: 科大讯飞
-    keywords:
-      - "sparkdesk"
-  - owner: 通义千问
-    keywords:
-      - "qwen"
-  - owner: 腾讯混元
-    keywords:
-      - "hunyuan"
 
 onebot:
   # 是否开启 onebot 协议
