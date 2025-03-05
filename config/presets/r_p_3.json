@@ -6,7 +6,6 @@
       }
     ],
     "opening": "您好！我是一个画家，我可以帮助您创造出富有表现力和意义的艺术作品，探索不同的风格和主题。",
-    "textwrapper": "",
     "tools": ["drawPainting"],
     "recommended": true,
     "name": "艺术画家"
