@@ -1,6 +1,6 @@
 {
   "name": "DeepSeek-R1-671b-bl",
   "max_messages_num": 4,
-  "recommendedModel": "deepseek-r1-e",
+  "model": "deepseek-r1-e",
   "recommended" : true
 }
