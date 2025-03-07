@@ -63,12 +63,11 @@ class AsyncQueue {
   // dequeue() Promise resolves to a value or the EOS sentinel if we're
   // closed. Here, we need to return a Promise that resolves to an
   // iterator result object.
-  next() {
-    return this.dequeue().then((value) =>
-      value === AsyncQueue.EOS
-        ? { value: undefined, done: true }
-        : { value: value, done: false }
-    )
+  async next() {
+    const value = await this.dequeue()
+    return value === AsyncQueue.EOS
+      ? { value: undefined, done: true }
+      : { value: value, done: false }
   }
 }
 // A sentinel value returned by dequeue() to mark "end of stream" when closed
