@@ -73,6 +73,30 @@
 }
 ```
 
+## /api/share
+
+### 分享Bot
+
+```json
+{
+    "contactor": {},  
+}
+````
+
+#### 返回
+
+```json
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "shareUrl": "",
+        "previewImg": ""
+    }
+}
+```
+
+
 ## /api/onebot/forward_msg
 
 ### 转发消息
