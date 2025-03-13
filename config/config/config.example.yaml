@@ -19,6 +19,23 @@ openai:
   # 默认使用的模型
   default_models: "gpt-4o-mini"
 
+gemini:
+  # 是否开启 gemini 协议
+  enable: true
+  # gemini api key
+  api_key: ""
+  # google ai stdio 基础地址
+  base_url: ""
+  # 允许游客使用的模型
+  guest_models:
+    keywords:
+        - flash
+    full_name:
+        - gemini-1.5-pro
+
+  # 默认使用的模型
+  default_models: "gpt-4o-mini"
+
 onebot:
   # 是否开启 onebot 协议
   enable: false
