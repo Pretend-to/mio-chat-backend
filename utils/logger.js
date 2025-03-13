@@ -67,6 +67,10 @@ const logger = {
     const milliseconds = currentDate.getMilliseconds().toString().padStart(3, '0')
     return `${hours}:${minutes}:${seconds}.${milliseconds}`
   },
+  json(obj){
+    return JSON.stringify(obj, null, 2)
+  }
 }
+
 global.logger = logger
 export default logger
