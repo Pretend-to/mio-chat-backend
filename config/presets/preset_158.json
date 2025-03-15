@@ -22,6 +22,8 @@
     }
   ],
   "tools": ["drawImage"],
+  "model": "gemini-2.0-flash-001",
+  "temperature": 0.8,
   "name": "本子画师",
   "hidden": true
 }
