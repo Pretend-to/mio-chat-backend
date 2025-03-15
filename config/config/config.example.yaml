@@ -17,7 +17,7 @@ openai:
         - o3-mini
         - deepseek-chat
   # 默认使用的模型
-  default_models: "gpt-4o-mini"
+  default_model: "gpt-4o-mini"
 
 gemini:
   # 是否开启 gemini 协议
@@ -34,7 +34,7 @@ gemini:
         - gemini-1.5-pro
 
   # 默认使用的模型
-  default_models: "gpt-4o-mini"
+  default_model: "gemini-2.0-flash"
 
 onebot:
   # 是否开启 onebot 协议
