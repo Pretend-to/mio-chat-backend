@@ -1,4 +1,4 @@
-import { MioFunction, Param } from '../../lib/functions.js'
+import { MioFunction } from '../../lib/functions.js'
 import os from 'node:os'
 import { spawn } from 'node:child_process'
 
@@ -7,13 +7,12 @@ export default class executeCommand extends MioFunction {
     super({
       name: 'executeCommand',
       description: `A tool that executes console commands and reads the output, current server is running on ${os.platform()}. Pay attention to the platform of the server.`,
-      params: [
-        new Param({
-          name: 'command',
-          type: 'string',
-          description: 'The console command you want to execute',
-          required: true,
-        }),
+      params: [{
+        name: 'command',
+        type: 'string',
+        description: 'The console command you want to execute',
+        required: true,
+      },
       ],
     })
     this.func = this.executeCommand

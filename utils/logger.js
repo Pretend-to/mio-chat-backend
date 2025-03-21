@@ -10,7 +10,7 @@ const logger = {
     this.log('WARN', msg, extra)
   },
   error(msg, extra = {}) {
-    console.log(msg) // Print the error message first
+    console.error(msg) // Print the error message first
     this.log('ERROR', msg, extra)
   },
   debug(msg, extra = {}) {
@@ -48,16 +48,35 @@ const logger = {
   getCallerInfo() {
     const stack = new Error().stack
     const stackLines = stack.split('\n')
-    const callerLine = stackLines[4] || '' // Get the 5th line for the actual caller
-    const match = callerLine.match(/\((.*):(\d+):\d+\)/)
+  
+    // 跳过 getCallerInfo 本身以及可能的中间层函数
+    let i = 1
+    while (i < stackLines.length && (stackLines[i].includes('getCallerInfo') || stackLines[i].includes('logger.js'))) {
+      i++
+    }
+  
+    // 尝试找到包含文件路径和行号的堆栈行
+    let callerLine = ''
+    for (; i < stackLines.length; i++) {
+      const line = stackLines[i]
+      if (line.includes('(') && line.includes(':')) {
+        callerLine = line
+        break
+      }
+    }
+    
+    // 稍微宽松的正则表达式，允许 "at " 前缀和其他变体
+    const match = callerLine.match(/at .*?\((.*?):(\d+):\d+\)/) || callerLine.match(/at (.*?):(\d+):\d+/)
+  
     if (match) {
       const fullPath = match[1]
       const pathSegments = fullPath.split('/')
-      // Get the last two segments
       const shortPath = pathSegments.slice(-2).join('/')
       return `[${shortPath}:${match[2]}]`
+    } else {
+      console.warn('Could not extract caller info from:', callerLine) // 调试警告
+      return '[unknown]'
     }
-    return '[unknown]'
   },
   getTime() {
     const currentDate = new Date()
@@ -67,6 +86,10 @@ const logger = {
     const milliseconds = currentDate.getMilliseconds().toString().padStart(3, '0')
     return `${hours}:${minutes}:${seconds}.${milliseconds}`
   },
+  json(obj){
+    console.log(JSON.stringify(obj, null, 2))
+  }
 }
+
 global.logger = logger
 export default logger
