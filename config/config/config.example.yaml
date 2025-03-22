@@ -21,11 +21,11 @@ openai:
 
 gemini:
   # 是否开启 gemini 协议
-  enable: true
-  # gemini api key
+  enable: false
+  # gemini api key, 支持多个 key 用 , 分割
   api_key: ""
   # google ai stdio 基础地址
-  base_url: ""
+  base_url: "https://generativelanguage.googleapis.com"
   # 允许游客使用的模型
   guest_models:
     keywords:
