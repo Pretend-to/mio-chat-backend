@@ -5,6 +5,7 @@
 /backup/*
 /config/config/config.yaml
 /presets/custom/*
+!/presets/custom/example.json
 
 /.VSCodeCounter
 /.vscode
