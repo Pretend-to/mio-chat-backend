@@ -32,7 +32,7 @@ async function imgUrlToBase64(url, id = 'default') {
       const contentType = res.headers['content-type']
 
       // 检查支持的图像格式
-      if (!['image/jpeg', 'image/png'].includes(contentType)) {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(contentType)) {
         resolve(`Unsupported image format: ${contentType}`)
         return
       }
@@ -48,7 +48,10 @@ async function imgUrlToBase64(url, id = 'default') {
         const endTime = Date.now()
         const elapsedTime = endTime - startTime
         logger.debug(`[${id}] Base64转换耗时：${elapsedTime}ms`)
-        resolve(base64Img)
+        resolve({
+          type: contentType,
+          data: base64Img
+        })
       })
     })
 
