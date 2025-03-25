@@ -3,7 +3,7 @@ debug: false
 openai:
   # 是否开启 openai 协议
   enable: true
-  # openai api key
+  # openai api key，支持多个 key 用 , 分割
   api_key: ""
   # openai 基础地址
   base_url: "https://api.openai.com/v1"

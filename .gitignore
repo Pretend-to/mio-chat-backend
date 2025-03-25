@@ -4,6 +4,7 @@
 /output/*
 /backup/*
 /config/config/config.yaml
+/presets/custom/*
 
 /.VSCodeCounter
 /.vscode
