@@ -9,9 +9,10 @@ const logger = {
   warn(msg, extra = {}) {
     this.log('WARN', msg, extra)
   },
-  error(msg, extra = {}) {
-    console.error(msg) // Print the error message first
+  error(msg, error, extra = {}) {
     this.log('ERROR', msg, extra)
+    console.error(msg, error) // Print the error message first
+
   },
   debug(msg, extra = {}) {
     if (global.debug) {
