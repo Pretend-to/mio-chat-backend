@@ -25,7 +25,7 @@ gemini:
   # gemini api key, 支持多个 key 用 , 分割
   api_key: ""
   # google ai stdio 基础地址
-  base_url: "https://generativelanguage.googleapis.com"
+  base_url: "https://bitter-rook-58.deno.dev"
   # 允许游客使用的模型
   guest_models:
     keywords:
@@ -62,4 +62,4 @@ web:
   # 是否默认全屏模式
   full_screen: true
   # 网页标题
-  title: "蜜柚——MioChat"
+  title: "MioChat"
