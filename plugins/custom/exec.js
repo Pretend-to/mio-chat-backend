@@ -11,9 +11,8 @@ export default class executeCommand extends MioFunction {
         name: 'command',
         type: 'string',
         description: 'The console command you want to execute',
-        required: true,
-      },
-      ],
+      }],
+      required: ['command'],
     })
     this.func = this.executeCommand
   }
