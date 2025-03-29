@@ -14,9 +14,10 @@
   "author": "mio",
   "license": "ISC",
   "devDependencies": {
-    "eslint": "^8.56.0"
+    "eslint": "^9.23.0"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.8.0",
     "api": "^6.1.1",
     "axios": "^1.6.7",
     "chokidar": "^4.0.3",
