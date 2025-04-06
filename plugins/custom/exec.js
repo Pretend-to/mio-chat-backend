@@ -7,12 +7,15 @@ export default class executeCommand extends MioFunction {
     super({
       name: 'executeCommand',
       description: `A tool that executes console commands and reads the output, current server is running on ${os.platform()}. Pay attention to the platform of the server.`,
-      params: [{
-        name: 'command',
-        type: 'string',
-        description: 'The console command you want to execute',
-      }],
-      required: ['command'],
+      parameters: {
+        type: 'object',
+        properties: {
+          command: {
+            type:'string',
+            description: 'The console command you want to execute',
+          },
+        },
+      }
     })
     this.func = this.executeCommand
   }
