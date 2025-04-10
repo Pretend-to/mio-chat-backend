@@ -87,8 +87,14 @@ const logger = {
     const milliseconds = currentDate.getMilliseconds().toString().padStart(3, '0')
     return `${hours}:${minutes}:${seconds}.${milliseconds}`
   },
-  json(obj){
-    console.log(JSON.stringify(obj, null, 2))
+  json(obj) {
+    const jsonString = JSON.stringify(obj, (key, value) => {
+      if (key === 'data') {
+        return 'xxx'; 
+      }
+      return value; 
+    }, 2);
+    console.log(jsonString);
   }
 }
 
