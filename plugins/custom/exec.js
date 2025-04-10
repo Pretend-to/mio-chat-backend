@@ -21,7 +21,7 @@ export default class executeCommand extends MioFunction {
   }
 
   async executeCommand(e) {
-    const commandArgs = e.params.command.split(' ') // 将命令分割为命令名称和参数
+    const commandArgs = e.parameters.command.split(' ') // 将命令分割为命令名称和参数
     const command = commandArgs.shift() // 移除第一个元素作为命令，剩余的作为参数
     const args = commandArgs
 
