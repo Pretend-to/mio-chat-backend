@@ -2,6 +2,8 @@
 
 一款基于 Websocket 的 ChatBot 对话平台，兼容 OpenAI 与**部分** Onebot 协议v11。兼容流行的 Onebot 生态圈。
 
+插件市场：[Mio-Chat 插件市场](https://github.com/Pretend-to/awesome-miochat-plugins)
+
 前端部分：[Mio-Chat 前端](https://github.com/Pretend-to/mio-chat-frontend)
 
 QQ交流群：[qq 群](https://qm.qq.com/q/Eqv9Z6iSB4)
@@ -27,7 +29,7 @@ QQ交流群：[qq 群](https://qm.qq.com/q/Eqv9Z6iSB4)
 - ✅ 支持自定义预设角色
 - ✅ 支持多种消息类型（文本、图片、转发消息等）
 - ✅ 支持 WebSocket 实时通信
-- ✅ 支持 API 接口调用
+- ✅ 支持 MCP 接口调用
 
 ## 项目状态
 
