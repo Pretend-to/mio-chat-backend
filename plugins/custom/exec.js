@@ -1,4 +1,4 @@
-import { MioFunction } from '../../lib/functions.js'
+import { MioFunction } from '../../lib/function.js'
 import os from 'node:os'
 import { spawn } from 'node:child_process'
 
