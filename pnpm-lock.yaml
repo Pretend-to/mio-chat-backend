@@ -73,6 +73,12 @@ importers:
         specifier: ^9.23.0
         version: 9.23.0
 
+  plugins/prodia-plugin:
+    dependencies:
+      prodia:
+        specifier: ^1.5.0
+        version: 1.5.0
+
 packages:
 
   '@aashutoshrathi/word-wrap@1.2.6':
@@ -1601,6 +1607,10 @@ packages:
 
   process-nextick-args@2.0.1:
     resolution: {integrity: sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==}
+
+  prodia@1.5.0:
+    resolution: {integrity: sha512-c2jfHwJw5TljAj/1OsKea2brsqpMLLR0+fPrUSBcQ5GvYIdiJ6D17vXfFey0aICtHXB92h5BQObEXs93O4HYhw==}
+    engines: {node: '>=18.0.0'}
 
   progress@2.0.3:
     resolution: {integrity: sha512-7PiHtLll5LdnKIMw100I+8xJXR5gW2QwWYkT6iJva0bXitZKa/XMrSbdmg3r2Xnaidz9Qumd0VPaMrZlF9V9sA==}
@@ -3830,6 +3840,8 @@ snapshots:
   prelude-ls@1.2.1: {}
 
   process-nextick-args@2.0.1: {}
+
+  prodia@1.5.0: {}
 
   progress@2.0.3: {}
 
