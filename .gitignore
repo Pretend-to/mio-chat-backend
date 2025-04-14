@@ -15,6 +15,7 @@
 !/plugins/custom/
 /plugins/custom/*
 !/plugins/custom/exec.js
+!/plugins/custom/parser.js
 
 
 test.js
