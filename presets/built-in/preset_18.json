@@ -7,7 +7,7 @@
     }
   ],
   "opening":"您好，我是 New Bing, 由 Microsoft 驱动的 AI 助手，今天有什么可以帮助您？😊 \n 今日剩余对话次数：[∞/∞]",
-  "avatar": "/static/avatar/bing.png",
+  "avatar": "/p/ava/bing.png",
   "tools": ["drawImage"],
   "recommended": true
 }
