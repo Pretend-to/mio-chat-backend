@@ -3,6 +3,7 @@
     - "gpt"
     - "o1"
     - "o3"
+    - "o4"
 - owner: Cohere
   keywords:
     - "command"
@@ -13,6 +14,7 @@
   keywords:
     - "gemini"
     - "PaLM"
+    - "gemma"
 - owner: X.AI
   keywords:
     - "grok"

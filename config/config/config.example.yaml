@@ -24,7 +24,7 @@ gemini:
   enable: false
   # gemini api key, 支持多个 key 用 , 分割
   api_key: ""
-  # google ai stdio 基础地址
+  # google ai stdio 基础地址, 用于反代 
   base_url: "https://bitter-rook-58.deno.dev"
   # 允许游客使用的模型
   guest_models:
