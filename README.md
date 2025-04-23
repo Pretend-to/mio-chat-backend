@@ -8,7 +8,7 @@
 
 前端部分在这里：[Mio-Chat 前端](https://github.com/Pretend-to/mio-chat-frontend)
 
-想找香草玩？加入 QQ 交流群吧！：[QQ 群](https://qm.qq.com/q/Eqv9Z6iSB4)
+想找香草玩？加入 QQ 交流群吧！：[QQ 群](http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=-r56TCEUfe5KAZXx3p256B2_cxMhAznC&authKey=6%2F7fyXh3AxdOsYmqqfxBaoKszlQzKKvI%2FahbRBpdKklWWJsyHUI0iyB7MoHQJ%2BqJ&noverify=0&group_code=798543340)
 
 先看看香草的聊天效果吧！：[Mio-Chat](https://ai.krumio.com)
 
