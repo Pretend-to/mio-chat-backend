@@ -11,6 +11,7 @@
 /.VSCodeCounter
 /.vscode
 /.idea
+/src-tauri/*
 
 /plugins/*
 !/plugins/custom/
