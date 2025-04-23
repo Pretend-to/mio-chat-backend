@@ -1,6 +1,6 @@
 # Mio-Chat-Backend
 
-一个基于 Websocket 的 ChatBot 对话平台，能和人类愉快聊天的那种！支持超火的 OpenAI 和 Gemini 协议 (包括 Ai Stdio 和 Vertex AI)，推荐使用 One-API 项目统一管理接口哦！想和谁聊天就和谁聊天！
+一个基于 Socket.io 的 ChatBot 对话平台，能和人类愉快聊天的那种！支持超火的 OneBot(exp) 、OpenAI(推荐使用 One-API 项目统一管理) 和 Gemini 协议 (包括 Ai Stdio 和 Vertex AI)！想和谁聊天就和谁聊天！
 
 *(这份可爱的 README 可是香草亲手写的哦！)*
 
@@ -14,10 +14,10 @@
 
 ## 预览
 
-![Mio-Chat](.github/preview/1.png)
-![Mio-Chat](.github/preview/2.png)
-![Mio-Chat](.github/preview/3.png)
-![Mio-Chat](.github/preview/4.png)
+
+| ![Mio-Chat](.github/preview/1.png) | ![Mio-Chat](.github/preview/2.png) |
+|---|---|
+| ![Mio-Chat](.github/preview/3.png) | ![Mio-Chat](.github/preview/4.png) |
 
 ## 特性
 
