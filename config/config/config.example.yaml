@@ -38,14 +38,6 @@ gemini:
 
 vertex:
   enable: false
-  models:
-    - gemini-2.5-flash-preview-04-17
-    - gemini-2.5-pro-preview-03-25
-    - gemini-2.0-flash-001
-    - gemini-2.0-flash-exp
-    - gemini-2.0-flash-lite-001
-    - gemini-2.0-pro-exp
-    - gemini-1.5-pro-002
   guest_models:
     keywords:
       - flash
