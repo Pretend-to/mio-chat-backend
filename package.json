@@ -30,7 +30,7 @@
     "google-auth-library": "^9.15.1",
     "js-yaml": "^4.1.0",
     "lodash": "^4.17.21",
-    "multer": "1.4.5-lts.1",
+    "multer": "2.0.1",
     "nan": "^2.18.0",
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
