@@ -43,13 +43,15 @@ vertex:
       - flash
     full_name:
       - gemini-2.5-pro-preview-03-25
-  default_model: gemini-2.0-flash-001
+  default_model: "gemini-2.0-flash-001"
 
 onebot:
   # 是否开启 onebot 协议
   enable: false
   # 反向 ws 链接地址
   reverse_ws_url: ""
+  # ws 认证 token
+  token: ""
   # 机器人 QQ 号
   bot_qq: ''
   # 主人 QQ 号
