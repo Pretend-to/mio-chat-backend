@@ -50,7 +50,7 @@ async function imgUrlToBase64(url, id = 'default') {
         logger.debug(`[${id}] Base64转换耗时：${elapsedTime}ms`)
         resolve({
           type: contentType,
-          data: base64Img
+          data: base64Img,
         })
       })
     })
@@ -90,9 +90,9 @@ async function base64ToImageUrl(baseUrl, base64) {
 async function bufferToImageUrl(baseUrl, buffer) {
   const outputDir = path.join(process.cwd(), 'output', 'generated', 'file')
 
-  // 如果目录不存在，则创建目录 
+  // 如果目录不存在，则创建目录
   if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true }) 
+    fs.mkdirSync(outputDir, { recursive: true })
   }
 
   // 生成唯一的文件名
@@ -102,7 +102,7 @@ async function bufferToImageUrl(baseUrl, buffer) {
   // 检查文件是否已存在
   if (fs.existsSync(outputPath)) {
     logger.warn(`文件已存在：${outputPath}`)
-    return `${baseUrl}/f/gen/image/${filename}` 
+    return `${baseUrl}/f/gen/image/${filename}`
   }
 
   // 将Buffer写入文件
