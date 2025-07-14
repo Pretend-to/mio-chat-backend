@@ -4,37 +4,37 @@ openai:
   # 是否开启 openai 协议
   enable: true
   # openai api key，支持多个 key 用 , 分割
-  api_key: ""
+  api_key: ''
   # openai 基础地址
-  base_url: "https://api.openai.com/v1"
+  base_url: 'https://api.openai.com/v1'
   # 允许游客使用的模型
   guest_models:
     keywords:
-        - gpt-4o-mini
+      - gpt-4o-mini
     full_name:
-        - gemini-2.0-flash
-        - command-r-plus
-        - o3-mini
-        - deepseek-chat
+      - gemini-2.0-flash
+      - command-r-plus
+      - o3-mini
+      - deepseek-chat
   # 默认使用的模型
-  default_model: "gpt-4o-mini"
+  default_model: 'gpt-4o-mini'
 
 gemini:
   # 是否开启 gemini 协议
   enable: false
   # gemini api key, 支持多个 key 用 , 分割
-  api_key: ""
+  api_key: ''
   # google ai stdio 基础地址, 用于反代 https://generativelanguage.googleapis.com
-  base_url: "https://mioproxy-532406869692.asia-northeast2.run.app/gemini"
+  base_url: 'https://mioproxy-532406869692.asia-northeast2.run.app/gemini'
   # 允许游客使用的模型
   guest_models:
     keywords:
-        - flash
+      - flash
     full_name:
-        - gemini-1.5-pro
+      - gemini-1.5-pro
 
   # 默认使用的模型
-  default_model: "gemini-2.0-flash"
+  default_model: 'gemini-2.0-flash'
 
 vertex:
   enable: false
@@ -43,15 +43,15 @@ vertex:
       - flash
     full_name:
       - gemini-2.5-pro-preview-03-25
-  default_model: "gemini-2.0-flash-001"
+  default_model: 'gemini-2.0-flash-001'
 
 onebot:
   # 是否开启 onebot 协议
   enable: false
   # 反向 ws 链接地址
-  reverse_ws_url: ""
+  reverse_ws_url: ''
   # ws 认证 token
-  token: ""
+  token: ''
   # 机器人 QQ 号
   bot_qq: ''
   # 主人 QQ 号
@@ -59,18 +59,18 @@ onebot:
 
 server:
   port: 3080
-  host: "0.0.0.0"
+  host: '0.0.0.0'
   # 单独 IP 每分钟最大请求数
   max_rate_pre_min: 100
 
 web:
   # 管理员访问码
-  admin_code: ""
+  admin_code: ''
   # 普通用户访问码,留空则允许游客登陆
-  user_code: ""
+  user_code: ''
   # 备案号
-  beian: ""
+  beian: ''
   # 是否默认全屏模式
   full_screen: true
   # 网页标题
-  title: "MioChat"
+  title: 'MioChat'

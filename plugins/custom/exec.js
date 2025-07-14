@@ -11,11 +11,11 @@ export default class executeCommand extends MioFunction {
         type: 'object',
         properties: {
           command: {
-            type:'string',
+            type: 'string',
             description: 'The console command you want to execute',
           },
         },
-      }
+      },
     })
     this.func = this.executeCommand
   }
@@ -51,7 +51,12 @@ export default class executeCommand extends MioFunction {
         child.on('close', (code) => {
           if (code !== 0) {
             logger.error('Command execution failed with code: ' + code)
-            reject('Command execution failed with code: ' + code + ' and stderr: ' + stderr)
+            reject(
+              'Command execution failed with code: ' +
+                code +
+                ' and stderr: ' +
+                stderr,
+            )
           } else {
             logger.mark('Command executed successfully: ' + stdout)
             resolve({ stdout: stdout.trim(), stderr: stderr.trim() })
