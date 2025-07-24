@@ -5,19 +5,19 @@ openai:
   enable: true
   # openai api key，支持多个 key 用 , 分割
   api_key: ''
-  # openai 基础地址
-  base_url: 'https://api.openai.com/v1'
+  # openai 基础地址 , 用于反代 https://api.openai.com/v1
+  base_url: 'https://mp-dadrh25t7a-uc.a.run.app/openai/v1'
   # 允许游客使用的模型
   guest_models:
     keywords:
-      - gpt-4o-mini
+      - gpt-4.1-mini
     full_name:
       - gemini-2.0-flash
       - command-r-plus
       - o3-mini
       - deepseek-chat
   # 默认使用的模型
-  default_model: 'gpt-4o-mini'
+  default_model: 'gpt-4.1-mini'
 
 gemini:
   # 是否开启 gemini 协议
@@ -25,7 +25,7 @@ gemini:
   # gemini api key, 支持多个 key 用 , 分割
   api_key: ''
   # google ai stdio 基础地址, 用于反代 https://generativelanguage.googleapis.com
-  base_url: 'https://mioproxy-532406869692.asia-northeast2.run.app/gemini'
+  base_url: 'https://mp-dadrh25t7a-uc.a.run.app/gemini'
   # 允许游客使用的模型
   guest_models:
     keywords:

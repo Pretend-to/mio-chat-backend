@@ -15,6 +15,7 @@
   "author": "mio",
   "license": "ISC",
   "devDependencies": {
+    "@eslint/js": "^9.31.0",
     "eslint": "^9.23.0",
     "globals": "^16.3.0",
     "prettier": "^3.6.2"
@@ -42,5 +43,8 @@
     "puppeteer": "^23.1.1",
     "socket.io": "^4.8.1",
     "ws": "^8.18.0"
-  }
+  },
+  "workspaces": [
+    "plugins/*"
+  ]
 }
