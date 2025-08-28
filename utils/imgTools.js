@@ -61,30 +61,37 @@ async function imgUrlToBase64(url, id = 'default') {
   })
 }
 
-async function base64ToImageUrl(baseUrl, base64) {
+async function base64ToImageUrl(baseUrl, base64String) {
   const outputDir = path.join(process.cwd(), 'output', 'generated', 'file')
+  const imageUrlPrefix = `${baseUrl}/f/gen/image/` // 常量，避免重复计算
 
-  // 如果目录不存在，则创建目录
+  // 确保目录存在
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true })
   }
 
+  // 提取 Base64 数据，移除前缀
+  const base64Data = base64String.replace(/^data:image\/\w+;base64,/, '')
+
+  // 将 Base64 解码为 Buffer
+  const buffer = Buffer.from(base64Data, 'base64')
+
   // 生成唯一的文件名
-  const buffer = Buffer.from(base64, 'base64')
   const filename = await getBufferName(buffer)
   const outputPath = path.join(outputDir, filename)
+  const imageUrl = imageUrlPrefix + filename
 
   // 检查文件是否已存在
   if (fs.existsSync(outputPath)) {
     logger.warn(`文件已存在：${outputPath}`)
-    return `${baseUrl}/f/gen/image/${filename}`
-  } else {
-    // 将Base64字符串写入文件
-    fs.writeFileSync(outputPath, buffer)
+    return imageUrl
   }
 
-  // 返回图片的URL
-  return `${baseUrl}/f/gen/image/${filename}`
+  // 将 Buffer 写入文件
+  fs.writeFileSync(outputPath, buffer)
+
+  // 返回图片 URL
+  return imageUrl
 }
 
 async function bufferToImageUrl(baseUrl, buffer) {
