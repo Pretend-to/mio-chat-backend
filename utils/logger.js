@@ -1,4 +1,4 @@
-/* eslint-disable no-undef */
+ 
 const logger = {
   info(msg, extra = {}) {
     this.log('INFO', msg, extra)
@@ -100,7 +100,9 @@ const logger = {
       obj,
       (key, value) => {
         if (key === 'data') {
-          return 'xxx'
+          return '[Base64 Image Data]'
+        } else if (key === 'url' && value.startsWith('data:')) {
+          return '[Base64 Image Data]'
         }
         return value
       },
