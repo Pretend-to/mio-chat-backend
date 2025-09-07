@@ -101,7 +101,7 @@ const logger = {
       (key, value) => {
         if (key === 'data') {
           return '[Base64 Image Data]'
-        } else if (key === 'url' && value?.startsWith('data:')) {
+        } else if (key === 'url' && typeof value === 'string' && value.startsWith('data:')) {
           return '[Base64 Image Data]'
         }
         return value
