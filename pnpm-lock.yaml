@@ -88,12 +88,6 @@ importers:
         specifier: ^3.6.2
         version: 3.6.2
 
-  plugins/prodia-plugin:
-    dependencies:
-      prodia:
-        specifier: ^1.5.0
-        version: 1.6.0
-
 packages:
 
   '@aashutoshrathi/word-wrap@1.2.6':
@@ -1700,10 +1694,6 @@ packages:
   process@0.11.10:
     resolution: {integrity: sha512-cdGef/drWFoydD1JsMzuFf8100nZl+GT+yacc2bEced5f9Rjk4z+WtFUTBu9PhOi9j/jfmBPu0mMEY4wIdAF8A==}
     engines: {node: '>= 0.6.0'}
-
-  prodia@1.6.0:
-    resolution: {integrity: sha512-clTqF0Gb5UooVObG035j7w8HizVtu8uYTR18bpPwGcj6Y+AST3GA9TMM5ssI7znIkarvsXI3tI3p7exie+xnxQ==}
-    engines: {node: '>=18.0.0'}
 
   progress@2.0.3:
     resolution: {integrity: sha512-7PiHtLll5LdnKIMw100I+8xJXR5gW2QwWYkT6iJva0bXitZKa/XMrSbdmg3r2Xnaidz9Qumd0VPaMrZlF9V9sA==}
@@ -4044,8 +4034,6 @@ snapshots:
   prettier@3.6.2: {}
 
   process@0.11.10: {}
-
-  prodia@1.6.0: {}
 
   progress@2.0.3: {}
 
