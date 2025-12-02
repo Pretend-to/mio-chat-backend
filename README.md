@@ -75,6 +75,20 @@ npm run start
 
 2.  修改配置文件，按照配置文件的注释修改就可以啦！
 
+## 生产部署 / Nginx 反代
+
+- 项目附带的示例配置位于 `config/nginx/ai.krumio.com.conf`，包括 `http {}` 顶部的 `map`（按 `Accept-Encoding` 归一化）以及完整的 `server {}`。把 `map` 放在全局一次即可，其余按需调整 `server_name`、证书路径等。
+- 后端使用 `express-static-gzip` 自动优先返回 `.br`/`.gz`，所以 Nginx 需要透传 `Accept-Encoding` 并把 `$enc`（`map` 的结果）纳入 `proxy_cache_key`，避免缓存把压缩/未压缩弄混。
+- 修改配置后，记得在服务器上验证：
+
+```bash
+sudo nginx -t
+sudo nginx -s reload
+curl -I -H "Accept-Encoding: br,gzip" https://ai.krumio.com/assets/js/vendor_editor_preview-hsMXmvV2.js
+```
+
+- 如果想让 Nginx 直接服务静态资源，只需在该文件基础上把静态 `location` 改为 `root/try_files` 并启用 `gzip_static on;`，其余 proxy 逻辑保持一致。
+
 ## 配置说明
 
 配置文件在 `config/config/config.example.yaml`，记得复制成 `config.yaml` 再修改哦！
