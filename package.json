@@ -38,6 +38,7 @@
     "nan": "^2.18.0",
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
+    "express-static-gzip": "^2.1.0",
     "officeparser": "^5.1.1",
     "openai": "^4.82.0",
     "puppeteer": "^23.1.1",
