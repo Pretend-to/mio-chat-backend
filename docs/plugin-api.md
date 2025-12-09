@@ -431,6 +431,16 @@ Content-Type: application/json
 | `parameters` | object | 是 | 工具执行参数（根据工具 schema） |
 | `user` | object | 否 | 模拟用户上下文（默认管理员） |
 
+**执行上下文**
+
+调试接口会自动构造完整的执行上下文:
+
+- `params`: 传入的 parameters 对象
+- `user.isAdmin`: 默认为 `true`
+- `user.userId`: 默认为 `"debug-user"` (可自定义)
+- `user.origin`: 自动从 HTTP 请求中获取,格式为 `protocol://host` (如 `http://localhost:7001`)
+  - 用于需要 baseUrl 的工具(如图片上传、文件访问等)
+
 **示例**
 
 ```http
@@ -548,6 +558,37 @@ Content-Type: application/json
 **使用场景**
 
 1. **开发调试** - 测试新开发的工具
+2. **参数验证** - 验证 schema 定义是否正确
+3. **问题排查** - 快速定位工具执行问题
+4. **性能测试** - 查看工具执行时间
+
+**超时设置**
+
+- 工具执行超时时间: **5分钟**
+- 服务器超时时间: **6分钟**
+- 如果工具执行超过5分钟，将返回超时错误
+- 响应中会包含 `timedOut: true` 标识
+
+**超时响应示例**
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "success": false,
+    "pluginName": "prodia-plugin",
+    "toolName": "draw_image",
+    "executionTime": "300000ms",
+    "timedOut": true,
+    "error": {
+      "message": "工具执行超时 (>300秒)",
+      "stack": "..."
+    },
+    "input": { ... }
+  }
+}
+```
 2. **参数验证** - 验证 schema 定义是否正确
 3. **问题排查** - 快速定位工具执行问题
 4. **性能测试** - 查看工具执行时间
