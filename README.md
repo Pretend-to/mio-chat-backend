@@ -665,7 +665,11 @@ npm init
 
 ## 📡 API 文档
 
-详细的 HTTP API 和 Socket.IO 事件文档请参阅 [api.md](./api.md)。
+完整的 API 文档：
+
+- **[配置管理 API](./docs/config-api.md)** - LLM 适配器 CRUD、热更新
+- **[插件管理 API](./docs/plugin-api.md)** - 插件 CRUD、配置更新、热重载
+- **[通用 API](./api.md)** - 基础接口、文件上传、分享等
 
 ### 核心 Socket.IO 事件
 
