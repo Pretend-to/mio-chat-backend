@@ -9,7 +9,7 @@ export default class parseFile extends MioFunction {
       parameters: {
         type: 'object',
         properties: {
-          file_urls: {
+          fileUrls: {
             type: 'array',
             description:
               'The URLs of the files to parse for content extraction.',
@@ -25,18 +25,18 @@ export default class parseFile extends MioFunction {
   }
 
   async parseFile(e) {
-    const file_urls = e.params.file_urls
+    const fileUrls = e.params.fileUrls
     const result = []
     // 使用 Promise.allSettled 并行处理所有文件解析
-    const promises = file_urls.map(async (file_url) => {
+    const promises = fileUrls.map(async (fileUrl) => {
       try {
-        const { content, error } = await parseFileWithUrl(file_url)
+        const { content, error } = await parseFileWithUrl(fileUrl)
         if (error) {
           throw new Error(error)
         }
-        result.push({ file_url, content })
+        result.push({ fileUrl, content })
       } catch (error) {
-        result.push({ file_url, error: error.message })
+        result.push({ fileUrl, error: error.message })
       }
     })
     await Promise.allSettled(promises) // 等待所有解析完成
