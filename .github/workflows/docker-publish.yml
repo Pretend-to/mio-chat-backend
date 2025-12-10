@@ -10,7 +10,8 @@ on:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: ${{ github.repository }}
+  # 使用环境变量或默认值
+  IMAGE_NAME: ${{ vars.DOCKER_IMAGE_NAME || 'miofcip/miochat' }}
 
 jobs:
   build-and-push:
