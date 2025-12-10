@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   mio-chat-backend:
     image: miofcip/miochat:latest
