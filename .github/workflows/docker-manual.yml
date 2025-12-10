@@ -11,7 +11,7 @@ on:
       push_image:
         description: '是否推送到 Docker Hub'
         required: true
-        default: 'true'
+        default: true
         type: boolean
 
 env:
