@@ -6,7 +6,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Pretend-to/mio-chat-backend/pulls)
+[![Docker Hub](https://img.shields.io/badge/docker-ready-blue.svg)](https://hub.docker.com/r/miofcip/miochat)
 
 [在线演示](https://ai.krumio.com) | [插件市场](https://github.com/Pretend-to/awesome-miochat-plugins) | [前端仓库](https://github.com/Pretend-to/mio-chat-frontend) | [QQ 交流群](http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=-r56TCEUfe5KAZXx3p256B2_cxMhAznC&authKey=6%2F7fyXh3AxdOsYmqqfxBaoKszlQzKKvI%2FahbRBpdKklWWJsyHUI0iyB7MoHQJ%2BqJ&noverify=0&group_code=798543340)
 
@@ -16,7 +16,7 @@
 
 ## 📖 项目简介
 
-Mio-Chat-Backend 是一个基于 Node.js 的高性能、模块化 AI 对话平台后端服务。采用事件驱动架构，支持多种主流 AI 协议，提供完整的插件生态系统，可快速构建企业级智能对话应用。
+Mio-Chat-Backend 是一个基于 Node.js 的高性能、模块化 AI 对话平台后端服务。采用事件驱动架构，支持多种主流 AI 协议，提供完整的插件生态系统。
 
 ### 核心特性
 
@@ -178,12 +178,45 @@ pm2 start config/pm2.json
 5. **验证运行**
 ```bash
 # 检查服务状态
-curl http://localhost:3000/api/health
+curl http://localhost:3080/api/health
 
 # 查看 PM2 进程
 pm2 list
 pm2 logs mio-chat-backend
 ```
+
+---
+
+## 🐳 Docker 部署（推荐）
+
+### 一条命令运行
+
+```bash
+# 使用测试密码
+docker run -d -p 3080:3080 -e ADMIN_CODE=test123 miofcip/miochat:latest
+
+# 使用自定义密码
+docker run -d -p 3080:3080 -e ADMIN_CODE=your_password miofcip/miochat:latest
+
+# 生成随机密码
+docker run -d -p 3080:3080 -e ADMIN_CODE=$(openssl rand -base64 32) miofcip/miochat:latest
+```
+
+### Docker Compose
+
+```bash
+# 正式版本
+docker-compose up -d
+
+# 开发版本（本地构建）
+docker-compose -f docker-compose.dev.yml up -d
+```
+
+### 访问服务
+
+- **Web 界面**: http://localhost:3080
+- **健康检查**: http://localhost:3080/api/health
+- **管理后台**: 使用设置的 ADMIN_CODE
 
 ---
 
@@ -263,7 +296,7 @@ onebot:
 #### 服务器配置
 ```yaml
 server:
-  port: 3000
+  port: 3080
   host: "0.0.0.0"
   rateLimit:
     windowMs: 60000   # 速率限制窗口 (毫秒)
