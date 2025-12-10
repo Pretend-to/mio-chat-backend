@@ -3,82 +3,11 @@ debug: false
 # LLM 适配器配置 - 支持多实例
 # 每个适配器类型可以配置多个实例
 llm_adapters:
-  # OpenAI 兼容协议适配器实例列表
-  openai:
-    - # 实例名称(可选，不填则自动编号为 openai-1, openai-2...)
-      name: ''
-      # 是否启用此实例
-      enable: true
-      # openai api key，支持多个 key 用 , 分割
-      api_key: ''
-      # openai 基础地址 , 用于反代 https://api.openai.com/v1
-      base_url: 'https://proxy.krumio.com/openai/v1'
-      # 允许游客使用的模型
-      guest_models:
-        keywords:
-          - gpt-4.1-mini
-        full_name:
-          - gemini-2.0-flash
-          - command-r-plus
-          - o3-mini
-          - deepseek-chat
-      # 默认使用的模型
-      default_model: 'gpt-4.1-mini'
-    # 可以添加更多 OpenAI 实例
-    # - name: 'openai-backup'
-    #   enable: true
-    #   api_key: ''
-    #   base_url: 'https://api.openai.com/v1'
-    #   ...
-
-  # Gemini 协议适配器实例列表
-  gemini:
-    - # 实例名称(可选)
-      name: ''
-      # 是否启用此实例
-      enable: false
-      # gemini api key, 支持多个 key 用 , 分割
-      api_key: ''
-      # google ai stdio 基础地址, 用于反代 https://generativelanguage.googleapis.com
-      base_url: 'https://proxy.krumio.com/gemini'
-      # 允许游客使用的模型
-      guest_models:
-        keywords:
-          - flash
-        full_name:
-          - gemini-1.5-pro
-      # 默认使用的模型
-      default_model: 'gemini-2.0-flash'
-
-  # Vertex AI 协议适配器实例列表
-  vertex:
-    - # 实例名称(可选)
-      name: ''
-      enable: false
-      # Vertex AI 区域 (必需)
-      region: 'us-central1'
-      # 服务账号 JSON 密钥（字符串格式）
-      # 可以是 JSON 字符串或留空使用 auth_file_path
-      service_account_json: ''
-      # 或者使用服务账号密钥文件路径（绝对路径）
-      # 如果 service_account_json 为空，则使用此路径
-      auth_file_path: ''
-      # 默认模型列表（用于无法自动获取模型列表时的备用）
-      # 特别是 Claude 模型需要在这里显式配置
-      models:
-        - 'gemini-2.0-flash-001'
-        - 'gemini-1.5-pro-002'
-        - 'claude-3-5-sonnet-v2@20241022'
-        - 'claude-3-5-haiku@20241022'
-      # 允许游客使用的模型
-      guest_models:
-        keywords:
-          - flash
-        full_name:
-          - gemini-2.5-pro-preview-03-25
-      # 默认使用的模型
-      default_model: 'gemini-2.0-flash-001'
-
+  openai: []
+  gemini: []
+  vertex: []
+  deepseek: []
+  
 onebot:
   # 是否开启 onebot 协议
   enable: false
