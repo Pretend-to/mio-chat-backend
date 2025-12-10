@@ -13,7 +13,6 @@ coverage
 .cache
 .tmp
 logs
-dist
 .vscode
 .idea
 *.swp
