@@ -10,13 +10,14 @@ RUN apk add --no-cache \
     bash \
     python3 \
     py3-pip \
-    uv 
-    
-# 复制 package.json 和 package-lock.json（如果存在）
-COPY package*.json ./
+    uv \
+    && npm install -g pnpm
+
+# 复制 package.json 和 pnpm-lock.yaml
+COPY package.json pnpm-lock.yaml* ./
 
 # 安装 Node.js 依赖
-RUN npm install
+RUN pnpm install --frozen-lockfile --prod=false
 
 # 创建 logs 目录
 RUN mkdir -p logs
