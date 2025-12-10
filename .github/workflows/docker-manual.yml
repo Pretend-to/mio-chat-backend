@@ -1,33 +1,22 @@
-name: Build and Publish Docker Image
+name: Manual Docker Build
 
+# 手动触发构建 Docker 镜像
 on:
-  push:
-    branches: [ master, main ]
-    paths:
-      - 'Dockerfile'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'lib/**'
-      - 'config/**'
-      - '.github/workflows/docker-publish.yml'
-    tags:
-      - 'v*'
-  pull_request:
-    branches: [ master, main ]
-    paths:
-      - 'Dockerfile'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'lib/**'
-      - 'config/**'
-      - '.github/workflows/docker-publish.yml'
-  # 手动触发
   workflow_dispatch:
+    inputs:
+      reason:
+        description: '构建原因'
+        required: true
+        default: '手动触发'
+      push_image:
+        description: '是否推送到 Docker Hub'
+        required: true
+        default: 'true'
+        type: boolean
 
 env:
   REGISTRY: docker.io
-  # 使用环境变量或默认值
-  IMAGE_NAME: ${{ vars.DOCKER_IMAGE_NAME || 'miofcip/miochat' }}
+  IMAGE_NAME: miofcip/miochat
 
 jobs:
   build-and-push:
@@ -74,7 +63,7 @@ jobs:
             image=moby/buildkit:buildx-stable-1
 
       - name: Log in to Docker Hub
-        if: github.event_name != 'pull_request'
+        if: github.event.inputs.push_image == 'true'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -88,10 +77,8 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=raw,value=manual-latest
+            type=raw,value=manual-{{date}}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
@@ -99,9 +86,25 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ github.event.inputs.push_image == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          labels: |
+            org.opencontainers.image.title=Mio Chat Backend
+            org.opencontainers.image.description=Enterprise-grade multi-protocol AI chat platform backend
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=manual-build
+            build.reason="${{ github.event.inputs.reason }}"
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          
+
+      - name: Summary
+        run: |
+          echo "## ✅ Docker 构建完成" >> $GITHUB_STEP_SUMMARY
+          echo "- **构建原因**: ${{ github.event.inputs.reason }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **推送镜像**: ${{ github.event.inputs.push_image }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event.inputs.push_image }}" = "true" ]; then
+            echo "- **镜像标签**:" >> $GITHUB_STEP_SUMMARY
+            for tag in ${{ steps.meta.outputs.tags }}; do
+              echo "  - $tag" >> $GITHUB_STEP_SUMMARY
+            done
+          fi
