@@ -127,12 +127,38 @@ pnpm install
 ```
 
 3. **配置文件**
+
+⚠️ **安全配置（必须设置）**
 ```bash
 # 复制配置模板
 cp config/config/config.example.yaml config/config/config.yaml
 
-# 编辑配置 (见下方配置说明)
+# 编辑配置文件，必须设置管理员访问码！
 vim config/config/config.yaml
+```
+
+**安全设置要求**：
+- 必须设置 `admin_code`（管理员访问码）
+- 推荐使用强密码，可使用以下命令生成：
+  ```bash
+  openssl rand -base64 32
+  ```
+- 管理员访问码不能与普通用户访问码相同
+
+**两种设置方式**：
+
+方式一：编辑配置文件
+```yaml
+web:
+  admin_code: "你的管理员访问码"  # 必须设置！
+  user_code: ""  # 可选，留空则允许游客访问
+```
+
+方式二：使用环境变量（推荐用于 Docker 部署）
+```bash
+export ADMIN_CODE="你的管理员访问码"
+export USER_CODE="普通用户访问码"  # 可选
+node app.js
 ```
 
 4. **启动服务**
@@ -270,7 +296,22 @@ node app.js
 
 ### 使用 PM2 部署
 
-1. **配置 PM2**
+1. **设置访问码**（必须）
+```bash
+# 生成安全的访问码
+ADMIN_CODE=$(openssl rand -base64 32)
+echo "管理员访问码: $ADMIN_CODE"
+
+# 可选：生成普通用户访问码
+USER_CODE=$(openssl rand -base64 24)
+echo "普通用户访问码: $USER_CODE"
+
+# 设置环境变量
+export ADMIN_CODE="$ADMIN_CODE"
+export USER_CODE="$USER_CODE"  # 可选
+```
+
+2. **配置 PM2**
 
 编辑 `config/pm2.json`:
 ```json
@@ -281,19 +322,72 @@ node app.js
     "instances": 4,              // 集群模式实例数
     "exec_mode": "cluster",
     "env": {
-      "NODE_ENV": "production"
+      "NODE_ENV": "production",
+      "ADMIN_CODE": "$ADMIN_CODE",
+      "USER_CODE": "$USER_CODE"  // 可选
     }
   }]
 }
 ```
 
-2. **启动集群**
+3. **启动集群**
 ```bash
 pnpm start
 # 或
 pm2 start config/pm2.json
 pm2 save      # 保存进程列表
 pm2 startup   # 设置开机自启
+```
+
+### Docker 部署
+
+项目已包含完整的 Docker 配置文件：
+
+```bash
+# 1. 生成访问码
+ADMIN_CODE=$(openssl rand -base64 32)
+echo "管理员访问码: $ADMIN_CODE"
+USER_CODE=$(openssl rand -base64 24)
+echo "普通用户访问码: $USER_CODE"
+
+# 2. 复制环境变量模板
+cp .env.example .env
+echo "ADMIN_CODE=$ADMIN_CODE" >> .env
+echo "USER_CODE=$USER_CODE" >> .env
+
+# 3. 构建并运行
+docker-compose up -d --build
+```
+
+**Dockerfile 特性**：
+- 使用 Node.js 20 LTS（支持 chrome-devtools-mcp）
+- 预装 Python 3、pip、uv、docker 等 MCP 所需工具
+- 非 root 用户运行
+- 健康检查
+- 端口：3080（与配置文件一致）
+
+**直接运行 Docker 容器**：
+```bash
+docker run -p 3080:3080 \
+  -e ADMIN_CODE="your-admin-code" \
+  -e USER_CODE="user-code" \
+  -v $(pwd)/config:/app/config \
+  -v $(pwd)/presets:/app/presets \
+  mio-chat-backend
+```
+
+**Docker Compose 部署**：
+```yaml
+version: '3'
+services:
+  mio-chat-backend:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - ADMIN_CODE=your-admin-code-here  # 必须设置
+      - USER_CODE=user-code-here        # 可选
+    restart: unless-stopped
 ```
 
 ### Nginx 反向代理
