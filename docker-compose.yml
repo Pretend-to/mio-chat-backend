@@ -1,0 +1,22 @@
+services:
+  mio-chat-backend:
+    build: .
+    container_name: mio-chat-backend
+    ports:
+      - "3080:3080"
+    environment:
+      # 必须设置管理员访问码
+      - ADMIN_CODE=
+      # 可选：设置普通用户访问码，留空则允许游客访问
+      - USER_CODE=
+    restart: unless-stopped
+    volumes:
+      - ./config:/app/config  # 挂载配置目录，持久化配置
+      - ./presets:/app/presets  # 挂载预设目录
+      - ./logs:/app/logs        # 挂载日志目录
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
