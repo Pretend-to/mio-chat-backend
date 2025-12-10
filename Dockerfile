@@ -18,6 +18,7 @@ RUN apk add --no-cache \
     harfbuzz \
     ca-certificates \
     ttf-freefont \
+    git \
     && npm install -g pnpm
 
 # 复制 package.json 和 pnpm-lock.yaml

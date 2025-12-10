@@ -2,23 +2,28 @@ version: '3.8'
 
 services:
   mio-chat-backend:
-    image: miofcip/miochat:latest
-    container_name: mio-chat-backend
+    build: .
+    container_name: mio-chat-backend-dev
     restart: unless-stopped
 
     ports:
       - "3080:3080"
 
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
       - TZ=Asia/Shanghai
       # 必须设置管理员访问码
       - ADMIN_CODE=${ADMIN_CODE:-admin123}
       # 可选：设置普通用户访问码，留空则允许游客访问
       - USER_CODE=${USER_CODE:-}
 
-    # 正式版本：不挂载任何目录，使用容器内自带的文件
-    # volumes: []
+    volumes:
+      # 开发模式：映射整个目录，实时修改代码
+      - .:/app
+      # 排除不需要映射的目录
+      - /app/node_modules
+      - /app/.pnpm-store
+      - /app/logs
 
     # 健康检查
     healthcheck:
@@ -28,13 +33,6 @@ services:
       retries: 3
       start_period: 40s
 
-    # 日志配置
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
 networks:
   default:
-    name: mio-chat-network
+    name: mio-chat-dev-network
