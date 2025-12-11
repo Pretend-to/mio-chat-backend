@@ -10,6 +10,7 @@ on:
       - 'lib/**'
       - 'config/**'
       - '.github/workflows/docker-publish.yml'
+      - 'dist/**'
     tags:
       - 'v*'
   pull_request:
