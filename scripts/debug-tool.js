@@ -11,7 +11,6 @@
  *   node scripts/debug-tool.js mcp-plugin read_file your_admin_code http://localhost:3000
  */
 
-import fetch from 'node-fetch'
 import readline from 'readline'
 
 const PLUGIN_NAME = process.argv[2]

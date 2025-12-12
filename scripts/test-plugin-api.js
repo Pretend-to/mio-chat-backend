@@ -10,8 +10,6 @@
  *   node scripts/test-plugin-api.js your_admin_code http://localhost:3000
  */
 
-import fetch from 'node-fetch'
-
 const ADMIN_CODE = process.argv[2] || 'admin123'
 const BASE_URL = process.argv[3] || 'http://localhost:3000'
 
