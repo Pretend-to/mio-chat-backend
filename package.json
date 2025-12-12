@@ -21,13 +21,14 @@
     "prettier": "^3.6.2"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.8.0",
+    "@modelcontextprotocol/sdk": "^1.24.3",
     "api": "^6.1.1",
     "axios": "^1.6.7",
     "chokidar": "^4.0.3",
     "eventsource-parser": "^3.0.0",
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
+    "express-static-gzip": "^2.1.0",
     "file-type": "^20.1.0",
     "form-data": "^4.0.2",
     "formdata-node": "^6.0.3",
@@ -38,12 +39,12 @@
     "nan": "^2.18.0",
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
-    "express-static-gzip": "^2.1.0",
     "officeparser": "^5.1.1",
-    "openai": "^4.82.0",
+    "openai": "^6.10.0",
     "puppeteer": "^23.1.1",
     "socket.io": "^4.8.1",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "zod": "^4.1.13"
   },
   "workspaces": [
     "plugins/*"
