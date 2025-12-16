@@ -18,7 +18,7 @@
 /plugins/custom/*
 !/plugins/custom/exec.js
 !/plugins/custom/parser.js
-lib/database-
+lib/database
 
 test.js
 image.jpg
