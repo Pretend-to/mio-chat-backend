@@ -80,7 +80,7 @@ export class EnhancedLogger extends EventEmitter {
       if (!fs.existsSync(this.config.logDir)) {
         fs.mkdirSync(this.config.logDir, { recursive: true })
       }
-    } catch (error) {
+    } catch {
       // 静默处理，避免日志系统本身出错
     }
   }
@@ -173,7 +173,7 @@ export class EnhancedLogger extends EventEmitter {
       this.rotateLogIfNeeded(filepath)
       
       fs.appendFileSync(filepath, message + '\n', 'utf8')
-    } catch (error) {
+    } catch {
       // 静默处理文件错误
     }
   }
@@ -206,7 +206,7 @@ export class EnhancedLogger extends EventEmitter {
         // 清理旧文件
         this.cleanupOldLogs()
       }
-    } catch (error) {
+    } catch {
       // 静默处理轮转错误
     }
   }
@@ -231,7 +231,7 @@ export class EnhancedLogger extends EventEmitter {
           fs.unlinkSync(file.path)
         })
       }
-    } catch (error) {
+    } catch {
       // 静默处理清理错误
     }
   }
@@ -301,7 +301,7 @@ export class EnhancedLogger extends EventEmitter {
           }
         }
       }
-    } catch (error) {
+    } catch {
       // 静默处理错误
     }
 

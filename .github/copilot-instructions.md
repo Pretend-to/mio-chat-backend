@@ -44,7 +44,7 @@ Quick, focused guidance so an AI coding agent can be productive immediately in t
   - There are not many automated tests in the repo. Use these manual checks:
     - `node app` to verify startup flows (status checks, adapter loading, plugin loading).
     - Inspect `stdout`/`pm2 logs` for `logger` output when running with pm2.
-  - Lint/format: `pnpm run format` (prettier). ESLint is present in devDependencies but no npm script — run manually if needed.
+  - Lint/format: `pnpm run lint` (oxlint) and `pnpm run format` (prettier).
 
 - Safety and error patterns to watch for:
   - Many modules assume config files exist and will call `process.exit(1)` if no LLM adapters are enabled. When writing code paths that may be used in CI or test, avoid leaving the repo in a state that triggers immediate exit during import.

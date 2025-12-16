@@ -15,7 +15,7 @@ cp config/config/config.example.yaml config/config/config.yaml
 - **Development mode**: `node app.js` - Runs in foreground with real-time logs
 - **Production mode**: `pnpm start` - Runs PM2 cluster using config/pm2.json
 - **Format code**: `pnpm run format` - Uses Prettier
-- **Lint**: Manually run `eslint` (config is present but no npm script)
+- **Lint**: `pnpm run lint` - Uses oxlint for fast linting
 
 ### Testing & Validation
 ```bash
