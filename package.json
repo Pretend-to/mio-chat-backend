@@ -7,7 +7,19 @@
   "scripts": {
     "start": "pm2 start ./config/pm2.json",
     "test": "node test",
-    "format": "prettier --write ."
+    "lint": "oxlint",
+    "lint:watch": "oxlint --watch",
+    "lint:fix": "oxlint --fix",
+    "format": "prettier --write .",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "migrate": "node scripts/migrate-to-sqlite.js",
+    "migrate-config": "node scripts/migrate-config-to-sqlite.js",
+    "migrate-all": "npm run migrate-config && npm run migrate",
+    "backup-db": "node scripts/backup-database.js",
+    "restore-db": "node scripts/restore-database.js"
   },
   "keywords": [
     "gpt"
@@ -15,13 +27,13 @@
   "author": "mio",
   "license": "ISC",
   "devDependencies": {
-    "@eslint/js": "^9.31.0",
-    "eslint": "^9.23.0",
-    "globals": "^16.3.0",
-    "prettier": "^3.6.2"
+    "oxlint": "^1.33.0",
+    "prettier": "^3.6.2",
+    "prisma": "^5.22.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.24.3",
+    "@prisma/client": "^5.22.0",
     "api": "^6.1.1",
     "axios": "^1.6.7",
     "chokidar": "^4.0.3",

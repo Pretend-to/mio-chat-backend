@@ -19,8 +19,8 @@ npm run test
 # Format code
 npm run format
 
-# Lint (ESLint configured)
-npx eslint .
+# Lint (oxlint configured)
+pnpm run lint
 ```
 
 ### Package Management
