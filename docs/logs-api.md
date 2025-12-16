@@ -341,7 +341,7 @@ socket.emit('message', JSON.stringify({
 
 ### 7. 心跳检测 (heartbeat)
 
-维持连接活跃状态。
+维持连接活跃状态。**注意：当前版本已禁用心跳超时检查，依赖 Socket.IO 自身的连接管理。**
 
 #### 请求格式
 ```javascript
@@ -365,6 +365,56 @@ socket.emit('message', JSON.stringify({
   data: {
     timestamp: 1734345600123,
     clientId: 'client-123'
+  }
+}
+```
+
+### 8. 调试接口 (debug)
+
+用于调试日志流服务状态，仅限管理员使用。
+
+#### 请求格式
+```javascript
+// 检查订阅状态
+socket.emit('message', JSON.stringify({
+  request_id: 'unique-request-id',
+  protocol: 'logs',
+  type: 'debug',
+  data: {
+    type: 'status'
+  }
+}))
+
+// 手动触发清理
+socket.emit('message', JSON.stringify({
+  request_id: 'unique-request-id',
+  protocol: 'logs',
+  type: 'debug',
+  data: {
+    type: 'cleanup'
+  }
+}))
+
+// 更新心跳
+socket.emit('message', JSON.stringify({
+  request_id: 'unique-request-id',
+  protocol: 'logs',
+  type: 'debug',
+  data: {
+    type: 'heartbeat'
+  }
+}))
+```
+
+#### 响应格式
+```javascript
+{
+  request_id: 'unique-request-id',
+  protocol: 'logs',
+  type: 'DEBUG_STATUS', // 或 DEBUG_CLEANUP, DEBUG_HEARTBEAT
+  success: true,
+  data: {
+    message: '订阅状态已输出到服务器日志'
   }
 }
 ```
