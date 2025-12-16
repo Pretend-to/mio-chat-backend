@@ -1,13 +1,17 @@
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
+import { EventEmitter } from 'events'
+import LogBuffer from './LogBuffer.js'
 
 /**
  * 增强版 Logger 类 - 替换原有 logger
  * 保持完全向后兼容，同时提供增强功能
+ * 现在支持实时日志流和事件发射
  */
-export class EnhancedLogger {
+export class EnhancedLogger extends EventEmitter {
   constructor(options = {}) {
+    super() // 初始化 EventEmitter
+    
     this.config = {
       // 日志级别 (数字越小级别越高)
       levels: {
@@ -54,6 +58,18 @@ export class EnhancedLogger {
 
     // 性能优化：缓存调用者信息
     this.callerCache = new Map()
+
+    // 初始化日志缓冲区
+    this.logBuffer = new LogBuffer({
+      maxSize: options.bufferSize || 1000
+    })
+
+    // 实时日志流配置
+    this.streamConfig = {
+      enabled: options.enableStream !== false,
+      bufferSize: options.bufferSize || 1000,
+      emitDelay: options.emitDelay || 0 // 发射延迟（毫秒）
+    }
   }
 
   /**
@@ -86,20 +102,51 @@ export class EnhancedLogger {
       return
     }
 
-    const timestamp = this.getTime()
+    const timestamp = new Date()
+    const timeString = this.getTime()
     const callerInfo = this.config.showCaller ? this.getCallerInfo() : ''
     const ip = extra.ip ? `[${extra.ip}]` : ''
     
+    // 创建日志条目对象
+    const logEntry = {
+      id: this.generateLogId(),
+      timestamp: timestamp,
+      level: level,
+      module: extra.module || 'system',
+      message: message,
+      caller: callerInfo,
+      ip: extra.ip,
+      extra: extra
+    }
+
+    // 添加到缓冲区
+    if (this.streamConfig.enabled) {
+      this.logBuffer.addLog(logEntry)
+    }
+
+    // 发射日志事件（用于实时流）
+    if (this.streamConfig.enabled) {
+      if (this.streamConfig.emitDelay > 0) {
+        setTimeout(() => {
+          this.emit('log', logEntry)
+        }, this.streamConfig.emitDelay)
+      } else {
+        this.emit('log', logEntry)
+      }
+    }
+    
     // 输出到控制台（保持原有格式）
     if (this.config.console) {
-      this.outputToConsole(level, message, ip, callerInfo, timestamp)
+      this.outputToConsole(level, message, ip, callerInfo, timeString)
     }
 
     // 输出到文件
     if (this.config.file) {
-      const formattedMessage = `[Mio-Chat][${timestamp}][${level}]${ip}${callerInfo} ${message}`
+      const formattedMessage = `[Mio-Chat][${timeString}][${level}]${ip}${callerInfo} ${message}`
       this.outputToFile(formattedMessage)
     }
+
+    return logEntry
   }
 
   /**
@@ -315,6 +362,7 @@ export class EnhancedLogger {
     // 检查全局 debug 标志（保持原有行为）
     if (global.debug || process.env.NODE_ENV === 'development') {
       this.log('DEBUG', msg, extra)
+      // 保持原有控制台输出行为
       if (this.config.console) {
         console.log(msg)
         console.log('\x1b[0m')
@@ -341,7 +389,11 @@ export class EnhancedLogger {
         return value
       }, 2)
       
+      // 保持原有行为：输出到控制台
       console.log(jsonString)
+      
+      // 新增：同时通过日志系统推送（用于实时流）
+      this.log('INFO', jsonString, { type: 'json', originalObject: obj })
     } catch (error) {
       this.error('JSON序列化失败', error)
     }
@@ -383,6 +435,127 @@ export class EnhancedLogger {
    */
   getColor(level) {
     return this.colors[level] || '0'
+  }
+
+  // === 新增：日志流和缓冲区管理方法 ===
+
+  /**
+   * 生成日志ID
+   */
+  generateLogId() {
+    return `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  }
+
+  /**
+   * 获取日志缓冲区
+   */
+  getLogBuffer() {
+    return this.logBuffer
+  }
+
+  /**
+   * 获取缓冲区中的日志
+   */
+  getBufferedLogs(startIndex, endIndex) {
+    return this.logBuffer.getLogs(startIndex, endIndex)
+  }
+
+  /**
+   * 搜索缓冲区中的日志
+   */
+  searchBufferedLogs(keyword) {
+    return this.logBuffer.searchLogs(keyword)
+  }
+
+  /**
+   * 按级别过滤缓冲区日志
+   */
+  filterBufferedLogsByLevel(level) {
+    return this.logBuffer.filterByLevel(level)
+  }
+
+  /**
+   * 按模块过滤缓冲区日志
+   */
+  filterBufferedLogsByModule(modules) {
+    return this.logBuffer.filterByModule(modules)
+  }
+
+  /**
+   * 按时间范围过滤缓冲区日志
+   */
+  filterBufferedLogsByTimeRange(startTime, endTime) {
+    return this.logBuffer.filterByTimeRange(startTime, endTime)
+  }
+
+  /**
+   * 清理日志缓冲区
+   */
+  clearBuffer() {
+    this.logBuffer.cleanup()
+    this.emit('bufferCleared')
+  }
+
+  /**
+   * 调整缓冲区大小
+   */
+  resizeBuffer(newSize) {
+    this.logBuffer.resize(newSize)
+    this.streamConfig.bufferSize = newSize
+    this.emit('bufferResized', newSize)
+  }
+
+  /**
+   * 启用/禁用日志流
+   */
+  setStreamEnabled(enabled) {
+    this.streamConfig.enabled = enabled
+    this.emit('streamToggled', enabled)
+  }
+
+  /**
+   * 设置发射延迟
+   */
+  setEmitDelay(delay) {
+    this.streamConfig.emitDelay = delay
+  }
+
+  /**
+   * 获取流配置
+   */
+  getStreamConfig() {
+    return { ...this.streamConfig }
+  }
+
+  /**
+   * 获取缓冲区统计信息
+   */
+  getBufferStats() {
+    return this.logBuffer.getStats()
+  }
+
+  /**
+   * 订阅日志事件（便捷方法）
+   */
+  onLog(callback) {
+    this.on('log', callback)
+    return this
+  }
+
+  /**
+   * 取消订阅日志事件（便捷方法）
+   */
+  offLog(callback) {
+    this.off('log', callback)
+    return this
+  }
+
+  /**
+   * 订阅一次日志事件（便捷方法）
+   */
+  onceLog(callback) {
+    this.once('log', callback)
+    return this
   }
 }
 
