@@ -916,7 +916,7 @@ npx nodemon app.js
 pnpm run format
 
 # 检查代码风格
-pnpm run lint  # (需手动运行 eslint,项目已配置 eslint.config.js)
+pnpm run lint  # 使用 oxlint 进行代码检查
 ```
 
 ### 调试技巧
@@ -958,7 +958,7 @@ node --inspect app.js
 ### 代码规范
 
 - 使用 ES Module 语法 (`import`/`export`)
-- 遵循现有代码风格 (Prettier + ESLint)
+- 遵循现有代码风格 (Prettier + oxlint)
 - 为新功能添加注释
 - 保持向后兼容性
 

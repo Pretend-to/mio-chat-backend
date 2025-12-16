@@ -1,0 +1,117 @@
+// Prisma schema file for Mio-Chat SQLite migration
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./data/app.db"
+}
+
+// 预设表
+model Preset {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  type        String   @default("custom") // 'built-in' | 'custom'
+  category    String   @default("common") // 'common' | 'recommended' | 'hidden'
+  history     String   // JSON 格式存储对话历史
+  opening     String   @default("")
+  textwrapper String   @default("")
+  tools       String   @default("[]") // JSON 格式存储工具列表
+  recommended Boolean  @default(false)
+  hidden      Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([name])
+  @@index([type])
+  @@index([category])
+  @@map("presets")
+}
+
+// 插件配置表
+model PluginConfig {
+  id         Int      @id @default(autoincrement())
+  pluginName String   @unique @map("plugin_name")
+  configData String   @map("config_data") // JSON 格式存储配置
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([pluginName])
+  @@index([enabled])
+  @@map("plugin_configs")
+}
+
+// 系统配置表
+model SystemSetting {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  value       String   // JSON 格式存储复杂配置
+  category    String   @default("general") // 'general' | 'server' | 'web' | 'onebot' | 'llm'
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([key])
+  @@index([category])
+  @@map("system_settings")
+}
+
+// LLM适配器配置表
+model LLMAdapter {
+  id           Int      @id @default(autoincrement())
+  adapterType  String   @map("adapter_type") // 'openai' | 'gemini' | 'vertex' | 'deepseek'
+  instanceName String   @map("instance_name") // 实例名称，同类型可有多个实例
+  configData   String   @map("config_data") // JSON 格式存储适配器配置
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([adapterType, instanceName])
+  @@index([adapterType])
+  @@index([enabled])
+  @@map("llm_adapters")
+}
+
+// 模型所有者配置表
+model ModelOwner {
+  id        Int      @id @default(autoincrement())
+  owner     String
+  keywords  String   // JSON 数组格式存储关键词
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([owner])
+  @@map("model_owners")
+}
+
+// 日志配置表
+model LogConfig {
+  id            Int      @id @default(autoincrement())
+  name          String   @unique
+  bufferSize    Int      @default(1000) @map("buffer_size")
+  flushInterval Int      @default(1000) @map("flush_interval")
+  sources       String   @default("[]") // JSON 格式存储日志源
+  filters       String   @default("{}") // JSON 格式存储过滤器
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([name])
+  @@map("log_configs")
+}
+
+// 日志统计表
+model LogStat {
+  id        Int      @id @default(autoincrement())
+  date      DateTime @db.Date
+  level     String
+  count     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([date, level])
+  @@index([date])
+  @@index([level])
+  @@map("log_stats")
+}
