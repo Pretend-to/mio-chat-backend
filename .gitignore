@@ -3,11 +3,13 @@
 /lib/resources
 /output/*
 /backup/*
-# 配置文件已迁移到SQLite数据库，不再需要忽略
-# /config/config/config.yaml
-# /config/config/vertex.json
-# /presets/custom/*
-# !/presets/custom/example.json
+
+# 数据库文件 - 包含敏感配置信息，绝对不能提交！
+/data/
+/prisma/data/
+*.db
+*.sqlite
+*.sqlite3
 
 /.VSCodeCounter
 /.vscode
@@ -19,7 +21,6 @@
 /plugins/custom/*
 !/plugins/custom/exec.js
 !/plugins/custom/parser.js
-lib/database
 
 test.js
 image.jpg
