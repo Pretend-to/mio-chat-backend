@@ -19,7 +19,11 @@
     "migrate-config": "node scripts/migrate-config-to-sqlite.js",
     "migrate-all": "npm run migrate-config && npm run migrate",
     "backup-db": "node scripts/backup-database.js",
-    "restore-db": "node scripts/restore-database.js"
+    "restore-db": "node scripts/restore-database.js",
+    "init-defaults": "node scripts/initialize-defaults.js",
+    "test-init": "node scripts/test-initialization.js",
+    "quick-start": "node scripts/quick-start.js",
+    "dev": "node scripts/dev.js"
   },
   "keywords": [
     "gpt"
