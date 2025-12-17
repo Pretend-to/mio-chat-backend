@@ -157,7 +157,7 @@ async function startApp() {
     await statusCheck()
     
     // 启动服务器并保存实例
-    httpServer = startServer()
+    httpServer = await startServer()
     
     logger.info('应用启动完成')
   } catch (error) {
