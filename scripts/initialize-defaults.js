@@ -26,41 +26,49 @@ async function initializeDefaultSystemSettings() {
     {
       key: 'admin_code',
       value: process.env.ADMIN_CODE || await generateSecureCode(),
+      category: 'web',
       description: '管理员访问码'
     },
     {
       key: 'user_code', 
       value: process.env.USER_CODE || await generateSecureCode(),
+      category: 'web',
       description: '普通用户访问码'
     },
     {
       key: 'server_port',
       value: parseInt(process.env.PORT) || 3000,
+      category: 'server',
       description: '服务器端口'
     },
     {
       key: 'debug_mode',
       value: process.env.DEBUG === 'true' || false,
+      category: 'general',
       description: '调试模式'
     },
     {
       key: 'model_owners',
       value: [],
+      category: 'general',
       description: '模型所有者配置'
     },
     {
       key: 'web_full_screen',
       value: process.env.WEB_FULL_SCREEN === 'false' ? false : true,
+      category: 'web',
       description: 'Web 界面全屏模式'
     },
     {
       key: 'web_beian',
       value: process.env.WEB_BEIAN || '',
+      category: 'web',
       description: 'Web 界面备案信息'
     },
     {
       key: 'web_title',
       value: process.env.WEB_TITLE || 'MioChat',
+      category: 'web',
       description: 'Web 界面标题'
     }
   ]
@@ -69,7 +77,7 @@ async function initializeDefaultSystemSettings() {
     try {
       const existing = await SystemSettingsService.get(setting.key)
       if (!existing) {
-        await SystemSettingsService.set(setting.key, setting.value, setting.description)
+        await SystemSettingsService.set(setting.key, setting.value, setting.category, setting.description)
         logger.info(`✓ 创建默认设置: ${setting.key}`)
         
         // 如果是访问码，显示生成的值
