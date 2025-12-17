@@ -44,9 +44,9 @@ pnpm run lint
 - **Utilities**: `lib/function.js` - Shared utility functions
 
 ### Configuration System
-- Main config: `config/config/config.yaml` (copy from `config.example.yaml`)
-- Plugin configs: `config/plugins/`
-- User management: `config/config/owners.yaml`
+- All configuration: SQLite database (`data/app.db`)
+- Configuration management: Web UI or API endpoints
+- Database schema: `prisma/schema.prisma`
 - Presets: `presets/` directory
 - Vertex AI auth: `config/config/vertex.json`
 

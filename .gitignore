@@ -3,10 +3,11 @@
 /lib/resources
 /output/*
 /backup/*
-/config/config/config.yaml
-/config/config/vertex.json
-/presets/custom/*
-!/presets/custom/example.json
+# 配置文件已迁移到SQLite数据库，不再需要忽略
+# /config/config/config.yaml
+# /config/config/vertex.json
+# /presets/custom/*
+# !/presets/custom/example.json
 
 /.VSCodeCounter
 /.vscode
