@@ -228,6 +228,8 @@ docker-compose -f docker-compose.dev.yml up -d
 - 运行时配置通过Web界面或API接口管理
 - 支持环境变量覆盖数据库配置
 
+⚠️ **安全提醒**: 数据库文件包含敏感信息（API密钥等），已添加到 `.gitignore`，请勿提交到版本控制！
+
 ### 核心配置项
 
 #### OpenAI 配置
