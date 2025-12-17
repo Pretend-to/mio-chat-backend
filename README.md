@@ -130,11 +130,12 @@ pnpm install
 
 ⚠️ **安全配置（必须设置）**
 ```bash
-# 复制配置模板
-cp config/config/config.example.yaml config/config/config.yaml
+# 注意：配置已迁移到SQLite数据库
+# 首次启动时会自动从示例配置初始化数据库
+# 后续配置管理请使用Web界面或API接口
 
-# 编辑配置文件，必须设置管理员访问码！
-vim config/config/config.yaml
+# 配置已完全迁移到数据库，首次启动会自动初始化
+# 后续配置请通过Web界面或API进行管理
 ```
 
 **安全设置要求**：
@@ -222,7 +223,10 @@ docker-compose -f docker-compose.dev.yml up -d
 
 ## ⚙️ 配置说明
 
-配置文件位于 `config/config/config.yaml`，支持环境变量覆盖。
+**重要更新**: 配置已完全迁移到SQLite数据库，不再使用配置文件。
+- 首次启动时自动初始化数据库配置
+- 运行时配置通过Web界面或API接口管理
+- 支持环境变量覆盖数据库配置
 
 ### 核心配置项
 
@@ -262,11 +266,11 @@ vertex:
       - "gemini-2.5-pro-preview-03-25"
       - "claude-3-5-sonnet-v2@20241022"  # 支持 Anthropic Claude
   default_model: "gemini-2.0-flash-001"
-  # 注意: 需要在 config/config/vertex.json 配置 GCP 服务账号凭据
-  # 凭据包含 project_id, region 等信息
+  # 注意: Vertex AI 凭据直接配置在实例的 service_account_json 字段中
+  # 或通过 auth_file_path 指定凭据文件路径
 ```
 
-**Vertex AI 凭据配置** (`config/config/vertex.json`):
+**Vertex AI 凭据配置** (直接在配置中设置):
 ```json
 {
   "type": "service_account",
@@ -314,7 +318,7 @@ web:
 
 ### 环境变量覆盖
 
-优先级: 环境变量 > config.yaml > 默认值
+优先级: 环境变量 > 数据库配置 > 默认值
 
 ```bash
 # 示例
@@ -870,10 +874,7 @@ mio-chat-backend/
 ├── plugins/                  # 外部插件目录 (pnpm workspaces)
 │   └── custom/               # 自定义插件
 ├── config/
-│   ├── config/
-│   │   ├── config.example.yaml
-│   │   └── config.yaml       # 主配置文件 (gitignore)
-│   ├── plugins/              # 插件配置
+│   ├── nginx/                # Nginx 配置
 │   ├── pm2.json              # PM2 配置
 │   └── nginx/                # Nginx 配置示例
 ├── utils/                    # 工具函数

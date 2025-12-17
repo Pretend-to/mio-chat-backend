@@ -11,7 +11,7 @@ Quick, focused guidance so an AI coding agent can be productive immediately in t
   - `lib/chat/` — protocol adapters: `llm/` (OpenAI/Gemini adapters) and `onebot/` (OneBot integration).
   - `lib/plugins` and `plugins/custom` — built-in vs third‑party plugin system; plugins expose tools and are discovered dynamically.
 
-- Config: `config/config/config.example.yaml` (copy to `config/config.yaml` or set envs). Key sections: `openai`, `gemini`, `onebot`, `server`, `web`.
+- Config: All configuration stored in SQLite database (`data/app.db`). Key sections: `llm_adapters`, `onebot`, `server`, `web`. Managed via Web UI or API.
 
 - How to run locally (discoverable from repo):
   - Install: `pnpm install` (repo uses pnpm workspaces; plugins live under `plugins/*`).
@@ -55,7 +55,7 @@ Quick, focused guidance so an AI coding agent can be productive immediately in t
   - `lib/check.js` — startup & status checks; sets `global.middleware`.
   - `lib/middleware.js` — most orchestration logic (LLM loading, OneBot, plugins, socket handlers).
   - `lib/server/http/index.js` — HTTP routes and static serving.
-  - `config/config/config.example.yaml` — canonical config keys and expected shapes.
+  - `prisma/schema.prisma` — database schema defining configuration structure.
   - `package.json` — scripts, dependencies, workspaces.
 
 If anything in this summary looks incomplete or you want me to expand a section (example code snippets for adding adapters or plugins), tell me which part and I will iterate.

@@ -105,7 +105,7 @@ model LogConfig {
 // 日志统计表
 model LogStat {
   id        Int      @id @default(autoincrement())
-  date      DateTime @db.Date
+  date      DateTime
   level     String
   count     Int      @default(0)
   createdAt DateTime @default(now()) @map("created_at")

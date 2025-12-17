@@ -7,8 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Installation & Setup
 ```bash
 pnpm install
-cp config/config/config.example.yaml config/config/config.yaml
-# Edit config/config/config.yaml with your API keys and settings
+# 配置已迁移到数据库，首次启动会自动初始化
+# 后续配置请通过Web界面管理
 ```
 
 ### Running the Application
@@ -155,4 +155,4 @@ export default class MyPlugin {
 - `lib/server/http/index.js` - HTTP routes and middleware
 - `lib/server/socket.io/index.js` - Socket.IO event handlers
 - `lib/chat/llm/openai/index.js` - Example LLM adapter implementation
-- `config/config/config.example.yaml` - Configuration reference
+- `prisma/schema.prisma` - Database schema and configuration structure
