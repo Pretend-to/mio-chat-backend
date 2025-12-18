@@ -9,7 +9,7 @@
     "start": "pm2 start ./config/pm2.json",
     "dev": "node scripts/dev.js",
     "quick-start": "node scripts/quick-start.js",
-    "postinstall": "prisma generate",
+
     "test": "node test",
     "lint": "oxlint",
     "lint:watch": "oxlint --watch",
