@@ -112,11 +112,7 @@ async function initializeDefaultPluginConfig() {
         plugins: null
       }
       
-      await PluginConfigService.create({
-        name: 'onebotConfig',
-        configData: defaultOnebotConfig,
-        description: 'OneBot 协议配置'
-      })
+      await PluginConfigService.create('onebotConfig', defaultOnebotConfig, true)
       
       logger.info('✓ 创建默认 OneBot 配置')
     } else {
