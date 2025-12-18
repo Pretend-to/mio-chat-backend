@@ -14,7 +14,7 @@
 
 1. **启动应用**：首次运行时会自动创建数据库
    ```bash
-   npm start
+   pnpm start
    ```
 
 2. **数据库位置**：
@@ -64,7 +64,7 @@ export DEBUG=true
 1. **重置数据库**：
    ```bash
    rm prisma/data/app.db
-   npm start  # 会重新创建数据库
+   pnpm start  # 会重新创建数据库
    ```
 
 2. **查看数据库内容**：

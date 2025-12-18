@@ -124,8 +124,7 @@ class ConfigCRUDTester {
   async testUpdateConfigSection() {
     // 测试更新 server 配置
     const serverUpdate = {
-      port: 3000,
-      max_rate_pre_min: 60
+      port: 3000
     }
 
     const response = await axios.put(`${this.baseURL}/api/config/server`, serverUpdate, {
@@ -150,8 +149,7 @@ class ConfigCRUDTester {
   async testUpdateFullConfig() {
     const configUpdate = {
       server: {
-        port: 3000,
-        max_rate_pre_min: 60
+        port: 3000
       }
     }
 
@@ -178,8 +176,7 @@ class ConfigCRUDTester {
     // 测试有效配置
     const validConfig = {
       server: {
-        port: 3000,
-        max_rate_pre_min: 60
+        port: 3000
       }
     }
 
@@ -201,8 +198,7 @@ class ConfigCRUDTester {
     // 测试无效配置
     const invalidConfig = {
       server: {
-        port: -1, // 无效端口
-        max_rate_pre_min: -1 // 无效速率限制
+        port: -1 // 无效端口
       }
     }
 

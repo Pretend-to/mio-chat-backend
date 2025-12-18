@@ -9,8 +9,7 @@
     "start": "pm2 start ./config/pm2.json",
     "dev": "node scripts/dev.js",
     "quick-start": "node scripts/quick-start.js",
-    "first-run": "npm install && npm run quick-start",
-
+    "first-run": "pnpm install && pnpm run quick-start",
     "test": "node test",
     "lint": "oxlint",
     "lint:watch": "oxlint --watch",
@@ -21,19 +20,16 @@
     "db:migrate": "node scripts/prisma-wrapper.js migrate dev",
     "db:studio": "node scripts/prisma-wrapper.js studio",
     "migrate": "node scripts/migrate-to-sqlite.js",
-    "migrate-config": "node scripts/migrate-config-to-sqlite.js",
-    "migrate-all": "npm run migrate-config && npm run migrate",
-    "backup-db": "node scripts/backup-database.js",
-    "restore-db": "node scripts/restore-database.js",
+
     "init-defaults": "node scripts/initialize-defaults.js",
-    "test-init": "node scripts/test-initialization.js",
+    "test-init": "node scripts/test/test-initialization.js",
     "docker:build": "docker build -t mio-chat-backend .",
     "docker:run": "bash scripts/docker-quick-start.sh",
     "docker:dev": "docker-compose -f docker-compose.dev.yml up -d",
     "docker:prod": "docker-compose up -d",
     "docker:stop": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
-    "test:owners": "node scripts/test-owners-loading.js"
+    "test:owners": "node scripts/test/test-owners-loading.js"
   },
   "keywords": [
     "gpt"
@@ -46,14 +42,13 @@
     "prisma": "^5.22.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.24.3",
+    "@modelcontextprotocol/sdk": "^1.25.1",
     "@prisma/client": "^5.22.0",
     "api": "^6.1.1",
     "axios": "^1.6.7",
     "chokidar": "^4.0.3",
     "eventsource-parser": "^3.0.0",
     "express": "^4.18.2",
-    "express-rate-limit": "^7.1.5",
     "express-static-gzip": "^2.1.0",
     "file-type": "^20.1.0",
     "form-data": "^4.0.2",

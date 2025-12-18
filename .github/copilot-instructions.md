@@ -32,7 +32,7 @@ Quick, focused guidance so an AI coding agent can be productive immediately in t
   - ES modules are used (`"type": "module"` in `package.json`). Use import/export syntax.
   - Dynamic imports: plugin and adapter modules are often imported via `pathToFileURL(...).toString()` and `await import(url)`. Keep code compatible with the dynamic import style.
   - Files under `dist/` are served as frontend static assets; the server sets ETag and Last-Modified headers.
-  - Rate limiting: implemented in `lib/server/http/middleware/rateLimiter.js` and applied globally except for `127.0.0.1`.
+
 
 - Quick editing checklist for typical tasks:
   - Add API route: update `lib/server/http/index.js` routes and add a controller in `lib/server/http/controllers/`.
