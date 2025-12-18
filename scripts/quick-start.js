@@ -37,10 +37,10 @@ async function ensurePrismaReady() {
     logger.info('   这可能需要几秒钟时间...')
     try {
       logger.info('   正在生成 Prisma 客户端...')
-      execSync('npx prisma generate', { stdio: 'pipe' })
+      execSync('npm run db:generate', { stdio: 'pipe' })
       
       logger.info('   正在初始化数据库...')
-      execSync('npx prisma db push', { stdio: 'pipe' })
+      execSync('npm run db:push', { stdio: 'pipe' })
       
       logger.info('✅ 数据库设置完成')
     } catch (error) {
@@ -50,7 +50,7 @@ async function ensurePrismaReady() {
       logger.info('🔧 请尝试手动运行以下命令：')
       logger.info('   npm run setup')
       logger.info('   或者：')
-      logger.info('   npx prisma generate && npx prisma db push')
+      logger.info('   npm run db:generate && npm run db:push')
       process.exit(1)
     }
   }

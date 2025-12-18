@@ -62,10 +62,10 @@ async function setupPrisma() {
   
   try {
     // 生成 Prisma 客户端
-    await runCommand('npx', ['prisma', 'generate'])
+    await runCommand('npm', ['run', 'db:generate'])
     
     // 推送数据库 schema
-    await runCommand('npx', ['prisma', 'db', 'push'])
+    await runCommand('npm', ['run', 'db:push'])
     
     logger.info('✅ 数据库设置完成')
   } catch (error) {
@@ -146,8 +146,8 @@ async function setup() {
     logger.info('')
     logger.info('🔧 手动设置步骤：')
     logger.info('   1. npm install 或 pnpm install')
-    logger.info('   2. npx prisma generate')
-    logger.info('   3. npx prisma db push')
+    logger.info('   2. npm run db:generate')
+    logger.info('   3. npm run db:push')
     logger.info('   4. 复制 .env.example 到 .env 并设置访问码')
     logger.info('   5. node app.js')
     process.exit(1)
