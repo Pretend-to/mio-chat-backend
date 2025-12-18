@@ -41,7 +41,7 @@ async function testConfigAPI() {
     
     // 测试更新server配置
     logger.info('\n测试更新server配置...')
-    const updateData = { port: 3000, max_rate_pre_min: 60 }
+    const updateData = { port: 3000 }
     const updateResponse = await axios.put('http://localhost:3000/api/config/server', updateData, { headers })
     logger.info(`状态码: ${updateResponse.status}`)
     console.log('响应数据:', JSON.stringify(updateResponse.data, null, 2))

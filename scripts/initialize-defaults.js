@@ -129,10 +129,125 @@ async function initializeDefaultPluginConfig() {
       const defaultOnebotConfig = {
         enable: false,
         reverse_ws_url: '',
-        bot_qq: '',
-        admin_qq: '',
+        bot_qq: '2698788044',
+        admin_qq: '1099834705',
         token: '',
-        plugins: null
+        plugins: {
+          options: {
+            textwraper: {
+              options: [
+                {
+                  value: '',
+                  label: '默认'
+                },
+                {
+                  value: 'AP',
+                  label: '画图',
+                  children: [
+                    {
+                      value: 'eDraw',
+                      label: '绘个图',
+                      preset: '#绘个图{xxx}'
+                    },
+                    {
+                      value: 'apDraw',
+                      label: '绘图',
+                      preset: '#绘图{xxx}'
+                    }
+                  ]
+                },
+                {
+                  value: 'SF',
+                  label: 'sf对话',
+                  children: [
+                    {
+                      value: 'sfgemini',
+                      label: 'sf #gg',
+                      preset: '#gg{xxx}'
+                    }
+                  ]
+                },
+                {
+                  value: 'GPT',
+                  label: 'AI对话',
+                  children: [
+                    {
+                      value: 'gptHelp',
+                      label: '帮助',
+                      preset: '#chatgpt帮助'
+                    },
+                    {
+                      value: 'gptCancel',
+                      label: '结束对话',
+                      preset: '#chatgpt结束对话'
+                    },
+                    {
+                      value: 'gptUseAPI',
+                      label: '基于API',
+                      preset: '#api{xxx}'
+                    },
+                    {
+                      value: 'gptUseGlm4',
+                      label: '基于GLM4',
+                      preset: '#glm4{xxx}'
+                    },
+                    {
+                      value: 'gptUseGemini',
+                      label: '基于Gemini',
+                      preset: '#gemini{xxx}'
+                    },
+                    {
+                      value: 'gptUseClaude',
+                      label: '基于Claude',
+                      preset: '#claude{xxx}'
+                    }
+                  ]
+                },
+                {
+                  value: 'Genshin',
+                  label: '娱乐功能',
+                  children: [
+                    {
+                      value: 'genshinHelp',
+                      label: '帮助',
+                      preset: '#帮助'
+                    },
+                    {
+                      value: 'genshinBind',
+                      label: '绑定UID',
+                      preset: '#绑定{xxx}'
+                    },
+                    {
+                      value: 'genshinIUpdate',
+                      label: '更新面板',
+                      preset: '#更新面板'
+                    },
+                    {
+                      value: 'genshinPanel',
+                      label: '角色面板',
+                      preset: '#{xxx}面板'
+                    },
+                    {
+                      value: 'genshinSk',
+                      label: '角色天赋',
+                      preset: '#{xxx}天赋'
+                    },
+                    {
+                      value: 'genshinCe',
+                      label: '角色命座',
+                      preset: '#{xxx}命座'
+                    },
+                    {
+                      value: 'genshinOb',
+                      label: '角色养成材料',
+                      preset: '#{xxx}材料'
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
       }
       
       await PluginConfigService.create('onebotConfig', defaultOnebotConfig, true)

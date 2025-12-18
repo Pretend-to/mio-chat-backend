@@ -105,6 +105,22 @@ middleware.loadLLMAdapters() → config.getLLMEnabled() → 按需实例化
 
 ---
 
+## � 文速档导航
+
+### 🚀 用户指南
+- **[快速启动指南](QUICK_START.md)** - 新用户 5 分钟上手
+- **[数据迁移指南](MIGRATION.md)** - 老用户配置文件迁移到数据库
+- **[Docker 部署指南](docs/DOCKER.md)** - 容器化部署完整教程
+- **[数据库设置](docs/DATABASE_SETUP.md)** - 数据库配置详解
+
+### 🔧 开发文档
+- **[API 文档](docs/api.md)** - 完整的 REST API 接口
+- **[插件开发](docs/plugin-api.md)** - 插件系统开发指南
+- **[配置管理](docs/config-api.md)** - 配置系统 API
+- **[更多文档](docs/README.md)** - 完整文档索引
+
+---
+
 ## 📦 快速开始
 
 ### 🚀 一键启动（推荐新用户）
@@ -115,7 +131,7 @@ git clone https://github.com/Pretend-to/mio-chat-backend.git
 cd mio-chat-backend
 
 # 一键安装并启动
-npm run first-run
+pnpm run first-run
 ```
 
 **就这么简单！** 脚本会自动：
@@ -129,7 +145,7 @@ npm run first-run
 
 **自定义端口启动**：
 ```bash
-PORT=8080 npm run quick-start
+PORT=8080 pnpm run quick-start
 ```
 
 ### 环境要求
@@ -149,24 +165,24 @@ cd mio-chat-backend
 2. **项目设置**
 ```bash
 # 方式一：一键设置（推荐）
-npm run setup
+pnpm run setup
 
 # 方式二：手动设置
-npm install                    # 安装依赖
-npm run db:generate           # 生成数据库客户端
-npm run db:push              # 初始化数据库
+pnpm install                    # 安装依赖
+pnpm run db:generate           # 生成数据库客户端
+pnpm run db:push              # 初始化数据库
 ```
 
 3. **启动服务**
 
 **快速启动** (自动生成访问码):
 ```bash
-npm run quick-start
+pnpm run quick-start
 ```
 
 **开发模式**:
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 **直接启动**:
@@ -186,7 +202,7 @@ ADMIN_CODE=your-secure-password node app.js
 
 **生产模式** (PM2 后台运行):
 ```bash
-npm start
+pnpm start
 # 或手动使用 PM2
 pm2 start config/pm2.json
 ```
@@ -241,24 +257,24 @@ nano .env
 **启动服务**：
 ```bash
 # 方式一：使用快速启动脚本（推荐）
-npm run docker:run
+pnpm run docker:run
 
 # 方式二：使用 Docker Compose
-npm run docker:prod              # 正式版本
-npm run docker:dev               # 开发版本
+pnpm run docker:prod              # 正式版本
+pnpm run docker:dev               # 开发版本
 
 # 方式三：传统 docker-compose 命令
 docker-compose up -d             # 正式版本
 docker-compose -f docker-compose.dev.yml up -d  # 开发版本
 
 # 自定义配置启动
-PORT=8080 ADMIN_CODE=your_password npm run docker:run
+PORT=8080 ADMIN_CODE=your_password pnpm run docker:run
 ```
 
 **管理命令**：
 ```bash
-npm run docker:logs              # 查看日志
-npm run docker:stop              # 停止服务
+pnpm run docker:logs              # 查看日志
+pnpm run docker:stop              # 停止服务
 docker-compose restart           # 重启服务
 ```
 
@@ -365,9 +381,6 @@ onebot:
 server:
   port: 3080                    # 服务端口，可通过 PORT 环境变量覆盖
   host: "0.0.0.0"               # 服务主机，可通过 HOST 环境变量覆盖
-  rateLimit:
-    windowMs: 60000             # 速率限制窗口 (毫秒)
-    max: 100                    # 最大请求数
 ```
 
 **环境变量支持**：
@@ -784,6 +797,7 @@ export default class MyPlugin {
 }
 ```
 
+
 ### 插件配置管理
 
 复杂插件可以在 `config/plugins/` 下创建配置文件，参考 `config/plugins/custom.json`。   parameters: {
@@ -878,7 +892,7 @@ npm init
 
 - **[配置管理 API](./docs/config-api.md)** - LLM 适配器 CRUD、热更新
 - **[插件管理 API](./docs/plugin-api.md)** - 插件 CRUD、配置更新、热重载
-- **[通用 API](./api.md)** - 基础接口、文件上传、分享等
+- **[通用 API](./docs/api.md)** - 基础接口、文件上传、分享等
 
 ### 核心 Socket.IO 事件
 

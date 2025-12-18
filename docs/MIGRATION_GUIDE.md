@@ -21,10 +21,10 @@ pnpm install
 
 ## 迁移步骤
 
-### 阶段1: 配置文件迁移
+### 一键迁移
 ```bash
-# 迁移所有配置文件到SQLite
-npm run migrate-config
+# 迁移所有配置文件和数据到SQLite
+pnpm run migrate
 ```
 
 这将迁移：

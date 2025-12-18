@@ -34,7 +34,7 @@ function checkPrismaClient() {
 function findPrismaCommand() {
   // 尝试不同的 Prisma 命令路径
   const commands = [
-    'npm run db:generate',  // 使用 npm script
+    'pnpm run db:generate',  // 使用 pnpm script
     'npx prisma@5.22.0 generate',  // 指定版本的 npx
     'pnpx prisma generate',  // pnpm 的 npx
     './node_modules/.bin/prisma generate'  // 本地二进制文件
@@ -49,7 +49,7 @@ function findPrismaCommand() {
     }
   }
   
-  return 'npm run db:generate'  // 默认回退
+  return 'pnpm run db:generate'  // 默认回退
 }
 
 async function ensurePrismaReady() {
@@ -72,9 +72,9 @@ async function ensurePrismaReady() {
       logger.error('错误信息:', error.message)
       logger.info('')
       logger.info('🔧 请尝试手动运行以下命令：')
-      logger.info('   npm run setup')
+      logger.info('   pnpm run setup')
       logger.info('   或者：')
-      logger.info('   npm install && npm run db:generate && npm run db:push')
+      logger.info('   pnpm install && pnpm run db:generate && pnpm run db:push')
       process.exit(1)
     }
   }
@@ -94,7 +94,7 @@ function startApp() {
     logger.info(`普通用户访问码: ${userCode}`)
     logger.info('')
     logger.info('⚠️  请妥善保存这些访问码！')
-    logger.info('💡 建议运行 "npm run setup" 来永久保存访问码')
+    logger.info('💡 建议运行 "pnpm run setup" 来永久保存访问码')
     logger.info('')
   }
   
@@ -139,8 +139,8 @@ async function main() {
     logger.error('启动失败:', error.message)
     logger.info('')
     logger.info('🔧 请尝试运行以下命令来解决问题：')
-    logger.info('   npm run setup    - 完整项目设置')
-    logger.info('   npm install      - 安装依赖')
+    logger.info('   pnpm run setup    - 完整项目设置')
+    logger.info('   pnpm install      - 安装依赖')
     logger.info('   npx prisma generate && npx prisma db push - 设置数据库')
     process.exit(1)
   }

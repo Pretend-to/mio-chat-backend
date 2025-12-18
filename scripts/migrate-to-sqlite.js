@@ -179,17 +179,47 @@ class DataMigrator {
   async migrateSystemSettings() {
     logger.info('开始迁移系统配置...')
     
-    const configPath = path.resolve(__dirname, '../config/config/config.yaml')
-    const ownersPath = path.resolve(__dirname, '../config/config/owners.yaml')
+    // 尝试多个可能的配置文件位置
+    const configPaths = [
+      path.resolve(__dirname, '../backup/2025-12-17/config/config/config.yaml'),
+      path.resolve(__dirname, '../config/config/config.yaml')
+    ]
+    
+    const ownersPaths = [
+      path.resolve(__dirname, '../backup/2025-12-17/config/config/owners.yaml'),
+      path.resolve(__dirname, '../config/config/owners.yaml')
+    ]
     
     // 迁移主配置文件
-    if (fs.existsSync(configPath)) {
+    let configPath = null
+    for (const path of configPaths) {
+      if (fs.existsSync(path)) {
+        configPath = path
+        break
+      }
+    }
+    
+    if (configPath) {
+      logger.info(`找到主配置文件: ${configPath}`)
       await this.migrateMainConfig(configPath)
+    } else {
+      logger.warn('未找到主配置文件，跳过迁移')
     }
     
     // 迁移模型所有者配置
-    if (fs.existsSync(ownersPath)) {
+    let ownersPath = null
+    for (const path of ownersPaths) {
+      if (fs.existsSync(path)) {
+        ownersPath = path
+        break
+      }
+    }
+    
+    if (ownersPath) {
+      logger.info(`找到模型所有者配置文件: ${ownersPath}`)
       await this.migrateOwnersConfig(ownersPath)
+    } else {
+      logger.warn('未找到模型所有者配置文件，跳过迁移')
     }
     
     logger.info(`系统配置迁移完成: 成功 ${this.stats.systemSettings.success}, 失败 ${this.stats.systemSettings.failed}`)
@@ -205,34 +235,76 @@ class DataMigrator {
       
       const systemConfigs = []
       
-      // 服务器配置
+      // 服务器配置 - 拆分为细分配置
       if (config.server) {
-        systemConfigs.push({
-          key: 'server',
-          value: config.server,
-          category: 'server',
-          description: '服务器配置'
-        })
+        if (config.server.port) {
+          systemConfigs.push({
+            key: 'server_port',
+            value: config.server.port,
+            category: 'server',
+            description: '服务器端口'
+          })
+        }
+        if (config.server.host) {
+          systemConfigs.push({
+            key: 'server_host',
+            value: config.server.host,
+            category: 'server',
+            description: '服务器主机地址'
+          })
+        }
+        if (config.server.max_rate_pre_min) {
+          systemConfigs.push({
+            key: 'server_max_rate',
+            value: config.server.max_rate_pre_min,
+            category: 'server',
+            description: '服务器最大请求频率'
+          })
+        }
       }
 
-      // Web配置
+      // Web配置 - 拆分为细分配置
       if (config.web) {
-        systemConfigs.push({
-          key: 'web',
-          value: config.web,
-          category: 'web',
-          description: 'Web界面配置'
-        })
-      }
-
-      // OneBot配置
-      if (config.onebot) {
-        systemConfigs.push({
-          key: 'onebot',
-          value: config.onebot,
-          category: 'onebot',
-          description: 'OneBot协议配置'
-        })
+        if (config.web.admin_code) {
+          systemConfigs.push({
+            key: 'admin_code',
+            value: config.web.admin_code,
+            category: 'web',
+            description: '管理员访问码'
+          })
+        }
+        if (config.web.user_code !== undefined) {
+          systemConfigs.push({
+            key: 'user_code',
+            value: config.web.user_code,
+            category: 'web',
+            description: '用户访问码'
+          })
+        }
+        if (config.web.full_screen !== undefined) {
+          systemConfigs.push({
+            key: 'web_full_screen',
+            value: config.web.full_screen,
+            category: 'web',
+            description: 'Web全屏模式'
+          })
+        }
+        if (config.web.title) {
+          systemConfigs.push({
+            key: 'web_title',
+            value: config.web.title,
+            category: 'web',
+            description: 'Web页面标题'
+          })
+        }
+        if (config.web.beian !== undefined) {
+          systemConfigs.push({
+            key: 'web_beian',
+            value: config.web.beian,
+            category: 'web',
+            description: 'Web备案信息'
+          })
+        }
       }
 
       // LLM适配器配置
@@ -248,7 +320,7 @@ class DataMigrator {
       // 调试模式
       if (config.debug !== undefined) {
         systemConfigs.push({
-          key: 'debug',
+          key: 'debug_mode',
           value: config.debug,
           category: 'general',
           description: '调试模式开关'
@@ -277,6 +349,31 @@ class DataMigrator {
           logger.error(`迁移系统配置失败 ${setting.key}:`, error.message)
         }
       }
+      
+      // 特殊处理 OneBot 配置 - 保存到插件配置表
+      if (config.onebot) {
+        try {
+          const exists = await PluginConfigService.findByName('onebotConfig')
+          if (exists) {
+            logger.debug('OneBot 配置已存在，跳过')
+            this.stats.pluginConfigs.skipped++
+          } else {
+            // 创建完整的 OneBot 配置
+            const onebotConfig = {
+              ...config.onebot,
+              plugins: null // 插件配置将从单独的文件迁移
+            }
+            
+            await PluginConfigService.create('onebotConfig', onebotConfig, true)
+            this.stats.pluginConfigs.success++
+            logger.info('OneBot 配置迁移成功')
+          }
+        } catch (error) {
+          this.stats.pluginConfigs.failed++
+          logger.error('迁移 OneBot 配置失败:', error.message)
+        }
+      }
+      
     } catch (error) {
       this.stats.systemSettings.failed++
       logger.error('迁移主配置文件失败:', error.message)
@@ -320,11 +417,26 @@ class DataMigrator {
   async migratePluginConfigs() {
     logger.info('开始迁移插件配置...')
     
-    const pluginsDir = path.resolve(__dirname, '../config/plugins')
-    if (!fs.existsSync(pluginsDir)) {
+    // 尝试多个可能的插件配置目录
+    const pluginsDirs = [
+      path.resolve(__dirname, '../backup/2025-12-17/config/plugins'),
+      path.resolve(__dirname, '../config/plugins')
+    ]
+    
+    let pluginsDir = null
+    for (const dir of pluginsDirs) {
+      if (fs.existsSync(dir)) {
+        pluginsDir = dir
+        break
+      }
+    }
+    
+    if (!pluginsDir) {
       logger.warn('插件配置目录不存在，跳过迁移')
       return
     }
+    
+    logger.info(`找到插件配置目录: ${pluginsDir}`)
 
     const files = fs.readdirSync(pluginsDir)
     
@@ -335,14 +447,6 @@ class DataMigrator {
       const pluginName = path.basename(file, path.extname(file))
       
       try {
-        // 检查是否已存在
-        const exists = await PluginConfigService.exists(pluginName)
-        if (exists) {
-          logger.debug(`插件配置已存在，跳过: ${pluginName}`)
-          this.stats.pluginConfigs.skipped++
-          continue
-        }
-        
         let config
         
         if (file.endsWith('.json')) {
@@ -355,10 +459,47 @@ class DataMigrator {
           continue // 跳过不支持的文件类型
         }
         
-        await PluginConfigService.create(pluginName, config, true)
-        this.stats.pluginConfigs.success++
-        
-        logger.debug(`迁移插件配置成功: ${pluginName}`)
+        // 特殊处理 OneBot 配置
+        if (pluginName === 'onebotConfig') {
+          const existingConfig = await PluginConfigService.findByName('onebotConfig')
+          if (existingConfig) {
+            // 合并配置：保留基本配置，更新插件部分
+            const mergedConfig = {
+              ...existingConfig.configData,
+              plugins: config
+            }
+            
+            await PluginConfigService.update('onebotConfig', mergedConfig)
+            this.stats.pluginConfigs.success++
+            logger.info('OneBot 插件配置合并成功')
+          } else {
+            // 创建新的 OneBot 配置
+            const fullConfig = {
+              enable: false,
+              reverse_ws_url: '',
+              bot_qq: '',
+              admin_qq: '',
+              token: '',
+              plugins: config
+            }
+            
+            await PluginConfigService.create('onebotConfig', fullConfig, true)
+            this.stats.pluginConfigs.success++
+            logger.info('OneBot 插件配置创建成功')
+          }
+        } else {
+          // 其他插件配置的常规处理
+          const exists = await PluginConfigService.exists(pluginName)
+          if (exists) {
+            logger.debug(`插件配置已存在，跳过: ${pluginName}`)
+            this.stats.pluginConfigs.skipped++
+            continue
+          }
+          
+          await PluginConfigService.create(pluginName, config, true)
+          this.stats.pluginConfigs.success++
+          logger.debug(`迁移插件配置成功: ${pluginName}`)
+        }
       } catch (error) {
         this.stats.pluginConfigs.failed++
         logger.error(`迁移插件配置失败 ${file}:`, error.message)
