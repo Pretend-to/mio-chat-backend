@@ -1,0 +1,44 @@
+- owner: OpenAI
+  keywords:
+    - 'gpt'
+    - 'o1'
+    - 'o3'
+    - 'o4'
+- owner: Cohere
+  keywords:
+    - 'command'
+- owner: Anthropic
+  keywords:
+    - 'claude'
+- owner: Google
+  keywords:
+    - 'gemini'
+    - 'PaLM'
+    - 'gemma'
+- owner: X.AI
+  keywords:
+    - 'grok'
+- owner: DeepSeek
+  keywords:
+    - 'deepseek'
+- owner: 智谱清言
+  keywords:
+    - 'glm'
+- owner: 豆包
+  keywords:
+    - 'doubao'
+- owner: 月之暗面 (kimi)
+  keywords:
+    - 'moonshot'
+    - 'kimi'
+- owner: 科大讯飞
+  keywords:
+    - 'sparkdesk'
+- owner: 通义千问
+  keywords:
+    - 'qwen'
+    - 'qwq'
+    - 'qvq'
+- owner: 腾讯混元
+  keywords:
+    - 'hunyuan'
