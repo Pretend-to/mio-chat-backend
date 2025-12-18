@@ -153,8 +153,8 @@ npm run setup
 
 # 方式二：手动设置
 npm install                    # 安装依赖
-npx prisma generate           # 生成数据库客户端
-npx prisma db push           # 初始化数据库
+npm run db:generate           # 生成数据库客户端
+npm run db:push              # 初始化数据库
 ```
 
 3. **启动服务**
