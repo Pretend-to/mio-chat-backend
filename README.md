@@ -295,12 +295,16 @@ onebot:
 #### 服务器配置
 ```yaml
 server:
-  port: 3080
-  host: "0.0.0.0"
+  port: 3080                    # 服务端口，可通过 PORT 环境变量覆盖
+  host: "0.0.0.0"               # 服务主机，可通过 HOST 环境变量覆盖
   rateLimit:
-    windowMs: 60000   # 速率限制窗口 (毫秒)
-    max: 100          # 最大请求数
+    windowMs: 60000             # 速率限制窗口 (毫秒)
+    max: 100                    # 最大请求数
 ```
+
+**环境变量支持**：
+- `PORT` - 覆盖服务端口配置
+- `HOST` - 覆盖服务主机配置
 
 #### Web 前端配置
 ```yaml
@@ -316,9 +320,20 @@ web:
 优先级: 环境变量 > 数据库配置 > 默认值
 
 ```bash
-# 示例
-export OPENAI_API_KEY="sk-xxx"
-export SERVER_PORT=8080
+# 服务器配置
+export PORT=8080                    # 服务端口（默认：3080）
+export HOST=127.0.0.1               # 服务主机（默认：0.0.0.0）
+
+# 认证配置
+export ADMIN_CODE="your-admin-code" # 管理员访问码
+export USER_CODE="your-user-code"   # 普通用户访问码（可选）
+
+# 其他配置
+export NODE_ENV=production          # 运行环境
+export DEBUG=true                   # 调试模式
+export LOG_LEVEL=info              # 日志级别
+
+# 启动服务
 node app.js
 ```
 
