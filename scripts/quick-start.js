@@ -19,7 +19,13 @@ function checkPrismaClient() {
   try {
     // 检查 Prisma 客户端是否已生成
     const prismaClientPath = path.join(process.cwd(), 'node_modules', '.prisma', 'client')
-    return fs.existsSync(prismaClientPath)
+    const prismaClientExists = fs.existsSync(prismaClientPath)
+    
+    // 同时检查数据库文件是否存在
+    const dbPath = path.join(process.cwd(), 'prisma', 'dev.db')
+    const dbExists = fs.existsSync(dbPath)
+    
+    return prismaClientExists && dbExists
   } catch (error) {
     return false
   }
@@ -27,13 +33,24 @@ function checkPrismaClient() {
 
 async function ensurePrismaReady() {
   if (!checkPrismaClient()) {
-    logger.info('🔧 检测到 Prisma 客户端未生成，正在自动设置...')
+    logger.info('🔧 检测到数据库未初始化，正在自动设置...')
+    logger.info('   这可能需要几秒钟时间...')
     try {
-      execSync('npx prisma generate', { stdio: 'inherit' })
-      execSync('npx prisma db push', { stdio: 'inherit' })
-      logger.info('✅ Prisma 设置完成')
+      logger.info('   正在生成 Prisma 客户端...')
+      execSync('npx prisma generate', { stdio: 'pipe' })
+      
+      logger.info('   正在初始化数据库...')
+      execSync('npx prisma db push', { stdio: 'pipe' })
+      
+      logger.info('✅ 数据库设置完成')
     } catch (error) {
-      logger.error('❌ Prisma 设置失败，请运行: npm run setup')
+      logger.error('❌ 数据库设置失败')
+      logger.error('错误信息:', error.message)
+      logger.info('')
+      logger.info('🔧 请尝试手动运行以下命令：')
+      logger.info('   npm run setup')
+      logger.info('   或者：')
+      logger.info('   npx prisma generate && npx prisma db push')
       process.exit(1)
     }
   }
