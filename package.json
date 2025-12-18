@@ -9,6 +9,7 @@
     "start": "pm2 start ./config/pm2.json",
     "dev": "node scripts/dev.js",
     "quick-start": "node scripts/quick-start.js",
+    "first-run": "npm install && npm run quick-start",
 
     "test": "node test",
     "lint": "oxlint",

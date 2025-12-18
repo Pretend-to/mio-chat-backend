@@ -114,8 +114,22 @@ middleware.loadLLMAdapters() → config.getLLMEnabled() → 按需实例化
 git clone https://github.com/Pretend-to/mio-chat-backend.git
 cd mio-chat-backend
 
-# 一键设置并启动（自动安装依赖、生成数据库、创建访问码）
-npm run setup && npm run quick-start
+# 一键安装并启动
+npm run first-run
+```
+
+**就这么简单！** 脚本会自动：
+- ✅ 安装所有依赖
+- ✅ 生成 Prisma 数据库客户端  
+- ✅ 初始化 SQLite 数据库
+- ✅ 创建安全的访问码
+- ✅ 启动服务器（默认端口 3080）
+
+服务启动后会显示访问码，请妥善保存！
+
+**自定义端口启动**：
+```bash
+PORT=8080 npm run quick-start
 ```
 
 ### 环境要求
