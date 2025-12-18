@@ -9,6 +9,33 @@ import prismaManager from '../lib/database/prisma.js'
 import SystemSettingsService from '../lib/database/services/SystemSettingsService.js'
 import PluginConfigService from '../lib/database/services/PluginConfigService.js'
 import logger from '../utils/logger.js'
+import fs from 'fs'
+import path from 'path'
+import yaml from 'js-yaml'
+import crypto from 'crypto'
+
+/**
+ * 生成随机访问码
+ */
+function generateSecureCode() {
+  return crypto.randomBytes(16).toString('base64')
+}
+
+/**
+ * 加载默认的 owners 配置
+ */
+function loadDefaultOwners() {
+  try {
+    const ownersPath = path.join(process.cwd(), 'config', 'owners.yaml')
+    if (fs.existsSync(ownersPath)) {
+      const ownersContent = fs.readFileSync(ownersPath, 'utf8')
+      return yaml.load(ownersContent)
+    }
+  } catch (error) {
+    logger.warn('加载默认 owners 配置失败:', error.message)
+  }
+  return []
+}
 
 /**
  * 初始化默认系统设置
@@ -16,22 +43,18 @@ import logger from '../utils/logger.js'
 async function initializeDefaultSystemSettings() {
   logger.info('正在初始化默认系统设置...')
   
-  // 生成默认访问码
-  const generateSecureCode = async () => {
-    const crypto = await import('crypto')
-    return crypto.randomBytes(16).toString('base64')
-  }
+  // 使用全局的 generateSecureCode 函数
 
   const defaultSettings = [
     {
       key: 'admin_code',
-      value: process.env.ADMIN_CODE || await generateSecureCode(),
+      value: process.env.ADMIN_CODE || generateSecureCode(),
       category: 'web',
       description: '管理员访问码'
     },
     {
       key: 'user_code', 
-      value: process.env.USER_CODE || await generateSecureCode(),
+      value: process.env.USER_CODE || generateSecureCode(),
       category: 'web',
       description: '普通用户访问码'
     },
@@ -49,7 +72,7 @@ async function initializeDefaultSystemSettings() {
     },
     {
       key: 'model_owners',
-      value: [],
+      value: loadDefaultOwners(),
       category: 'general',
       description: '模型所有者配置'
     },
