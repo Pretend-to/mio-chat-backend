@@ -1,11 +1,3 @@
-import { statusCheck } from './lib/check.js'
-import { startServer } from './lib/server/http/index.js'
-import prismaManager from './lib/database/prisma.js'
-import PresetService from './lib/database/services/PresetService.js'
-import SystemSettingsService from './lib/database/services/SystemSettingsService.js'
-import PluginConfigService from './lib/database/services/PluginConfigService.js'
-import initializeDefaults from './scripts/initialize-defaults.js'
-import AutoMigrationDetector from './lib/migration/autoMigrationDetector.js'
 import logger from './utils/logger.js'
 // import taskScheduler from './lib/corn.js'
 
@@ -16,7 +8,7 @@ let isShuttingDown = false
 /**
  * 检查并执行自动迁移
  */
-async function checkAndPerformAutoMigration() {
+async function checkAndPerformAutoMigration(AutoMigrationDetector) {
   try {
     const detector = new AutoMigrationDetector()
     
@@ -105,14 +97,45 @@ async function checkAndFixPrisma() {
 }
 
 /**
+ * 动态导入所有依赖模块
+ */
+async function importDependencies() {
+  const { statusCheck } = await import('./lib/check.js')
+  const { startServer } = await import('./lib/server/http/index.js')
+  const prismaManager = (await import('./lib/database/prisma.js')).default
+  const PresetService = (await import('./lib/database/services/PresetService.js')).default
+  const SystemSettingsService = (await import('./lib/database/services/SystemSettingsService.js')).default
+  const PluginConfigService = (await import('./lib/database/services/PluginConfigService.js')).default
+  const initializeDefaults = (await import('./scripts/initialize-defaults.js')).default
+  const AutoMigrationDetector = (await import('./lib/migration/autoMigrationDetector.js')).default
+  
+  return {
+    statusCheck,
+    startServer,
+    prismaManager,
+    PresetService,
+    SystemSettingsService,
+    PluginConfigService,
+    initializeDefaults,
+    AutoMigrationDetector
+  }
+}
+
+/**
  * 初始化数据库和服务
  */
-async function initializeDatabase() {
+async function initializeDatabase(dependencies) {
+  const { 
+    prismaManager, 
+    PresetService, 
+    SystemSettingsService, 
+    PluginConfigService, 
+    initializeDefaults,
+    AutoMigrationDetector
+  } = dependencies
+  
   try {
     logger.info('初始化数据库连接...')
-    
-    // 检查并修复 Prisma 客户端
-    await checkAndFixPrisma()
     
     // 初始化 Prisma 管理器
     await prismaManager.initialize()
@@ -123,7 +146,7 @@ async function initializeDatabase() {
     await PluginConfigService.initialize()
     
     // 检查并执行自动迁移
-    await checkAndPerformAutoMigration()
+    await checkAndPerformAutoMigration(AutoMigrationDetector)
     
     // 初始化默认配置
     logger.info('初始化默认配置...')
@@ -244,18 +267,24 @@ async function gracefulShutdown(signal) {
 // 应用启动流程
 async function startApp() {
   try {
+    // 首先检查并修复 Prisma 客户端
+    await checkAndFixPrisma()
+    
+    // 动态导入所有依赖
+    const dependencies = await importDependencies()
+    
     // 初始化数据库
-    await initializeDatabase()
+    await initializeDatabase(dependencies)
     
     // 等待配置初始化完成
     const config = (await import('./lib/config.js')).default
     await config._waitForInit()
     
     // 系统状态检查
-    await statusCheck()
+    await dependencies.statusCheck()
     
     // 启动服务器并保存实例
-    httpServer = await startServer()
+    httpServer = await dependencies.startServer()
     
     logger.info('应用启动完成')
   } catch (error) {
