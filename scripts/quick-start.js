@@ -2,10 +2,12 @@
 
 /**
  * 快速启动脚本
- * 自动生成安全的访问码并启动应用
+ * 自动检查环境并启动应用
  */
 
-import { spawn } from 'child_process'
+import { spawn, execSync } from 'child_process'
+import fs from 'fs'
+import path from 'path'
 import crypto from 'crypto'
 import logger from '../utils/logger.js'
 
@@ -13,18 +15,47 @@ function generateSecureCode() {
   return crypto.randomBytes(16).toString('base64')
 }
 
+function checkPrismaClient() {
+  try {
+    // 检查 Prisma 客户端是否已生成
+    const prismaClientPath = path.join(process.cwd(), 'node_modules', '.prisma', 'client')
+    return fs.existsSync(prismaClientPath)
+  } catch (error) {
+    return false
+  }
+}
+
+async function ensurePrismaReady() {
+  if (!checkPrismaClient()) {
+    logger.info('🔧 检测到 Prisma 客户端未生成，正在自动设置...')
+    try {
+      execSync('npx prisma generate', { stdio: 'inherit' })
+      execSync('npx prisma db push', { stdio: 'inherit' })
+      logger.info('✅ Prisma 设置完成')
+    } catch (error) {
+      logger.error('❌ Prisma 设置失败，请运行: npm run setup')
+      process.exit(1)
+    }
+  }
+}
+
 function startApp() {
   const adminCode = process.env.ADMIN_CODE || generateSecureCode()
   const userCode = process.env.USER_CODE || generateSecureCode()
   
   logger.info('🚀 正在启动 Mio-Chat...')
-  logger.info('')
-  logger.info('🔐 访问码信息：')
-  logger.info(`管理员访问码: ${adminCode}`)
-  logger.info(`普通用户访问码: ${userCode}`)
-  logger.info('')
-  logger.info('⚠️  请妥善保存这些访问码！')
-  logger.info('')
+  
+  // 只在没有设置环境变量时显示生成的访问码
+  if (!process.env.ADMIN_CODE) {
+    logger.info('')
+    logger.info('🔐 访问码信息：')
+    logger.info(`管理员访问码: ${adminCode}`)
+    logger.info(`普通用户访问码: ${userCode}`)
+    logger.info('')
+    logger.info('⚠️  请妥善保存这些访问码！')
+    logger.info('💡 建议运行 "npm run setup" 来永久保存访问码')
+    logger.info('')
+  }
   
   const env = {
     ...process.env,
@@ -59,4 +90,19 @@ function startApp() {
   })
 }
 
-startApp()
+async function main() {
+  try {
+    await ensurePrismaReady()
+    startApp()
+  } catch (error) {
+    logger.error('启动失败:', error.message)
+    logger.info('')
+    logger.info('🔧 请尝试运行以下命令来解决问题：')
+    logger.info('   npm run setup    - 完整项目设置')
+    logger.info('   npm install      - 安装依赖')
+    logger.info('   npx prisma generate && npx prisma db push - 设置数据库')
+    process.exit(1)
+  }
+}
+
+main()

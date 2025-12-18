@@ -5,7 +5,11 @@
   "description": "AI-Powered chat platform,support ONEBOT v11",
   "main": "index.js",
   "scripts": {
+    "setup": "node scripts/setup.js",
     "start": "pm2 start ./config/pm2.json",
+    "dev": "node scripts/dev.js",
+    "quick-start": "node scripts/quick-start.js",
+    "postinstall": "prisma generate",
     "test": "node test",
     "lint": "oxlint",
     "lint:watch": "oxlint --watch",
@@ -21,9 +25,7 @@
     "backup-db": "node scripts/backup-database.js",
     "restore-db": "node scripts/restore-database.js",
     "init-defaults": "node scripts/initialize-defaults.js",
-    "test-init": "node scripts/test-initialization.js",
-    "quick-start": "node scripts/quick-start.js",
-    "dev": "node scripts/dev.js"
+    "test-init": "node scripts/test-initialization.js"
   },
   "keywords": [
     "gpt"
