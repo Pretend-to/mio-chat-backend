@@ -16,17 +16,23 @@
     "lint:watch": "oxlint --watch",
     "lint:fix": "oxlint --fix",
     "format": "prettier --write .",
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio",
+    "db:generate": "node scripts/prisma-wrapper.js generate",
+    "db:push": "node scripts/prisma-wrapper.js db push",
+    "db:migrate": "node scripts/prisma-wrapper.js migrate dev",
+    "db:studio": "node scripts/prisma-wrapper.js studio",
     "migrate": "node scripts/migrate-to-sqlite.js",
     "migrate-config": "node scripts/migrate-config-to-sqlite.js",
     "migrate-all": "npm run migrate-config && npm run migrate",
     "backup-db": "node scripts/backup-database.js",
     "restore-db": "node scripts/restore-database.js",
     "init-defaults": "node scripts/initialize-defaults.js",
-    "test-init": "node scripts/test-initialization.js"
+    "test-init": "node scripts/test-initialization.js",
+    "docker:build": "docker build -t mio-chat-backend .",
+    "docker:run": "bash scripts/docker-quick-start.sh",
+    "docker:dev": "docker-compose -f docker-compose.dev.yml up -d",
+    "docker:prod": "docker-compose up -d",
+    "docker:stop": "docker-compose down",
+    "docker:logs": "docker-compose logs -f"
   },
   "keywords": [
     "gpt"

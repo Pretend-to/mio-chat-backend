@@ -208,31 +208,77 @@ pm2 logs mio-chat-backend
 ### 一条命令运行
 
 ```bash
-# 使用测试密码
-docker run -d -p 3080:3080 -e ADMIN_CODE=test123 miofcip/miochat:latest
+# 基础运行（自动生成访问码）
+docker run -d -p 3080:3080 miofcip/miochat:latest
 
-# 使用自定义密码
-docker run -d -p 3080:3080 -e ADMIN_CODE=your_password miofcip/miochat:latest
+# 自定义端口和访问码
+docker run -d -p 8080:8080 \
+  -e PORT=8080 \
+  -e ADMIN_CODE=your_password \
+  miofcip/miochat:latest
 
-# 生成随机密码
-docker run -d -p 3080:3080 -e ADMIN_CODE=$(openssl rand -base64 32) miofcip/miochat:latest
+# 完整配置示例
+docker run -d -p 3080:3080 \
+  -e PORT=3080 \
+  -e HOST=0.0.0.0 \
+  -e ADMIN_CODE=your_admin_password \
+  -e USER_CODE=your_user_password \
+  -e DEBUG=false \
+  miofcip/miochat:latest
 ```
 
 ### Docker Compose
 
+**创建 .env 文件**：
 ```bash
-# 正式版本
-docker-compose up -d
+# 复制环境变量模板
+cp .env.example .env
 
-# 开发版本（本地构建）
-docker-compose -f docker-compose.dev.yml up -d
+# 编辑配置
+nano .env
+```
+
+**启动服务**：
+```bash
+# 方式一：使用快速启动脚本（推荐）
+npm run docker:run
+
+# 方式二：使用 Docker Compose
+npm run docker:prod              # 正式版本
+npm run docker:dev               # 开发版本
+
+# 方式三：传统 docker-compose 命令
+docker-compose up -d             # 正式版本
+docker-compose -f docker-compose.dev.yml up -d  # 开发版本
+
+# 自定义配置启动
+PORT=8080 ADMIN_CODE=your_password npm run docker:run
+```
+
+**管理命令**：
+```bash
+npm run docker:logs              # 查看日志
+npm run docker:stop              # 停止服务
+docker-compose restart           # 重启服务
 ```
 
 ### 访问服务
 
-- **Web 界面**: http://localhost:3080
+- **Web 界面**: http://localhost:3080 (或自定义端口)
 - **健康检查**: http://localhost:3080/api/health
 - **管理后台**: 使用设置的 ADMIN_CODE
+
+### Docker 环境变量
+
+| 变量名 | 默认值 | 说明 |
+|--------|--------|------|
+| `PORT` | 3080 | 服务端口 |
+| `HOST` | 0.0.0.0 | 服务主机 |
+| `ADMIN_CODE` | - | 管理员访问码（必须设置） |
+| `USER_CODE` | - | 普通用户访问码（可选） |
+| `NODE_ENV` | production | 运行环境 |
+| `DEBUG` | false | 调试模式 |
+| `LOG_LEVEL` | info | 日志级别 |
 
 ---
 

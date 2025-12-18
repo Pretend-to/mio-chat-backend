@@ -31,16 +31,40 @@ function checkPrismaClient() {
   }
 }
 
+function findPrismaCommand() {
+  // 尝试不同的 Prisma 命令路径
+  const commands = [
+    'npm run db:generate',  // 使用 npm script
+    'npx prisma@5.22.0 generate',  // 指定版本的 npx
+    'pnpx prisma generate',  // pnpm 的 npx
+    './node_modules/.bin/prisma generate'  // 本地二进制文件
+  ]
+  
+  for (const cmd of commands) {
+    try {
+      execSync(cmd.replace('generate', '--help'), { stdio: 'pipe' })
+      return cmd
+    } catch {
+      continue
+    }
+  }
+  
+  return 'npm run db:generate'  // 默认回退
+}
+
 async function ensurePrismaReady() {
   if (!checkPrismaClient()) {
     logger.info('🔧 检测到数据库未初始化，正在自动设置...')
     logger.info('   这可能需要几秒钟时间...')
+    
     try {
+      const baseCmd = findPrismaCommand()
+      
       logger.info('   正在生成 Prisma 客户端...')
-      execSync('npm run db:generate', { stdio: 'pipe' })
+      execSync(baseCmd, { stdio: 'pipe' })
       
       logger.info('   正在初始化数据库...')
-      execSync('npm run db:push', { stdio: 'pipe' })
+      execSync(baseCmd.replace('generate', 'db push'), { stdio: 'pipe' })
       
       logger.info('✅ 数据库设置完成')
     } catch (error) {
@@ -50,7 +74,7 @@ async function ensurePrismaReady() {
       logger.info('🔧 请尝试手动运行以下命令：')
       logger.info('   npm run setup')
       logger.info('   或者：')
-      logger.info('   npm run db:generate && npm run db:push')
+      logger.info('   npm install && npm run db:generate && npm run db:push')
       process.exit(1)
     }
   }

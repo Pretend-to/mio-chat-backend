@@ -7,15 +7,22 @@ services:
     restart: unless-stopped
 
     ports:
-      - "3080:3080"
+      - "${PORT:-3080}:${PORT:-3080}"
 
     environment:
+      # 服务器配置
+      - PORT=${PORT:-3080}
+      - HOST=${HOST:-0.0.0.0}
       - NODE_ENV=development
       - TZ=Asia/Shanghai
-      # 必须设置管理员访问码
-      - ADMIN_CODE=${ADMIN_CODE:-admin123}
-      # 可选：设置普通用户访问码，留空则允许游客访问
+      
+      # 访问码配置
+      - ADMIN_CODE=${ADMIN_CODE:-}
       - USER_CODE=${USER_CODE:-}
+      
+      # 开发配置
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
 
     volumes:
       # 开发模式：映射整个目录，实时修改代码
@@ -25,9 +32,9 @@ services:
       - /app/.pnpm-store
       - /app/logs
 
-    # 健康检查
+    # 健康检查（支持动态端口）
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3080/api/health"]
+      test: ["CMD", "sh", "-c", "curl -f http://localhost:$${PORT:-3080}/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
