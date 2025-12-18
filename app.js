@@ -5,12 +5,44 @@ import PresetService from './lib/database/services/PresetService.js'
 import SystemSettingsService from './lib/database/services/SystemSettingsService.js'
 import PluginConfigService from './lib/database/services/PluginConfigService.js'
 import initializeDefaults from './scripts/initialize-defaults.js'
+import AutoMigrationDetector from './lib/migration/autoMigrationDetector.js'
 import logger from './utils/logger.js'
 // import taskScheduler from './lib/corn.js'
 
 // 全局变量存储服务器实例
 let httpServer = null
 let isShuttingDown = false
+
+/**
+ * 检查并执行自动迁移
+ */
+async function checkAndPerformAutoMigration() {
+  try {
+    const detector = new AutoMigrationDetector()
+    
+    // 检查是否需要迁移
+    const needsMigration = await detector.needsMigration()
+    
+    if (needsMigration) {
+      // 显示迁移提示
+      detector.showMigrationPrompt()
+      
+      // 执行自动迁移
+      const result = await detector.performAutoMigration()
+      
+      // 显示迁移结果
+      detector.showMigrationComplete(result)
+      
+      if (!result.success) {
+        logger.error('自动迁移失败，请手动执行迁移')
+        process.exit(1)
+      }
+    }
+  } catch (error) {
+    logger.error('自动迁移检测失败:', error)
+    // 不退出程序，继续正常启动流程
+  }
+}
 
 /**
  * 初始化数据库和服务
@@ -26,6 +58,9 @@ async function initializeDatabase() {
     await PresetService.initialize()
     await SystemSettingsService.initialize()
     await PluginConfigService.initialize()
+    
+    // 检查并执行自动迁移
+    await checkAndPerformAutoMigration()
     
     // 初始化默认配置
     logger.info('初始化默认配置...')
