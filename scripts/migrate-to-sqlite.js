@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import yaml from 'js-yaml'
+import { execSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import prismaManager from '../lib/database/prisma.js'
 import PresetService from '../lib/database/services/PresetService.js'
@@ -61,10 +62,65 @@ class DataMigrator {
   }
 
   /**
+   * 检查并修复 Prisma 客户端
+   */
+  async checkAndFixPrisma() {
+    try {
+      // 检查 .prisma/client 目录是否存在
+      const prismaClientPath = path.resolve(__dirname, '../node_modules/.prisma/client')
+      
+      if (!fs.existsSync(prismaClientPath)) {
+        throw new Error('Prisma client directory not found')
+      }
+      
+      // 尝试导入 Prisma 客户端
+      const { PrismaClient } = await import('@prisma/client')
+      
+      // 尝试创建实例（这会触发真正的错误如果客户端有问题）
+      const testClient = new PrismaClient()
+      await testClient.$disconnect()
+      
+      logger.info('Prisma 客户端检查通过')
+    } catch (error) {
+      if (error.message.includes('.prisma/client') || 
+          error.message.includes('Prisma client directory not found') ||
+          error.message.includes('Cannot find module')) {
+        logger.warn('检测到 Prisma 客户端未生成，正在自动修复...')
+        
+        try {
+          // 生成 Prisma 客户端
+          logger.info('正在生成 Prisma 客户端...')
+          execSync('npx prisma generate', { 
+            stdio: 'inherit',
+            cwd: path.resolve(__dirname, '..')
+          })
+          
+          // 推送数据库架构
+          logger.info('正在推送数据库架构...')
+          execSync('npx prisma db push', { 
+            stdio: 'inherit',
+            cwd: path.resolve(__dirname, '..')
+          })
+          
+          logger.info('✅ Prisma 客户端修复完成')
+        } catch (fixError) {
+          logger.error('❌ Prisma 客户端修复失败:', fixError.message)
+          throw new Error('Prisma 客户端修复失败，请手动运行: npx prisma generate && npx prisma db push')
+        }
+      } else {
+        throw error
+      }
+    }
+  }
+
+  /**
    * 初始化数据库和服务
    */
   async initializeServices() {
     logger.info('初始化数据库和服务...')
+    
+    // 检查并修复 Prisma 客户端
+    await this.checkAndFixPrisma()
     
     await prismaManager.initialize()
     await PresetService.initialize()

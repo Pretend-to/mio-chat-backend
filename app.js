@@ -45,11 +45,74 @@ async function checkAndPerformAutoMigration() {
 }
 
 /**
+ * 检查并修复 Prisma 客户端
+ */
+async function checkAndFixPrisma() {
+  try {
+    const fs = await import('fs')
+    const path = await import('path')
+    
+    // 检查 .prisma/client 目录是否存在
+    const prismaClientPath = path.resolve(process.cwd(), 'node_modules/.prisma/client')
+    
+    if (!fs.existsSync(prismaClientPath)) {
+      throw new Error('Prisma client directory not found')
+    }
+    
+    // 尝试导入 Prisma 客户端
+    const { PrismaClient } = await import('@prisma/client')
+    
+    // 尝试创建实例（这会触发真正的错误如果客户端有问题）
+    const testClient = new PrismaClient()
+    await testClient.$disconnect()
+    
+    logger.info('Prisma 客户端检查通过')
+  } catch (error) {
+    if (error.message.includes('.prisma/client') || 
+        error.message.includes('Prisma client directory not found') ||
+        error.message.includes('Cannot find module')) {
+      logger.warn('检测到 Prisma 客户端未生成，正在自动修复...')
+      
+      try {
+        const { execSync } = await import('child_process')
+        
+        // 生成 Prisma 客户端
+        logger.info('正在生成 Prisma 客户端...')
+        execSync('npx prisma generate', { 
+          stdio: 'inherit',
+          cwd: process.cwd()
+        })
+        
+        // 推送数据库架构
+        logger.info('正在推送数据库架构...')
+        execSync('npx prisma db push', { 
+          stdio: 'inherit',
+          cwd: process.cwd()
+        })
+        
+        logger.info('✅ Prisma 客户端修复完成')
+      } catch (fixError) {
+        logger.error('❌ Prisma 客户端修复失败:', fixError.message)
+        logger.error('请手动运行以下命令修复：')
+        logger.error('  npx prisma generate')
+        logger.error('  npx prisma db push')
+        process.exit(1)
+      }
+    } else {
+      throw error
+    }
+  }
+}
+
+/**
  * 初始化数据库和服务
  */
 async function initializeDatabase() {
   try {
     logger.info('初始化数据库连接...')
+    
+    // 检查并修复 Prisma 客户端
+    await checkAndFixPrisma()
     
     // 初始化 Prisma 管理器
     await prismaManager.initialize()
