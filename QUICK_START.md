@@ -98,25 +98,92 @@ node app.js
 
 ## 故障排除
 
-如果遇到问题，请尝试：
+### 常见问题
 
-1. **清理并重新安装**：
-   ```bash
-   rm -rf node_modules package-lock.json
-   npm install
-   npm run quick-start
-   ```
+#### 1. Prisma 客户端生成失败
 
-2. **手动设置数据库**：
-   ```bash
-   npm run db:generate
-   npm run db:push
-   ```
+**错误信息**: `prisma: not found` 或 `Command failed: npm run db:generate`
 
-3. **检查 Node.js 版本**：
-   ```bash
-   node --version  # 需要 >= 18.0.0
-   ```
+**解决方案**：
+```bash
+# 方案一：完整重新安装
+rm -rf node_modules package-lock.json pnpm-lock.yaml
+npm install
+npm run quick-start
+
+# 方案二：手动设置数据库
+npm install
+npm run setup
+
+# 方案三：使用指定版本
+npx prisma@5.22.0 generate
+npx prisma@5.22.0 db push
+node app.js
+```
+
+#### 2. 端口被占用
+
+**错误信息**: `EADDRINUSE: address already in use`
+
+**解决方案**：
+```bash
+# 使用其他端口
+PORT=8080 npm run quick-start
+
+# 或者停止占用端口的进程
+lsof -ti:3080 | xargs kill -9
+```
+
+#### 3. 权限问题
+
+**错误信息**: `EACCES: permission denied`
+
+**解决方案**：
+```bash
+# 修复权限
+sudo chown -R $(whoami) ~/.npm
+sudo chown -R $(whoami) ./node_modules
+
+# 或使用 sudo（不推荐）
+sudo npm run quick-start
+```
+
+#### 4. Node.js 版本过低
+
+**错误信息**: `SyntaxError: Unexpected token`
+
+**解决方案**：
+```bash
+# 检查版本（需要 >= 18.0.0）
+node --version
+
+# 升级 Node.js
+# 使用 nvm
+nvm install 18
+nvm use 18
+
+# 或下载最新版本
+# https://nodejs.org/
+```
+
+### 完全重置
+
+如果所有方法都失败，可以完全重置：
+
+```bash
+# 1. 清理所有文件
+rm -rf node_modules package-lock.json pnpm-lock.yaml
+rm -rf prisma/dev.db .env
+
+# 2. 重新克隆项目
+cd ..
+rm -rf mio-chat-backend
+git clone https://github.com/Pretend-to/mio-chat-backend.git
+cd mio-chat-backend
+
+# 3. 重新安装
+npm run first-run
+```
 
 ## 需要帮助？
 
