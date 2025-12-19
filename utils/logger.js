@@ -371,21 +371,171 @@ export class EnhancedLogger extends EventEmitter {
   }
 
   /**
+   * 检测是否为 base64 字符串
+   */
+  isBase64String(str) {
+    if (typeof str !== 'string' || str.length < 20) {
+      return false
+    }
+    
+    // 检查 data URL 格式
+    if (str.startsWith('data:')) {
+      return true
+    }
+    
+    // 检查纯 base64 字符串（长度大于20且符合base64格式）
+    if (str.length > 20) {
+      // Base64 字符集检查 - 更严格的正则
+      const base64Regex = /^[A-Za-z0-9+/]+={0,2}$/
+      if (base64Regex.test(str)) {
+        // 进一步检查：base64 字符串通常长度是4的倍数
+        if (str.length % 4 === 0) {
+          // 额外检查：base64 字符串通常包含大小写字母和数字的混合
+          const hasUpper = /[A-Z]/.test(str)
+          const hasLower = /[a-z]/.test(str)
+          const hasDigit = /[0-9]/.test(str)
+          
+          // 如果包含多种字符类型，更可能是 base64
+          return (hasUpper && hasLower) || (hasUpper && hasDigit) || (hasLower && hasDigit)
+        }
+      }
+    }
+    
+    return false
+  }
+
+  /**
+   * 检测是否为长字符串（可能包含敏感信息）
+   */
+  isLongString(str) {
+    if (typeof str !== 'string') {
+      return false
+    }
+    
+    // 超过100个字符的字符串可能包含敏感信息
+    return str.length > 100
+  }
+
+  /**
+   * 屏蔽 base64 内容
+   */
+  maskBase64(str) {
+    if (typeof str !== 'string') {
+      return str
+    }
+    
+    // 处理 data URL
+    if (str.startsWith('data:')) {
+      const commaIndex = str.indexOf(',')
+      if (commaIndex !== -1) {
+        const mimeType = str.substring(0, commaIndex + 1)
+        const base64Data = str.substring(commaIndex + 1)
+        const dataLength = base64Data.length
+        return `${mimeType}[BASE64_DATA:${dataLength}chars]`
+      }
+      return '[DATA_URL]'
+    }
+    
+    // 处理纯 base64 字符串
+    if (this.isBase64String(str)) {
+      const length = str.length
+      const preview = str.substring(0, 8)
+      const suffix = str.substring(str.length - 8)
+      return `[BASE64:${length}chars:${preview}...${suffix}]`
+    }
+    
+    return str
+  }
+
+  /**
+   * 检测敏感字段名
+   */
+  isSensitiveField(key) {
+    if (typeof key !== 'string') {
+      return false
+    }
+    
+    const sensitivePatterns = [
+      'password', 'passwd', 'pwd',
+      'token', 'access_token', 'refresh_token', 'auth_token',
+      'secret', 'api_secret', 'client_secret',
+      'key', 'api_key', 'private_key', 'public_key',
+      'credential', 'auth', 'authorization',
+      'service_account_json', 'cert', 'certificate'
+    ]
+    
+    const lowerKey = key.toLowerCase()
+    return sensitivePatterns.some(pattern => lowerKey.includes(pattern))
+  }
+
+  /**
+   * 屏蔽敏感信息
+   */
+  maskSensitiveValue(value) {
+    if (typeof value !== 'string' || value.length === 0) {
+      return '[REDACTED]'
+    }
+    
+    if (value.length <= 8) {
+      return '[REDACTED]'
+    }
+    
+    // 显示前后几个字符
+    const start = value.substring(0, 4)
+    const end = value.substring(value.length - 4)
+    return `${start}...${end}`
+  }
+
+  /**
    * JSON 输出（增强版，保持原有 API）
    */
   json(obj) {
     try {
       const jsonString = JSON.stringify(obj, (key, value) => {
-        // 保持原有过滤逻辑
+        // 处理敏感字段（优先级最高）
+        if (this.isSensitiveField(key)) {
+          return this.maskSensitiveValue(value)
+        }
+        
+        // 处理字符串值
+        if (typeof value === 'string') {
+          // 检查是否为 base64 数据
+          if (this.isBase64String(value)) {
+            return this.maskBase64(value)
+          }
+          
+          // 检查是否为长字符串（可能包含敏感信息）
+          if (this.isLongString(value)) {
+            // 如果是长字符串但不是 base64，可能是其他敏感数据
+            // 检查是否包含重复字符（如 'aaaa...'）
+            const isRepeatedChar = /^(.)\1{50,}$/.test(value)
+            if (!isRepeatedChar) {
+              // 不是重复字符，可能是敏感数据，进行部分屏蔽
+              const length = value.length
+              const preview = value.substring(0, 20)
+              const suffix = value.substring(value.length - 20)
+              return `[LONG_STRING:${length}chars:${preview}...${suffix}]`
+            }
+          }
+        }
+        
+        // 保持原有过滤逻辑（向后兼容）
         if (key === 'data') {
-          return '[Base64 Image Data]'
-        } else if (key === 'url' && typeof value === 'string' && value.startsWith('data:')) {
-          return '[Base64 Image Data]'
+          if (typeof value === 'string') {
+            if (this.isBase64String(value)) {
+              return this.maskBase64(value)
+            }
+            if (this.isLongString(value)) {
+              return '[Base64 Image Data]' // 保持原有行为
+            }
+          }
+          return '[Base64 Image Data]' // 保持原有行为
         }
-        // 增强：过滤敏感信息
-        if (key.toLowerCase().includes('password') || key.toLowerCase().includes('token')) {
-          return '[REDACTED]'
+        
+        if (key === 'url' && typeof value === 'string' && value.startsWith('data:')) {
+          return this.maskBase64(value)
         }
+        
         return value
       }, 2)
       
