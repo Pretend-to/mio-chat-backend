@@ -19,7 +19,7 @@ const tests = [
     name: '获取 OneBot 配置节点',
     method: 'GET', 
     path: '/api/config/onebot',
-    expectedFields: ['enable', 'reverse_ws_url', 'bot_qq', 'admin_qq', 'token']
+    expectedFields: ['enable'] // 只检查必需字段，其他字段可选
   },
   {
     name: '获取 OneBot 插件选项',

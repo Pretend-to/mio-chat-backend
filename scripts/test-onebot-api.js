@@ -247,9 +247,17 @@ class OneBotAPITester {
     logger.info('\n🧪 测试 4: PUT /api/config - 批量更新配置')
     
     try {
-      // 准备批量更新数据
+      // 先获取当前配置，保持插件配置不变
+      const currentConfig = await this.testGetOneBotConfig()
+      if (!currentConfig) {
+        this.logTest('批量更新配置', false, '无法获取当前配置')
+        return
+      }
+
+      // 准备批量更新数据（保持插件配置）
       const updateData = {
         onebot: {
+          ...currentConfig,
           enable: false, // 临时禁用，不影响实际使用
           reverse_ws_url: 'ws://batch-test.example.com:8080/onebot/v11/ws',
           bot_qq: '2698788044',
@@ -312,7 +320,8 @@ class OneBotAPITester {
         return
       }
 
-      this.logTest('获取 OneBot 插件选项', true, `获取到插件选项: ${Object.keys(plugins.options).join(', ')}`)
+      const optionKeys = Object.keys(plugins.options)
+      this.logTest('获取 OneBot 插件选项', true, `获取到插件选项: ${optionKeys.length > 0 ? optionKeys.join(', ') : '(空)'}`)
       
     } catch (error) {
       this.logTest('获取 OneBot 插件选项', false, error.message)
