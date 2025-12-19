@@ -6,29 +6,23 @@ let httpServer = null
 let isShuttingDown = false
 
 /**
- * 检查并执行自动迁移
+ * 检查并执行自动迁移（包括 OneBot 配置迁移）
  */
 async function checkAndPerformAutoMigration(AutoMigrationDetector) {
   try {
     const detector = new AutoMigrationDetector()
     
-    // 检查是否需要迁移
-    const needsMigration = await detector.needsMigration()
+    // 执行完整的迁移检查和处理
+    const result = await detector.checkAndMigrate()
     
-    if (needsMigration) {
-      // 显示迁移提示
-      detector.showMigrationPrompt()
-      
-      // 执行自动迁移
-      const result = await detector.performAutoMigration()
-      
-      // 显示迁移结果
-      detector.showMigrationComplete(result)
-      
-      if (!result.success) {
-        logger.error('自动迁移失败，请手动执行迁移')
-        process.exit(1)
-      }
+    if (!result.success && !result.noMigrationNeeded) {
+      logger.error('自动迁移失败，请手动执行迁移')
+      logger.error('错误信息:', result.error)
+      process.exit(1)
+    }
+    
+    if (result.noMigrationNeeded) {
+      logger.debug('无需执行配置迁移，继续正常启动')
     }
   } catch (error) {
     logger.error('自动迁移检测失败:', error)

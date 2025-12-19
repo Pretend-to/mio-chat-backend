@@ -124,7 +124,7 @@ async function initializeDefaultPluginConfig() {
   logger.info('正在初始化默认插件配置...')
   
   try {
-    const existing = await PluginConfigService.findByName('onebotConfig')
+    const existing = await SystemSettingsService.get('onebot')
     if (!existing) {
       const defaultOnebotConfig = {
         enable: false,
@@ -250,7 +250,7 @@ async function initializeDefaultPluginConfig() {
         }
       }
       
-      await PluginConfigService.create('onebotConfig', defaultOnebotConfig, true)
+      await SystemSettingsService.set('onebot', defaultOnebotConfig, 'onebot', 'OneBot 协议配置')
       
       logger.info('✓ 创建默认 OneBot 配置')
     } else {
