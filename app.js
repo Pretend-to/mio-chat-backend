@@ -44,14 +44,7 @@ async function checkAndFixPrisma() {
     const fs = await import('fs')
     const path = await import('path')
     
-    // 检查 .prisma/client 目录是否存在
-    const prismaClientPath = path.resolve(process.cwd(), 'node_modules/.prisma/client')
-    
-    if (!fs.existsSync(prismaClientPath)) {
-      throw new Error('Prisma client directory not found')
-    }
-    
-    // 尝试导入 Prisma 客户端
+    // 尝试导入 Prisma 客户端（让 Node.js 自己解析路径）
     const { PrismaClient } = await import('@prisma/client')
     
     // 尝试创建实例（这会触发真正的错误如果客户端有问题）
