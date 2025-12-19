@@ -45,11 +45,7 @@ curl -H "x-admin-code: YOUR_ADMIN_CODE" \
             "description": "OpenAI API 密钥，支持多个密钥用逗号分隔",
             "required": true,
             "label": "API Key",
-            "placeholder": "sk-...",
-            "validation": {
-              "pattern": "^sk-[a-zA-Z0-9]+",
-              "message": "API Key 必须以 sk- 开头"
-            }
+            "placeholder": "API Key"
           }
         }
       }
