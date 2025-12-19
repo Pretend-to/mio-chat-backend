@@ -16,6 +16,7 @@ export default class executeCommand extends MioFunction {
           },
         },
       },
+      adminOnly: true // 仅限管理员执行
     })
     this.func = this.executeCommand
   }
@@ -26,11 +27,6 @@ export default class executeCommand extends MioFunction {
     const args = commandArgs
 
     try {
-      // 如果用户不是管理员，拒绝执行
-      if (!e.user.isAdmin) {
-        throw new Error('Only administrators can execute commands.')
-      }
-
       return new Promise((resolve, reject) => {
         const child = spawn(command, args, { shell: true })
 
