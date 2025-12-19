@@ -371,10 +371,10 @@ export class EnhancedLogger extends EventEmitter {
   }
 
   /**
-   * 检测是否为 base64 字符串
+   * 检测是否为 base64 字符串（更严格的检测）
    */
   isBase64String(str) {
-    if (typeof str !== 'string' || str.length < 20) {
+    if (typeof str !== 'string' || str.length < 100) {
       return false
     }
     
@@ -383,8 +383,8 @@ export class EnhancedLogger extends EventEmitter {
       return true
     }
     
-    // 检查纯 base64 字符串（长度大于20且符合base64格式）
-    if (str.length > 20) {
+    // 检查纯 base64 字符串（必须很长且符合base64格式）
+    if (str.length > 100) {
       // Base64 字符集检查 - 更严格的正则
       const base64Regex = /^[A-Za-z0-9+/]+={0,2}$/
       if (base64Regex.test(str)) {
@@ -394,9 +394,11 @@ export class EnhancedLogger extends EventEmitter {
           const hasUpper = /[A-Z]/.test(str)
           const hasLower = /[a-z]/.test(str)
           const hasDigit = /[0-9]/.test(str)
+          const hasSpecial = /[+/]/.test(str)
           
-          // 如果包含多种字符类型，更可能是 base64
-          return (hasUpper && hasLower) || (hasUpper && hasDigit) || (hasLower && hasDigit)
+          // 必须包含多种字符类型且包含base64特殊字符，才认为是base64
+          const typeCount = [hasUpper, hasLower, hasDigit, hasSpecial].filter(Boolean).length
+          return typeCount >= 3
         }
       }
     }
@@ -499,37 +501,28 @@ export class EnhancedLogger extends EventEmitter {
         
         // 处理字符串值
         if (typeof value === 'string') {
-          // 检查是否为 base64 数据
-          if (this.isBase64String(value)) {
+          // 只对明确的 data URL 进行处理
+          if (value.startsWith('data:image/') || value.startsWith('data:video/') || value.startsWith('data:audio/')) {
             return this.maskBase64(value)
           }
           
-          // 检查是否为长字符串（可能包含敏感信息）
-          if (this.isLongString(value)) {
-            // 如果是长字符串但不是 base64，可能是其他敏感数据
-            // 检查是否包含重复字符（如 'aaaa...'）
-            const isRepeatedChar = /^(.)\1{50,}$/.test(value)
-            if (!isRepeatedChar) {
-              // 不是重复字符，可能是敏感数据，进行部分屏蔽
-              const length = value.length
-              const preview = value.substring(0, 20)
-              const suffix = value.substring(value.length - 20)
-              return `[LONG_STRING:${length}chars:${preview}...${suffix}]`
-            }
+          // 对于其他情况，只有在确实是很长的base64字符串时才处理
+          if (this.isBase64String(value) && value.length > 500) {
+            return this.maskBase64(value)
           }
         }
         
-        // 保持原有过滤逻辑（向后兼容）
-        if (key === 'data') {
-          if (typeof value === 'string') {
-            if (this.isBase64String(value)) {
-              return this.maskBase64(value)
-            }
-            if (this.isLongString(value)) {
-              return '[Base64 Image Data]' // 保持原有行为
-            }
+        // 只对明确的图片/媒体数据字段进行处理
+        if (key === 'data' && typeof value === 'string') {
+          if (value.startsWith('data:image/') || value.startsWith('data:video/') || value.startsWith('data:audio/')) {
+            return this.maskBase64(value)
           }
-          return '[Base64 Image Data]' // 保持原有行为
+          // 对于其他 data 字段，只有在确实很长时才简化
+          if (value.length > 1000) {
+            const preview = value.substring(0, 50)
+            const suffix = value.substring(value.length - 20)
+            return `[DATA:${value.length}chars:${preview}...${suffix}]`
+          }
         }
         
         if (key === 'url' && typeof value === 'string' && value.startsWith('data:')) {
@@ -593,7 +586,7 @@ export class EnhancedLogger extends EventEmitter {
    * 生成日志ID
    */
   generateLogId() {
-    return `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    return `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
   }
 
   /**
