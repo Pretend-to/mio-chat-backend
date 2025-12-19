@@ -90,9 +90,9 @@ INSERT INTO system_settings (key, value, category) VALUES
 
 #### 2. 插件配置 (plugin_configs)
 ```sql
--- OneBot 配置（默认禁用）
-INSERT INTO plugin_configs (plugin_name, config_data, enabled) VALUES 
-('onebotConfig', '{"enable":false,"reverse_ws_url":"","bot_qq":"","admin_qq":"","token":""}', true);
+-- OneBot 配置（默认禁用）- 现在存储在 system_settings 表中
+INSERT INTO system_settings (key, value, category, description) VALUES 
+('onebot', '{"enable":false,"reverse_ws_url":"","bot_qq":"","admin_qq":"","token":"","plugins":null}', 'onebot', 'OneBot 协议配置');
 ```
 
 ## 🔐 访问码生成

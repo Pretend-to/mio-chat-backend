@@ -409,10 +409,10 @@ class DataMigrator {
       // 特殊处理 OneBot 配置 - 保存到插件配置表
       if (config.onebot) {
         try {
-          const exists = await PluginConfigService.findByName('onebotConfig')
+          const exists = await SystemSettingsService.exists('onebot')
           if (exists) {
             logger.debug('OneBot 配置已存在，跳过')
-            this.stats.pluginConfigs.skipped++
+            this.stats.systemSettings.skipped++
           } else {
             // 创建完整的 OneBot 配置
             const onebotConfig = {
@@ -420,12 +420,12 @@ class DataMigrator {
               plugins: null // 插件配置将从单独的文件迁移
             }
             
-            await PluginConfigService.create('onebotConfig', onebotConfig, true)
-            this.stats.pluginConfigs.success++
+            await SystemSettingsService.set('onebot', onebotConfig, 'onebot', 'OneBot 协议配置')
+            this.stats.systemSettings.success++
             logger.info('OneBot 配置迁移成功')
           }
         } catch (error) {
-          this.stats.pluginConfigs.failed++
+          this.stats.systemSettings.failed++
           logger.error('迁移 OneBot 配置失败:', error.message)
         }
       }
@@ -517,16 +517,16 @@ class DataMigrator {
         
         // 特殊处理 OneBot 配置
         if (pluginName === 'onebotConfig') {
-          const existingConfig = await PluginConfigService.findByName('onebotConfig')
-          if (existingConfig) {
+          const existingConfig = await SystemSettingsService.get('onebot')
+          if (existingConfig && existingConfig.value) {
             // 合并配置：保留基本配置，更新插件部分
             const mergedConfig = {
-              ...existingConfig.configData,
+              ...existingConfig.value,
               plugins: config
             }
             
-            await PluginConfigService.update('onebotConfig', mergedConfig)
-            this.stats.pluginConfigs.success++
+            await SystemSettingsService.set('onebot', mergedConfig, 'onebot', 'OneBot 协议配置')
+            this.stats.systemSettings.success++
             logger.info('OneBot 插件配置合并成功')
           } else {
             // 创建新的 OneBot 配置
@@ -539,8 +539,8 @@ class DataMigrator {
               plugins: config
             }
             
-            await PluginConfigService.create('onebotConfig', fullConfig, true)
-            this.stats.pluginConfigs.success++
+            await SystemSettingsService.set('onebot', fullConfig, 'onebot', 'OneBot 协议配置')
+            this.stats.systemSettings.success++
             logger.info('OneBot 插件配置创建成功')
           }
         } else {
