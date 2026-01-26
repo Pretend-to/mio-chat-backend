@@ -3,10 +3,15 @@
 /lib/resources
 /output/*
 /backup/*
-/config/config/config.yaml
-/config/config/vertex.json
-/presets/custom/*
-!/presets/custom/example.json
+/tmp/
+/workspace
+
+# 数据库文件 - 包含敏感配置信息，绝对不能提交！
+/data/
+/prisma/data/
+*.db
+*.sqlite
+*.sqlite3
 
 /.VSCodeCounter
 /.vscode
@@ -18,7 +23,6 @@
 /plugins/custom/*
 !/plugins/custom/exec.js
 !/plugins/custom/parser.js
-
 
 test.js
 image.jpg

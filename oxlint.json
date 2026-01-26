@@ -1,0 +1,29 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
+  "rules": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "warn",
+    "style": "warn",
+    "pedantic": "off",
+    "nursery": "off",
+    "restriction": "off"
+  },
+  "env": {
+    "node": true,
+    "es2024": true
+  },
+  "globals": {
+    "middleware": "readonly",
+    "logger": "readonly"
+  },
+  "ignore": [
+    "node_modules/**",
+    "dist/**",
+    "output/**",
+    "logs/**",
+    ".git/**",
+    "**/*.min.js",
+    "**/*.bundle.js"
+  ]
+}

@@ -83,8 +83,7 @@ X-Admin-Code: 123456
     },
     "server": {
       "port": 3080,
-      "host": "0.0.0.0",
-      "max_rate_pre_min": 100
+      "host": "0.0.0.0"
     },
     "web": {
       "admin_code": "123***456",
@@ -149,8 +148,7 @@ GET /api/config/server
   "message": "success",
   "data": {
     "port": 3080,
-    "host": "0.0.0.0",
-    "max_rate_pre_min": 100
+    "host": "0.0.0.0"
   }
 }
 ```

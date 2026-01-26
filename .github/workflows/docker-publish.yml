@@ -2,7 +2,7 @@ name: Build and Publish Docker Image
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [ production ]
     paths:
       - 'Dockerfile'
       - 'package.json'
@@ -10,10 +10,11 @@ on:
       - 'lib/**'
       - 'config/**'
       - '.github/workflows/docker-publish.yml'
+      - 'dist/**'
     tags:
       - 'v*'
   pull_request:
-    branches: [ master, main ]
+    branches: [ production ]
     paths:
       - 'Dockerfile'
       - 'package.json'

@@ -105,15 +105,62 @@ middleware.loadLLMAdapters() → config.getLLMEnabled() → 按需实例化
 
 ---
 
+## � 文速档导航
+
+### 🚀 用户指南
+- **[快速启动指南](QUICK_START.md)** - 新用户 5 分钟上手
+- **[数据迁移指南](MIGRATION.md)** - 老用户配置文件迁移到数据库
+- **[Docker 部署指南](docs/DOCKER.md)** - 容器化部署完整教程
+- **[数据库设置](docs/DATABASE_SETUP.md)** - 数据库配置详解
+
+### 🔧 开发文档
+- **[API 文档](docs/api.md)** - 完整的 REST API 接口
+- **[插件开发](docs/plugin-api.md)** - 插件系统开发指南
+- **[配置管理](docs/config-api.md)** - 配置系统 API
+- **[更多文档](docs/README.md)** - 完整文档索引
+
+---
+
 ## 📦 快速开始
+
+### 🚀 一键启动（推荐新用户）
+
+```bash
+# 克隆项目
+git clone https://github.com/Pretend-to/mio-chat-backend.git
+cd mio-chat-backend
+
+# 一键安装并启动
+pnpm run first-run
+```
+
+**就这么简单！** 脚本会自动：
+- ✅ 安装所有依赖
+- ✅ 生成 Prisma 数据库客户端  
+- ✅ 初始化 SQLite 数据库
+- ✅ 创建安全的访问码
+- ✅ 启动服务器（默认端口 3080）
+
+服务启动后会显示访问码，请妥善保存！
+
+**自定义端口启动**：
+```bash
+PORT=8080 pnpm run quick-start
+```
+
+### 🔧 遇到问题？
+
+如果遇到任何启动问题，应用会自动检测并修复常见问题（如 Prisma 客户端未生成等）。
+
+如果自动修复失败，请查看控制台输出的详细错误信息。
 
 ### 环境要求
 
 - **Node.js**: >= 18.0.0
-- **pnpm**: >= 8.0.0
+- **npm/pnpm**: >= 8.0.0
 - **操作系统**: Linux / macOS / Windows
 
-### 安装步骤
+### 详细安装步骤
 
 1. **克隆仓库**
 ```bash
@@ -121,51 +168,42 @@ git clone https://github.com/Pretend-to/mio-chat-backend.git
 cd mio-chat-backend
 ```
 
-2. **安装依赖**
+2. **项目设置**
 ```bash
-pnpm install
+# 方式一：一键设置（推荐）
+pnpm run setup
+
+# 方式二：手动设置
+pnpm install                    # 安装依赖
+pnpm run db:generate           # 生成数据库客户端
+pnpm run db:push              # 初始化数据库
 ```
 
-3. **配置文件**
+3. **启动服务**
 
-⚠️ **安全配置（必须设置）**
+**快速启动** (自动生成访问码):
 ```bash
-# 复制配置模板
-cp config/config/config.example.yaml config/config/config.yaml
-
-# 编辑配置文件，必须设置管理员访问码！
-vim config/config/config.yaml
+pnpm run quick-start
 ```
 
-**安全设置要求**：
-- 必须设置 `admin_code`（管理员访问码）
-- 推荐使用强密码，可使用以下命令生成：
-  ```bash
-  openssl rand -base64 32
-  ```
-- 管理员访问码不能与普通用户访问码相同
-
-**两种设置方式**：
-
-方式一：编辑配置文件
-```yaml
-web:
-  admin_code: "你的管理员访问码"  # 必须设置！
-  user_code: ""  # 可选，留空则允许游客访问
-```
-
-方式二：使用环境变量（推荐用于 Docker 部署）
+**开发模式**:
 ```bash
-export ADMIN_CODE="你的管理员访问码"
-export USER_CODE="普通用户访问码"  # 可选
-node app.js
+pnpm run dev
 ```
 
-4. **启动服务**
-
-**开发模式** (前台运行，实时日志输出):
+**直接启动**:
 ```bash
 node app.js
+```
+
+**自定义端口启动**:
+```bash
+PORT=8080 node app.js
+```
+
+**自定义访问码启动**:
+```bash
+ADMIN_CODE=your-secure-password node app.js
 ```
 
 **生产模式** (PM2 后台运行):
@@ -192,37 +230,88 @@ pm2 logs mio-chat-backend
 ### 一条命令运行
 
 ```bash
-# 使用测试密码
-docker run -d -p 3080:3080 -e ADMIN_CODE=test123 miofcip/miochat:latest
+# 基础运行（自动生成访问码）
+docker run -d -p 3080:3080 miofcip/miochat:latest
 
-# 使用自定义密码
-docker run -d -p 3080:3080 -e ADMIN_CODE=your_password miofcip/miochat:latest
+# 自定义端口和访问码
+docker run -d -p 8080:8080 \
+  -e PORT=8080 \
+  -e ADMIN_CODE=your_password \
+  miofcip/miochat:latest
 
-# 生成随机密码
-docker run -d -p 3080:3080 -e ADMIN_CODE=$(openssl rand -base64 32) miofcip/miochat:latest
+# 完整配置示例
+docker run -d -p 3080:3080 \
+  -e PORT=3080 \
+  -e HOST=0.0.0.0 \
+  -e ADMIN_CODE=your_admin_password \
+  -e USER_CODE=your_user_password \
+  -e DEBUG=false \
+  miofcip/miochat:latest
 ```
 
 ### Docker Compose
 
+**创建 .env 文件**：
 ```bash
-# 正式版本
-docker-compose up -d
+# 复制环境变量模板
+cp .env.example .env
 
-# 开发版本（本地构建）
-docker-compose -f docker-compose.dev.yml up -d
+# 编辑配置
+nano .env
+```
+
+**启动服务**：
+```bash
+# 方式一：使用快速启动脚本（推荐）
+pnpm run docker:run
+
+# 方式二：使用 Docker Compose
+pnpm run docker:prod              # 正式版本
+pnpm run docker:dev               # 开发版本
+
+# 方式三：传统 docker-compose 命令
+docker-compose up -d             # 正式版本
+docker-compose -f docker-compose.dev.yml up -d  # 开发版本
+
+# 自定义配置启动
+PORT=8080 ADMIN_CODE=your_password pnpm run docker:run
+```
+
+**管理命令**：
+```bash
+pnpm run docker:logs              # 查看日志
+pnpm run docker:stop              # 停止服务
+docker-compose restart           # 重启服务
 ```
 
 ### 访问服务
 
-- **Web 界面**: http://localhost:3080
+- **Web 界面**: http://localhost:3080 (或自定义端口)
 - **健康检查**: http://localhost:3080/api/health
 - **管理后台**: 使用设置的 ADMIN_CODE
+
+### Docker 环境变量
+
+| 变量名 | 默认值 | 说明 |
+|--------|--------|------|
+| `PORT` | 3080 | 服务端口 |
+| `HOST` | 0.0.0.0 | 服务主机 |
+| `ADMIN_CODE` | - | 管理员访问码（必须设置） |
+| `USER_CODE` | - | 普通用户访问码（可选） |
+| `NODE_ENV` | production | 运行环境 |
+| `DEBUG` | false | 调试模式 |
+| `LOG_LEVEL` | info | 日志级别 |
 
 ---
 
 ## ⚙️ 配置说明
 
-配置文件位于 `config/config/config.yaml`，支持环境变量覆盖。
+**重要更新**: 配置已完全迁移到SQLite数据库，不再使用配置文件。
+- 首次启动时自动初始化数据库配置
+- 运行时配置通过Web界面或API接口管理
+- 支持环境变量覆盖数据库配置
+
+⚠️ **安全提醒**: 数据库文件包含敏感信息（API密钥等），已添加到 `.gitignore`，请勿提交到版本控制！
 
 ### 核心配置项
 
@@ -262,11 +351,11 @@ vertex:
       - "gemini-2.5-pro-preview-03-25"
       - "claude-3-5-sonnet-v2@20241022"  # 支持 Anthropic Claude
   default_model: "gemini-2.0-flash-001"
-  # 注意: 需要在 config/config/vertex.json 配置 GCP 服务账号凭据
-  # 凭据包含 project_id, region 等信息
+  # 注意: Vertex AI 凭据直接配置在实例的 service_account_json 字段中
+  # 或通过 auth_file_path 指定凭据文件路径
 ```
 
-**Vertex AI 凭据配置** (`config/config/vertex.json`):
+**Vertex AI 凭据配置** (直接在配置中设置):
 ```json
 {
   "type": "service_account",
@@ -296,12 +385,13 @@ onebot:
 #### 服务器配置
 ```yaml
 server:
-  port: 3080
-  host: "0.0.0.0"
-  rateLimit:
-    windowMs: 60000   # 速率限制窗口 (毫秒)
-    max: 100          # 最大请求数
+  port: 3080                    # 服务端口，可通过 PORT 环境变量覆盖
+  host: "0.0.0.0"               # 服务主机，可通过 HOST 环境变量覆盖
 ```
+
+**环境变量支持**：
+- `PORT` - 覆盖服务端口配置
+- `HOST` - 覆盖服务主机配置
 
 #### Web 前端配置
 ```yaml
@@ -314,12 +404,23 @@ web:
 
 ### 环境变量覆盖
 
-优先级: 环境变量 > config.yaml > 默认值
+优先级: 环境变量 > 数据库配置 > 默认值
 
 ```bash
-# 示例
-export OPENAI_API_KEY="sk-xxx"
-export SERVER_PORT=8080
+# 服务器配置
+export PORT=8080                    # 服务端口（默认：3080）
+export HOST=127.0.0.1               # 服务主机（默认：0.0.0.0）
+
+# 认证配置
+export ADMIN_CODE="your-admin-code" # 管理员访问码
+export USER_CODE="your-user-code"   # 普通用户访问码（可选）
+
+# 其他配置
+export NODE_ENV=production          # 运行环境
+export DEBUG=true                   # 调试模式
+export LOG_LEVEL=info              # 日志级别
+
+# 启动服务
 node app.js
 ```
 
@@ -702,6 +803,7 @@ export default class MyPlugin {
 }
 ```
 
+
 ### 插件配置管理
 
 复杂插件可以在 `config/plugins/` 下创建配置文件，参考 `config/plugins/custom.json`。   parameters: {
@@ -796,7 +898,7 @@ npm init
 
 - **[配置管理 API](./docs/config-api.md)** - LLM 适配器 CRUD、热更新
 - **[插件管理 API](./docs/plugin-api.md)** - 插件 CRUD、配置更新、热重载
-- **[通用 API](./api.md)** - 基础接口、文件上传、分享等
+- **[通用 API](./docs/api.md)** - 基础接口、文件上传、分享等
 
 ### 核心 Socket.IO 事件
 
@@ -870,10 +972,7 @@ mio-chat-backend/
 ├── plugins/                  # 外部插件目录 (pnpm workspaces)
 │   └── custom/               # 自定义插件
 ├── config/
-│   ├── config/
-│   │   ├── config.example.yaml
-│   │   └── config.yaml       # 主配置文件 (gitignore)
-│   ├── plugins/              # 插件配置
+│   ├── nginx/                # Nginx 配置
 │   ├── pm2.json              # PM2 配置
 │   └── nginx/                # Nginx 配置示例
 ├── utils/                    # 工具函数
@@ -916,7 +1015,7 @@ npx nodemon app.js
 pnpm run format
 
 # 检查代码风格
-pnpm run lint  # (需手动运行 eslint,项目已配置 eslint.config.js)
+pnpm run lint  # 使用 oxlint 进行代码检查
 ```
 
 ### 调试技巧
@@ -958,7 +1057,7 @@ node --inspect app.js
 ### 代码规范
 
 - 使用 ES Module 语法 (`import`/`export`)
-- 遵循现有代码风格 (Prettier + ESLint)
+- 遵循现有代码风格 (Prettier + oxlint)
 - 为新功能添加注释
 - 保持向后兼容性
 

@@ -30,6 +30,9 @@ RUN PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
     pnpm install --frozen-lockfile --ignore-scripts
 
+# 生成 Prisma 客户端
+RUN pnpm run db:generate
+
 # 创建 logs 目录
 RUN mkdir -p logs
 
@@ -46,16 +49,19 @@ RUN chown -R miochat:nodejs /app
 # 切换到非 root 用户
 USER miochat
 
-# 暴露端口（更新为配置文件中的默认端口 3080）
+# 暴露端口（支持环境变量配置，默认 3080）
 EXPOSE 3080
 
-# 健康检查
+# 健康检查（支持动态端口）
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3080/api/health || exit 1
+  CMD curl -f http://localhost:${PORT:-3080}/api/health || exit 1
 
-# 设置 Puppeteer 使用系统 Chrome
+# 设置环境变量
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    PORT=3080 \
+    HOST=0.0.0.0 \
+    NODE_ENV=production
 
-# 启动应用
-CMD ["node", "app.js"]
+# 初始化数据库并启动应用
+CMD ["sh", "-c", "pnpm run db:push && node app.js"]
