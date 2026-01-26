@@ -5,9 +5,31 @@
   "description": "AI-Powered chat platform,support ONEBOT v11",
   "main": "index.js",
   "scripts": {
+    "setup": "node scripts/setup.js",
     "start": "pm2 start ./config/pm2.json",
+    "dev": "node scripts/dev.js",
+    "quick-start": "node scripts/quick-start.js",
+    "first-run": "pnpm install && pnpm run quick-start",
     "test": "node test",
-    "format": "prettier --write ."
+    "lint": "oxlint",
+    "lint:watch": "oxlint --watch",
+    "lint:fix": "oxlint --fix",
+    "format": "prettier --write .",
+    "db:generate": "node scripts/prisma-wrapper.js generate",
+    "db:push": "node scripts/prisma-wrapper.js db push",
+    "db:migrate": "node scripts/prisma-wrapper.js migrate dev",
+    "db:studio": "node scripts/prisma-wrapper.js studio",
+    "migrate": "node scripts/migrate-to-sqlite.js",
+
+    "init-defaults": "node scripts/initialize-defaults.js",
+    "test-init": "node scripts/test/test-initialization.js",
+    "docker:build": "docker build -t mio-chat-backend .",
+    "docker:run": "bash scripts/docker-quick-start.sh",
+    "docker:dev": "docker-compose -f docker-compose.dev.yml up -d",
+    "docker:prod": "docker-compose up -d",
+    "docker:stop": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "test:owners": "node scripts/test/test-owners-loading.js"
   },
   "keywords": [
     "gpt"
@@ -15,19 +37,19 @@
   "author": "mio",
   "license": "ISC",
   "devDependencies": {
-    "@eslint/js": "^9.31.0",
-    "eslint": "^9.23.0",
-    "globals": "^16.3.0",
-    "prettier": "^3.6.2"
+    "oxlint": "^1.33.0",
+    "prettier": "^3.6.2",
+    "prisma": "^5.22.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.8.0",
+    "@modelcontextprotocol/sdk": "^1.25.1",
+    "@prisma/client": "^5.22.0",
     "api": "^6.1.1",
     "axios": "^1.6.7",
     "chokidar": "^4.0.3",
     "eventsource-parser": "^3.0.0",
     "express": "^4.18.2",
-    "express-rate-limit": "^7.1.5",
+    "express-static-gzip": "^2.1.0",
     "file-type": "^20.1.0",
     "form-data": "^4.0.2",
     "formdata-node": "^6.0.3",
@@ -38,12 +60,12 @@
     "nan": "^2.18.0",
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
-    "express-static-gzip": "^2.1.0",
     "officeparser": "^5.1.1",
-    "openai": "^4.82.0",
+    "openai": "^6.10.0",
     "puppeteer": "^23.1.1",
     "socket.io": "^4.8.1",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "zod": "^4.1.13"
   },
   "workspaces": [
     "plugins/*"

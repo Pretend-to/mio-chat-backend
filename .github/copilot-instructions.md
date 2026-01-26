@@ -11,7 +11,7 @@ Quick, focused guidance so an AI coding agent can be productive immediately in t
   - `lib/chat/` — protocol adapters: `llm/` (OpenAI/Gemini adapters) and `onebot/` (OneBot integration).
   - `lib/plugins` and `plugins/custom` — built-in vs third‑party plugin system; plugins expose tools and are discovered dynamically.
 
-- Config: `config/config/config.example.yaml` (copy to `config/config.yaml` or set envs). Key sections: `openai`, `gemini`, `onebot`, `server`, `web`.
+- Config: All configuration stored in SQLite database (`data/app.db`). Key sections: `llm_adapters`, `onebot`, `server`, `web`. Managed via Web UI or API.
 
 - How to run locally (discoverable from repo):
   - Install: `pnpm install` (repo uses pnpm workspaces; plugins live under `plugins/*`).
@@ -32,7 +32,7 @@ Quick, focused guidance so an AI coding agent can be productive immediately in t
   - ES modules are used (`"type": "module"` in `package.json`). Use import/export syntax.
   - Dynamic imports: plugin and adapter modules are often imported via `pathToFileURL(...).toString()` and `await import(url)`. Keep code compatible with the dynamic import style.
   - Files under `dist/` are served as frontend static assets; the server sets ETag and Last-Modified headers.
-  - Rate limiting: implemented in `lib/server/http/middleware/rateLimiter.js` and applied globally except for `127.0.0.1`.
+
 
 - Quick editing checklist for typical tasks:
   - Add API route: update `lib/server/http/index.js` routes and add a controller in `lib/server/http/controllers/`.
@@ -44,7 +44,7 @@ Quick, focused guidance so an AI coding agent can be productive immediately in t
   - There are not many automated tests in the repo. Use these manual checks:
     - `node app` to verify startup flows (status checks, adapter loading, plugin loading).
     - Inspect `stdout`/`pm2 logs` for `logger` output when running with pm2.
-  - Lint/format: `pnpm run format` (prettier). ESLint is present in devDependencies but no npm script — run manually if needed.
+  - Lint/format: `pnpm run lint` (oxlint) and `pnpm run format` (prettier).
 
 - Safety and error patterns to watch for:
   - Many modules assume config files exist and will call `process.exit(1)` if no LLM adapters are enabled. When writing code paths that may be used in CI or test, avoid leaving the repo in a state that triggers immediate exit during import.
@@ -55,7 +55,7 @@ Quick, focused guidance so an AI coding agent can be productive immediately in t
   - `lib/check.js` — startup & status checks; sets `global.middleware`.
   - `lib/middleware.js` — most orchestration logic (LLM loading, OneBot, plugins, socket handlers).
   - `lib/server/http/index.js` — HTTP routes and static serving.
-  - `config/config/config.example.yaml` — canonical config keys and expected shapes.
+  - `prisma/schema.prisma` — database schema defining configuration structure.
   - `package.json` — scripts, dependencies, workspaces.
 
 If anything in this summary looks incomplete or you want me to expand a section (example code snippets for adding adapters or plugins), tell me which part and I will iterate.

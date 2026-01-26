@@ -1,0 +1,17 @@
+{
+  "oxc.enable": true,
+  "oxc.lint.runon": "onType",
+  "oxc.configPath": "./oxlint.json",
+  "oxc.fixKind": "safe_fix",
+  "oxc.unusedDisableDirectives": "warn",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.oxc": true
+  },
+  "editor.formatOnSave": true,
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
+}

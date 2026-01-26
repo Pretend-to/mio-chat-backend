@@ -1,13 +1,17 @@
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
+import { EventEmitter } from 'events'
+import LogBuffer from './LogBuffer.js'
 
 /**
  * 增强版 Logger 类 - 替换原有 logger
  * 保持完全向后兼容，同时提供增强功能
+ * 现在支持实时日志流和事件发射
  */
-export class EnhancedLogger {
+export class EnhancedLogger extends EventEmitter {
   constructor(options = {}) {
+    super() // 初始化 EventEmitter
+    
     this.config = {
       // 日志级别 (数字越小级别越高)
       levels: {
@@ -54,6 +58,18 @@ export class EnhancedLogger {
 
     // 性能优化：缓存调用者信息
     this.callerCache = new Map()
+
+    // 初始化日志缓冲区
+    this.logBuffer = new LogBuffer({
+      maxSize: options.bufferSize || 1000
+    })
+
+    // 实时日志流配置
+    this.streamConfig = {
+      enabled: options.enableStream !== false,
+      bufferSize: options.bufferSize || 1000,
+      emitDelay: options.emitDelay || 0 // 发射延迟（毫秒）
+    }
   }
 
   /**
@@ -64,7 +80,7 @@ export class EnhancedLogger {
       if (!fs.existsSync(this.config.logDir)) {
         fs.mkdirSync(this.config.logDir, { recursive: true })
       }
-    } catch (error) {
+    } catch {
       // 静默处理，避免日志系统本身出错
     }
   }
@@ -86,20 +102,51 @@ export class EnhancedLogger {
       return
     }
 
-    const timestamp = this.getTime()
+    const timestamp = new Date()
+    const timeString = this.getTime()
     const callerInfo = this.config.showCaller ? this.getCallerInfo() : ''
     const ip = extra.ip ? `[${extra.ip}]` : ''
     
+    // 创建日志条目对象
+    const logEntry = {
+      id: this.generateLogId(),
+      timestamp: timestamp,
+      level: level,
+      module: extra.module || 'system',
+      message: message,
+      caller: callerInfo,
+      ip: extra.ip,
+      extra: extra
+    }
+
+    // 添加到缓冲区
+    if (this.streamConfig.enabled) {
+      this.logBuffer.addLog(logEntry)
+    }
+
+    // 发射日志事件（用于实时流）
+    if (this.streamConfig.enabled) {
+      if (this.streamConfig.emitDelay > 0) {
+        setTimeout(() => {
+          this.emit('log', logEntry)
+        }, this.streamConfig.emitDelay)
+      } else {
+        this.emit('log', logEntry)
+      }
+    }
+    
     // 输出到控制台（保持原有格式）
     if (this.config.console) {
-      this.outputToConsole(level, message, ip, callerInfo, timestamp)
+      this.outputToConsole(level, message, ip, callerInfo, timeString)
     }
 
     // 输出到文件
     if (this.config.file) {
-      const formattedMessage = `[Mio-Chat][${timestamp}][${level}]${ip}${callerInfo} ${message}`
+      const formattedMessage = `[Mio-Chat][${timeString}][${level}]${ip}${callerInfo} ${message}`
       this.outputToFile(formattedMessage)
     }
+
+    return logEntry
   }
 
   /**
@@ -126,7 +173,7 @@ export class EnhancedLogger {
       this.rotateLogIfNeeded(filepath)
       
       fs.appendFileSync(filepath, message + '\n', 'utf8')
-    } catch (error) {
+    } catch {
       // 静默处理文件错误
     }
   }
@@ -159,7 +206,7 @@ export class EnhancedLogger {
         // 清理旧文件
         this.cleanupOldLogs()
       }
-    } catch (error) {
+    } catch {
       // 静默处理轮转错误
     }
   }
@@ -184,7 +231,7 @@ export class EnhancedLogger {
           fs.unlinkSync(file.path)
         })
       }
-    } catch (error) {
+    } catch {
       // 静默处理清理错误
     }
   }
@@ -254,7 +301,7 @@ export class EnhancedLogger {
           }
         }
       }
-    } catch (error) {
+    } catch {
       // 静默处理错误
     }
 
@@ -315,6 +362,7 @@ export class EnhancedLogger {
     // 检查全局 debug 标志（保持原有行为）
     if (global.debug || process.env.NODE_ENV === 'development') {
       this.log('DEBUG', msg, extra)
+      // 保持原有控制台输出行为
       if (this.config.console) {
         console.log(msg)
         console.log('\x1b[0m')
@@ -323,25 +371,172 @@ export class EnhancedLogger {
   }
 
   /**
+   * 检测是否为 base64 字符串（更严格的检测）
+   */
+  isBase64String(str) {
+    if (typeof str !== 'string' || str.length < 100) {
+      return false
+    }
+    
+    // 检查 data URL 格式
+    if (str.startsWith('data:')) {
+      return true
+    }
+    
+    // 检查纯 base64 字符串（必须很长且符合base64格式）
+    if (str.length > 100) {
+      // Base64 字符集检查 - 更严格的正则
+      const base64Regex = /^[A-Za-z0-9+/]+={0,2}$/
+      if (base64Regex.test(str)) {
+        // 进一步检查：base64 字符串通常长度是4的倍数
+        if (str.length % 4 === 0) {
+          // 额外检查：base64 字符串通常包含大小写字母和数字的混合
+          const hasUpper = /[A-Z]/.test(str)
+          const hasLower = /[a-z]/.test(str)
+          const hasDigit = /[0-9]/.test(str)
+          const hasSpecial = /[+/]/.test(str)
+          
+          // 必须包含多种字符类型且包含base64特殊字符，才认为是base64
+          const typeCount = [hasUpper, hasLower, hasDigit, hasSpecial].filter(Boolean).length
+          return typeCount >= 3
+        }
+      }
+    }
+    
+    return false
+  }
+
+  /**
+   * 检测是否为长字符串（可能包含敏感信息）
+   */
+  isLongString(str) {
+    if (typeof str !== 'string') {
+      return false
+    }
+    
+    // 超过100个字符的字符串可能包含敏感信息
+    return str.length > 100
+  }
+
+  /**
+   * 屏蔽 base64 内容
+   */
+  maskBase64(str) {
+    if (typeof str !== 'string') {
+      return str
+    }
+    
+    // 处理 data URL
+    if (str.startsWith('data:')) {
+      const commaIndex = str.indexOf(',')
+      if (commaIndex !== -1) {
+        const mimeType = str.substring(0, commaIndex + 1)
+        const base64Data = str.substring(commaIndex + 1)
+        const dataLength = base64Data.length
+        return `${mimeType}[BASE64_DATA:${dataLength}chars]`
+      }
+      return '[DATA_URL]'
+    }
+    
+    // 处理纯 base64 字符串
+    if (this.isBase64String(str)) {
+      const length = str.length
+      const preview = str.substring(0, 8)
+      const suffix = str.substring(str.length - 8)
+      return `[BASE64:${length}chars:${preview}...${suffix}]`
+    }
+    
+    return str
+  }
+
+  /**
+   * 检测敏感字段名
+   */
+  isSensitiveField(key) {
+    if (typeof key !== 'string') {
+      return false
+    }
+    
+    const sensitivePatterns = [
+      'password', 'passwd', 'pwd',
+      'token', 'access_token', 'refresh_token', 'auth_token',
+      'secret', 'api_secret', 'client_secret',
+      'key', 'api_key', 'private_key', 'public_key',
+      'credential', 'auth', 'authorization',
+      'service_account_json', 'cert', 'certificate'
+    ]
+    
+    const lowerKey = key.toLowerCase()
+    return sensitivePatterns.some(pattern => lowerKey.includes(pattern))
+  }
+
+  /**
+   * 屏蔽敏感信息
+   */
+  maskSensitiveValue(value) {
+    if (typeof value !== 'string' || value.length === 0) {
+      return '[REDACTED]'
+    }
+    
+    if (value.length <= 8) {
+      return '[REDACTED]'
+    }
+    
+    // 显示前后几个字符
+    const start = value.substring(0, 4)
+    const end = value.substring(value.length - 4)
+    return `${start}...${end}`
+  }
+
+  /**
    * JSON 输出（增强版，保持原有 API）
    */
   json(obj) {
     try {
       const jsonString = JSON.stringify(obj, (key, value) => {
-        // 保持原有过滤逻辑
-        if (key === 'data') {
-          return '[Base64 Image Data]'
-        } else if (key === 'url' && typeof value === 'string' && value.startsWith('data:')) {
-          return '[Base64 Image Data]'
+        // 处理敏感字段（优先级最高）
+        if (this.isSensitiveField(key)) {
+          return this.maskSensitiveValue(value)
         }
-        // 增强：过滤敏感信息
-        if (key.toLowerCase().includes('password') || key.toLowerCase().includes('token')) {
-          return '[REDACTED]'
+        
+        // 处理字符串值
+        if (typeof value === 'string') {
+          // 只对明确的 data URL 进行处理
+          if (value.startsWith('data:image/') || value.startsWith('data:video/') || value.startsWith('data:audio/')) {
+            return this.maskBase64(value)
+          }
+          
+          // 对于其他情况，只有在确实是很长的base64字符串时才处理
+          if (this.isBase64String(value) && value.length > 500) {
+            return this.maskBase64(value)
+          }
         }
+        
+        // 只对明确的图片/媒体数据字段进行处理
+        if (key === 'data' && typeof value === 'string') {
+          if (value.startsWith('data:image/') || value.startsWith('data:video/') || value.startsWith('data:audio/')) {
+            return this.maskBase64(value)
+          }
+          // 对于其他 data 字段，只有在确实很长时才简化
+          if (value.length > 1000) {
+            const preview = value.substring(0, 50)
+            const suffix = value.substring(value.length - 20)
+            return `[DATA:${value.length}chars:${preview}...${suffix}]`
+          }
+        }
+        
+        if (key === 'url' && typeof value === 'string' && value.startsWith('data:')) {
+          return this.maskBase64(value)
+        }
+        
         return value
       }, 2)
       
+      // 保持原有行为：输出到控制台
       console.log(jsonString)
+      
+      // 新增：同时通过日志系统推送（用于实时流）
+      this.log('INFO', jsonString, { type: 'json', originalObject: obj })
     } catch (error) {
       this.error('JSON序列化失败', error)
     }
@@ -383,6 +578,127 @@ export class EnhancedLogger {
    */
   getColor(level) {
     return this.colors[level] || '0'
+  }
+
+  // === 新增：日志流和缓冲区管理方法 ===
+
+  /**
+   * 生成日志ID
+   */
+  generateLogId() {
+    return `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
+  }
+
+  /**
+   * 获取日志缓冲区
+   */
+  getLogBuffer() {
+    return this.logBuffer
+  }
+
+  /**
+   * 获取缓冲区中的日志
+   */
+  getBufferedLogs(startIndex, endIndex) {
+    return this.logBuffer.getLogs(startIndex, endIndex)
+  }
+
+  /**
+   * 搜索缓冲区中的日志
+   */
+  searchBufferedLogs(keyword) {
+    return this.logBuffer.searchLogs(keyword)
+  }
+
+  /**
+   * 按级别过滤缓冲区日志
+   */
+  filterBufferedLogsByLevel(level) {
+    return this.logBuffer.filterByLevel(level)
+  }
+
+  /**
+   * 按模块过滤缓冲区日志
+   */
+  filterBufferedLogsByModule(modules) {
+    return this.logBuffer.filterByModule(modules)
+  }
+
+  /**
+   * 按时间范围过滤缓冲区日志
+   */
+  filterBufferedLogsByTimeRange(startTime, endTime) {
+    return this.logBuffer.filterByTimeRange(startTime, endTime)
+  }
+
+  /**
+   * 清理日志缓冲区
+   */
+  clearBuffer() {
+    this.logBuffer.cleanup()
+    this.emit('bufferCleared')
+  }
+
+  /**
+   * 调整缓冲区大小
+   */
+  resizeBuffer(newSize) {
+    this.logBuffer.resize(newSize)
+    this.streamConfig.bufferSize = newSize
+    this.emit('bufferResized', newSize)
+  }
+
+  /**
+   * 启用/禁用日志流
+   */
+  setStreamEnabled(enabled) {
+    this.streamConfig.enabled = enabled
+    this.emit('streamToggled', enabled)
+  }
+
+  /**
+   * 设置发射延迟
+   */
+  setEmitDelay(delay) {
+    this.streamConfig.emitDelay = delay
+  }
+
+  /**
+   * 获取流配置
+   */
+  getStreamConfig() {
+    return { ...this.streamConfig }
+  }
+
+  /**
+   * 获取缓冲区统计信息
+   */
+  getBufferStats() {
+    return this.logBuffer.getStats()
+  }
+
+  /**
+   * 订阅日志事件（便捷方法）
+   */
+  onLog(callback) {
+    this.on('log', callback)
+    return this
+  }
+
+  /**
+   * 取消订阅日志事件（便捷方法）
+   */
+  offLog(callback) {
+    this.off('log', callback)
+    return this
+  }
+
+  /**
+   * 订阅一次日志事件（便捷方法）
+   */
+  onceLog(callback) {
+    this.once('log', callback)
+    return this
   }
 }
 
