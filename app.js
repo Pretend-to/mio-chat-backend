@@ -138,6 +138,16 @@ async function initializeDatabase(dependencies) {
     // 初始化默认配置
     logger.info('初始化默认配置...')
     await initializeDefaults()
+
+    // 重新加载内存中的配置以同步刚刚写入数据库的默认值，
+    // 避免后续的状态检查重复生成访问码
+    try {
+      const config = (await import('./lib/config.js')).default
+      await config.reload()
+      logger.info('配置已从数据库重新加载以应用默认值')
+    } catch (err) {
+      logger.warn('重新加载配置时发生问题，可能导致配置不同步:', err.message)
+    }
     
     logger.info('数据库和服务初始化完成')
   } catch (error) {
