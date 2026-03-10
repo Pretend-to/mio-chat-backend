@@ -35,8 +35,8 @@ async function checkAndPerformAutoMigration(AutoMigrationDetector) {
  */
 async function checkAndFixPrisma() {
   try {
-    const fs = await import('fs')
-    const path = await import('path')
+    const _fs = await import('fs')
+    const _path = await import('path')
     
     // 尝试导入 Prisma 客户端（让 Node.js 自己解析路径）
     const { PrismaClient } = await import('@prisma/client')
