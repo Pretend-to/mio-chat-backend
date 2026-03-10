@@ -4,3 +4,8 @@ packages:
 ignoredBuiltDependencies:
   - es5-ext
   - puppeteer
+
+onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - prisma
