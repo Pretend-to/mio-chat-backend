@@ -6,35 +6,29 @@
 scripts/
 ├── README.md                    # 本说明文件
 ├── test/                        # 测试脚本目录
-├── clear-admin-code.js          # 清除管理员访问码
-├── dev.js                       # 开发模式启动
-├── docker-quick-start.sh        # Docker 快速启动
-├── get-admin-code.js            # 获取管理员访问码
+├── utils/                       # 内部工具和迁移脚本
 ├── initialize-defaults.js       # 初始化默认配置
-├── migrate-to-sqlite.js         # 数据迁移脚本
-├── prisma-wrapper.js            # Prisma 包装器
 ├── quick-start.js               # 快速启动
-├── release.sh                   # 发布脚本
 └── setup.js                     # 项目设置
 ```
 
 ## 核心脚本说明
 
 ### 生产环境脚本
-- `initialize-defaults.js` - 初始化默认配置（新用户必需）
-- `migrate-to-sqlite.js` - 从配置文件迁移到数据库（老用户必需）
+- `initialize-defaults.js` - 初始化默认配置（核心服务使用）
 - `setup.js` - 完整项目设置
 - `quick-start.js` - 快速启动项目
 
-### 开发工具脚本
-- `dev.js` - 开发模式启动
-- `prisma-wrapper.js` - Prisma 数据库操作包装器
+### 内部工具脚本 (utils/)
 - `get-admin-code.js` - 获取管理员访问码
 - `clear-admin-code.js` - 清除管理员访问码
-
-### 部署脚本
-- `docker-quick-start.sh` - Docker 快速启动
+- `migrate-to-sqlite.js` - 数据迁移脚本
 - `release.sh` - 发布脚本
+- `run-tests.sh` - 运行测试脚本
+- `migrate-onebot-config.js` - OneBot 配置迁移
+
+### 部署与 Docker
+可以直接使用 `docker-compose` 命令或 `npm run docker:*` 脚本。
 
 ## 测试脚本目录 (test/)
 
