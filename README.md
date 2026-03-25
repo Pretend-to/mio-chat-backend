@@ -121,377 +121,108 @@ middleware.loadLLMAdapters() → config.getLLMEnabled() → 按需实例化
 
 ---
 
-## 📦 快速开始
+## 🚀 快速开始
 
-### 🚀 一键启动（推荐新用户）
-
+### 1. 克隆仓库
 ```bash
-# 克隆项目
 git clone https://github.com/Pretend-to/mio-chat-backend.git
 cd mio-chat-backend
-
-# 一键安装并启动
-pnpm run first-run
 ```
 
-**就这么简单！** 脚本会自动：
-- ✅ 安装所有依赖
-- ✅ 生成 Prisma 数据库客户端  
+### 2. 安装依赖
+```bash
+pnpm install
+```
+
+### 3. 初始化项目
+```bash
+pnpm run init
+```
+该指令会自动完成：
+- ✅ 生成 Prisma 数据库客户端
 - ✅ 初始化 SQLite 数据库
-- ✅ 创建安全的访问码
-- ✅ 启动服务器（默认端口 3080）
+- ✅ 在 `.env` 中生成安全的管理员访问码
 
-服务启动后会显示访问码，请妥善保存！
-
-**自定义端口启动**：
-```bash
-PORT=8080 pnpm run quick-start
-```
-
-### 🔧 遇到问题？
-
-如果遇到任何启动问题，应用会自动检测并修复常见问题（如 Prisma 客户端未生成等）。
-
-如果自动修复失败，请查看控制台输出的详细错误信息。
-
-### 环境要求
-
-- **Node.js**: >= 18.0.0
-- **npm/pnpm**: >= 8.0.0
-- **操作系统**: Linux / macOS / Windows
-
-### 详细安装步骤
-
-1. **克隆仓库**
-```bash
-git clone https://github.com/Pretend-to/mio-chat-backend.git
-cd mio-chat-backend
-```
-
-2. **项目设置**
-```bash
-# 方式一：一键设置（推荐）
-pnpm run setup
-
-# 方式二：手动设置
-pnpm install                    # 安装依赖
-pnpm run db:generate           # 生成数据库客户端
-pnpm run db:push              # 初始化数据库
-```
-
-3. **启动服务**
-
-**快速启动** (自动生成访问码):
-```bash
-pnpm run quick-start
-```
-
-**开发模式**:
+### 4. 启动应用
 ```bash
 pnpm run dev
 ```
+启动后访问 http://localhost:3080，使用 `.env` 中的 `ADMIN_CODE` 登录。
 
-**直接启动**:
+
+---
+
+## 🐳 Docker 部署
+
+### 快速运行
 ```bash
-node app.js
+docker run -d -p 3080:3080 miofcip/miochat:latest
 ```
 
-**自定义端口启动**:
+### 使用 Docker Compose (推荐)
 ```bash
-PORT=8080 node app.js
-```
+# 生成 .env
+cp .env.example .env
 
-**自定义访问码启动**:
-```bash
-ADMIN_CODE=your-secure-password node app.js
-```
-
-**生产模式** (PM2 后台运行):
-```bash
-pnpm start
-# 或手动使用 PM2
-pm2 start config/pm2.json
-```
-
-5. **验证运行**
-```bash
-# 检查服务状态
-curl http://localhost:3080/api/health
-
-# 查看 PM2 进程
-pm2 list
-pm2 logs mio-chat-backend
+# 启动服务
+pnpm run docker:up
 ```
 
 ---
 
-## 🐳 Docker 部署（推荐）
-
-### 一条命令运行
-
+## 验证运行
 ```bash
-# 基础运行（自动生成访问码）
+# 检查 API 健康状态
+curl http://localhost:3080/api/health
+```
+
+---
+
+
+## 📦 部署方式
+
+### 快速启动
+```bash
 docker run -d -p 3080:3080 miofcip/miochat:latest
-
-# 自定义端口和访问码
-docker run -d -p 8080:8080 \
-  -e PORT=8080 \
-  -e ADMIN_CODE=your_password \
-  miofcip/miochat:latest
-
-# 完整配置示例
-docker run -d -p 3080:3080 \
-  -e PORT=3080 \
-  -e HOST=0.0.0.0 \
-  -e ADMIN_CODE=your_admin_password \
-  -e USER_CODE=your_user_password \
-  -e DEBUG=false \
-  miofcip/miochat:latest
 ```
 
 ### Docker Compose
-
-**创建 .env 文件**：
 ```bash
-# 复制环境变量模板
+# 生成 .env
 cp .env.example .env
 
-# 编辑配置
-nano .env
+# 启动 (正式版)
+pnpm run docker:up
 ```
-
-**启动服务**：
-```bash
-# 方式一：使用快速启动脚本（推荐）
-pnpm run docker:run
-
-# 方式二：使用 Docker Compose
-pnpm run docker:prod              # 正式版本
-pnpm run docker:dev               # 开发版本
-
-# 方式三：传统 docker-compose 命令
-docker-compose up -d             # 正式版本
-docker-compose -f docker-compose.dev.yml up -d  # 开发版本
-
-# 自定义配置启动
-PORT=8080 ADMIN_CODE=your_password pnpm run docker:run
-```
-
-**管理命令**：
-```bash
-pnpm run docker:logs              # 查看日志
-pnpm run docker:stop              # 停止服务
-docker-compose restart           # 重启服务
-```
-
-### 访问服务
-
-- **Web 界面**: http://localhost:3080 (或自定义端口)
-- **健康检查**: http://localhost:3080/api/health
-- **管理后台**: 使用设置的 ADMIN_CODE
-
-### Docker 环境变量
-
-| 变量名 | 默认值 | 说明 |
-|--------|--------|------|
-| `PORT` | 3080 | 服务端口 |
-| `HOST` | 0.0.0.0 | 服务主机 |
-| `ADMIN_CODE` | - | 管理员访问码（必须设置） |
-| `USER_CODE` | - | 普通用户访问码（可选） |
-| `NODE_ENV` | production | 运行环境 |
-| `DEBUG` | false | 调试模式 |
-| `LOG_LEVEL` | info | 日志级别 |
 
 ---
 
-## ⚙️ 配置说明
+## ⚙️ 配置与部署
 
-**重要更新**: 配置已完全迁移到SQLite数据库，不再使用配置文件。
-- 首次启动时自动初始化数据库配置
-- 运行时配置通过Web界面或API接口管理
-- 支持环境变量覆盖数据库配置
+**系统全自动化**: 启动时会自动初始化。登录后可在 **管理后台** 可视化修改 OpenAI / Gemini 等模型配置。环境变量优先级最高。
+
 
 ⚠️ **安全提醒**: 数据库文件包含敏感信息（API密钥等），已添加到 `.gitignore`，请勿提交到版本控制！
 
-### 核心配置项
 
-#### OpenAI 配置
-```yaml
-openai:
-  apiKey: "sk-xxx"                    # API 密钥
-  baseURL: "https://api.openai.com/v1" # 基础 URL (支持 One-API 等代理)
-  models:                             # 可用模型列表
-    - "gpt-4"
-    - "gpt-3.5-turbo"
-  defaultModel: "gpt-4"
-```
 
-#### Gemini 配置
-```yaml
-gemini:
-  enable: true
-  api_key: "AIza..."                    # Gemini API 密钥
-  base_url: "https://generativelanguage.googleapis.com/v1beta"
-  guest_models:
-    keywords:
-      - "flash"
-    full_name:
-      - "gemini-1.5-pro"
-  default_model: "gemini-2.0-flash"
-```
 
-#### Vertex AI 配置 (Google Cloud)
-```yaml
-vertex:
-  enable: true
-  guest_models:
-    keywords:
-      - "flash"
-    full_name:
-      - "gemini-2.5-pro-preview-03-25"
-      - "claude-3-5-sonnet-v2@20241022"  # 支持 Anthropic Claude
-  default_model: "gemini-2.0-flash-001"
-  # 注意: Vertex AI 凭据直接配置在实例的 service_account_json 字段中
-  # 或通过 auth_file_path 指定凭据文件路径
-```
 
-**Vertex AI 凭据配置** (直接在配置中设置):
-```json
-{
-  "type": "service_account",
-  "project_id": "your-gcp-project-id",
-  "private_key_id": "xxx",
-  "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n",
-  "client_email": "xxx@xxx.iam.gserviceaccount.com",
-  "client_id": "xxx",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "xxx"
-}
-```
-
-获取 Vertex AI 凭据: [VertexAI 配置指南](https://github.com/MartialBE/one-hub/wiki/VertexAI)
-
-#### OneBot 配置 (QQ 机器人)
-```yaml
-onebot:
-  enabled: true
-  reverseWsUrl: "ws://127.0.0.1:8080" # 反向 WebSocket 地址
-  botQQ: "123456789"                  # 机器人 QQ 号
-  adminQQ: ["987654321"]              # 管理员 QQ 列表
-```
-
-#### 服务器配置
-```yaml
-server:
-  port: 3080                    # 服务端口，可通过 PORT 环境变量覆盖
-  host: "0.0.0.0"               # 服务主机，可通过 HOST 环境变量覆盖
-```
-
-**环境变量支持**：
-- `PORT` - 覆盖服务端口配置
-- `HOST` - 覆盖服务主机配置
-
-#### Web 前端配置
-```yaml
-web:
-  adminAccessCode: "admin123"   # 管理员访问码
-  userAccessCode: "user456"     # 普通用户访问码
-  title: "Mio-Chat"
-  description: "AI 对话平台"
-```
-
-### 环境变量覆盖
-
-优先级: 环境变量 > 数据库配置 > 默认值
-
+### 1. 使用 PM2
 ```bash
-# 服务器配置
-export PORT=8080                    # 服务端口（默认：3080）
-export HOST=127.0.0.1               # 服务主机（默认：0.0.0.0）
-
-# 认证配置
-export ADMIN_CODE="your-admin-code" # 管理员访问码
-export USER_CODE="your-user-code"   # 普通用户访问码（可选）
-
-# 其他配置
-export NODE_ENV=production          # 运行环境
-export DEBUG=true                   # 调试模式
-export LOG_LEVEL=info              # 日志级别
-
-# 启动服务
-node app.js
-```
-
----
-
-## 🚀 生产部署
-
-### 使用 PM2 部署
-
-1. **设置访问码**（必须）
-```bash
-# 生成安全的访问码
-ADMIN_CODE=$(openssl rand -base64 32)
-echo "管理员访问码: $ADMIN_CODE"
-
-# 可选：生成普通用户访问码
-USER_CODE=$(openssl rand -base64 24)
-echo "普通用户访问码: $USER_CODE"
-
-# 设置环境变量
-export ADMIN_CODE="$ADMIN_CODE"
-export USER_CODE="$USER_CODE"  # 可选
-```
-
-2. **配置 PM2**
-
-编辑 `config/pm2.json`:
-```json
-{
-  "apps": [{
-    "name": "mio-chat-backend",
-    "script": "app.js",
-    "instances": 4,              // 集群模式实例数
-    "exec_mode": "cluster",
-    "env": {
-      "NODE_ENV": "production",
-      "ADMIN_CODE": "$ADMIN_CODE",
-      "USER_CODE": "$USER_CODE"  // 可选
-    }
-  }]
-}
-```
-
-3. **启动集群**
-```bash
+# 修改 config/pm2.json
+pnpm install
+pnpm run init
 pnpm start
-# 或
-pm2 start config/pm2.json
-pm2 save      # 保存进程列表
-pm2 startup   # 设置开机自启
 ```
 
-### Docker 部署
-
-项目已包含完整的 Docker 配置文件：
-
+### 2. 使用 Docker
 ```bash
-# 1. 生成访问码
-ADMIN_CODE=$(openssl rand -base64 32)
-echo "管理员访问码: $ADMIN_CODE"
-USER_CODE=$(openssl rand -base64 24)
-echo "普通用户访问码: $USER_CODE"
-
-# 2. 复制环境变量模板
-cp .env.example .env
-echo "ADMIN_CODE=$ADMIN_CODE" >> .env
-echo "USER_CODE=$USER_CODE" >> .env
-
-# 3. 构建并运行
-docker-compose up -d --build
+docker run -d -p 3080:3080 \
+  -e ADMIN_CODE=your_secret_code \
+  miofcip/miochat:latest
 ```
+
 
 **Dockerfile 特性**：
 - 使用 Node.js 20 LTS（支持 chrome-devtools-mcp）

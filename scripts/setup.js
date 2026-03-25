@@ -5,7 +5,7 @@
  * 自动完成新用户的项目初始化
  */
 
-import { spawn, execSync } from 'child_process'
+import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
@@ -39,22 +39,6 @@ function runCommand(command, args = [], options = {}) {
       }
     })
   })
-}
-
-async function checkNodeModules() {
-  const nodeModulesPath = path.join(process.cwd(), 'node_modules')
-  if (!fs.existsSync(nodeModulesPath)) {
-    logger.info('📦 检测到 node_modules 不存在，正在安装依赖...')
-    try {
-      // 尝试使用 pnpm，如果失败则使用 npm
-      await runCommand('pnpm', ['install'])
-    } catch (error) {
-      logger.warn('pnpm 安装失败，尝试使用 npm...')
-      await runCommand('npm', ['install'])
-    }
-  } else {
-    logger.info('✅ 依赖已安装')
-  }
 }
 
 async function setupPrisma() {
@@ -121,22 +105,16 @@ async function setup() {
     logger.info('🚀 开始设置 Mio-Chat 项目...')
     logger.info('')
     
-    // 1. 检查并安装依赖
-    await checkNodeModules()
-    
-    // 2. 创建环境变量文件
+    // 1. 创建环境变量文件
     await createEnvFile()
     
-    // 3. 设置数据库
+    // 2. 设置数据库
     await setupPrisma()
     
     logger.info('')
-    logger.info('🎉 项目设置完成！')
+    logger.info('🎉 初始化完成！现在运行以下命令启动服务：')
     logger.info('')
-    logger.info('📋 接下来你可以：')
-    logger.info('   pnpm run dev     - 开发模式启动')
-    logger.info('   pnpm start       - 生产模式启动（需要 PM2）')
-    logger.info('   node app.js     - 直接启动')
+    logger.info('   pnpm run dev')
     logger.info('')
     logger.info('🌐 默认访问地址: http://localhost:3080')
     logger.info('')
