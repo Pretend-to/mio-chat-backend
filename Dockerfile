@@ -30,7 +30,8 @@ RUN PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
     pnpm install --frozen-lockfile --ignore-scripts
 
-# 生成 Prisma 客户端
+# 复制 Prisma Schema 并生成客户端
+COPY prisma/ ./prisma/
 RUN pnpm run db:generate
 
 # 创建 logs 目录
