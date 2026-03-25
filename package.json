@@ -27,37 +27,43 @@
   "author": "mio",
   "license": "ISC",
   "devDependencies": {
-    "oxlint": "^1.33.0",
-    "prettier": "^3.6.2",
+    "oxlint": "^1.57.0",
+    "prettier": "^3.8.1",
     "prisma": "^5.22.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.1",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@prisma/client": "^5.22.0",
-    "api": "^6.1.1",
-    "axios": "^1.6.7",
+    "api": "^6.1.3",
+    "axios": "^1.13.6",
     "chokidar": "^4.0.3",
-    "eventsource-parser": "^3.0.0",
-    "express": "^4.18.2",
-    "express-static-gzip": "^2.1.0",
-    "file-type": "^20.1.0",
-    "form-data": "^4.0.2",
+    "eventsource-parser": "^3.0.6",
+    "express": "^4.22.1",
+    "express-static-gzip": "^2.2.0",
+    "file-type": "^21.3.4",
+    "form-data": "^4.0.5",
     "formdata-node": "^6.0.3",
     "google-auth-library": "^9.15.1",
-    "js-yaml": "^4.1.0",
-    "lodash": "^4.17.21",
-    "multer": "2.0.1",
-    "nan": "^2.18.0",
+    "js-yaml": "^4.1.1",
+    "lodash": "^4.17.23",
+    "multer": "^2.1.1",
+    "nan": "^2.26.2",
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
-    "officeparser": "^5.1.1",
-    "openai": "^6.10.0",
-    "puppeteer": "^23.1.1",
-    "socket.io": "^4.8.1",
-    "ws": "^8.18.0",
-    "zod": "^4.1.13"
+    "officeparser": "^5.2.2",
+    "openai": "^6.32.0",
+    "puppeteer": "^23.11.1",
+    "socket.io": "^4.8.3",
+    "ws": "^8.20.0",
+    "zod": "^4.3.6"
   },
   "workspaces": [
     "plugins/*"
-  ]
+  ],
+  "pnpm": {
+    "overrides": {
+      "underscore": ">=1.13.8",
+      "file-type": "^21.3.4"
+    }
+  }
 }
