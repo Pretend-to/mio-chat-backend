@@ -52,7 +52,7 @@
     "node-fetch": "^3.3.2",
     "officeparser": "^5.2.2",
     "openai": "^6.32.0",
-    "puppeteer": "^24.40.0",
+    "puppeteer": "^24.42.0",
     "socket.io": "^4.8.3",
     "ws": "^8.20.0",
     "zod": "^4.3.6"
