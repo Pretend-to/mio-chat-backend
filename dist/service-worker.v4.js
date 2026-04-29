@@ -1,6 +1,6 @@
 const CACHE_DATABASE_NAME = "my-cache-db";
 const CACHE_OBJECT_STORE_NAME = "responses";
-const CACHE_VERSION = 12; // 每次修改 Service Worker 文件时，更新此版本号！
+const CACHE_VERSION = 13; // 每次修改 Service Worker 文件时，更新此版本号！
 const MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 天的缓存有效期 (毫秒)
 const CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // 每天清理一次 (毫秒)
 let db;
@@ -120,7 +120,8 @@ self.addEventListener("activate", (event) => {
       await caches.keys().then((cacheNames) => {
         return Promise.all(
           cacheNames.map((cacheName) => {
-            if (cacheName !== CACHE_DATABASE_NAME) {
+            // 保留 IndexedDB 的 key 和 html 页面缓存，删除其他旧版本缓存
+            if (cacheName !== CACHE_DATABASE_NAME && cacheName !== "html-cache") {
               return caches.delete(cacheName);
             }
           }),
