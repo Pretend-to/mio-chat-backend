@@ -2,7 +2,7 @@ import officeParser from 'officeparser'
 import fs from 'fs/promises'
 import path from 'path'
 import os from 'os'
-import { URL } from 'url'
+import { URL, fileURLToPath } from 'url'
 
 const textFileTypes = [
   '.txt',
@@ -72,6 +72,12 @@ export async function parseFile(filePath) {
 export async function parseFileWithUrl(fileUrl) {
   let tempFilePath = null
   try {
+    // 处理 file:// 协议
+    if (fileUrl.startsWith('file://')) {
+      const filePath = fileURLToPath(fileUrl)
+      return await parseFile(filePath)
+    }
+
     // 提取文件名
     const url = new URL(fileUrl)
     const pathname = url.pathname
