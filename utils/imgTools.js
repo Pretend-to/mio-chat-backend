@@ -1,9 +1,8 @@
 import https from 'https'
 import http from 'http'
-import fs from 'fs'
-import path from 'path'
 import crypto from 'crypto'
 import * as fileType from 'file-type'
+import storageService from '../lib/storage/StorageService.js'
 
 const getBufferName = async (buffer) => {
   const getBufferExt = async (buffer) => {
@@ -60,14 +59,6 @@ async function imgUrlToBase64(url, id = 'default') {
 }
 
 async function base64ToImageUrl(baseUrl, base64String) {
-  const outputDir = path.join(process.cwd(), 'output', 'generated', 'file')
-  const imageUrlPrefix = `${baseUrl}/f/gen/image/` // 常量，避免重复计算
-
-  // 确保目录存在
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true })
-  }
-
   // 提取 Base64 数据，移除前缀
   const base64Data = base64String.replace(/^data:image\/\w+;base64,/, '')
 
@@ -76,45 +67,30 @@ async function base64ToImageUrl(baseUrl, base64String) {
 
   // 生成唯一的文件名
   const filename = await getBufferName(buffer)
-  const outputPath = path.join(outputDir, filename)
-  const imageUrl = imageUrlPrefix + filename
-
-  // 检查文件是否已存在
-  if (fs.existsSync(outputPath)) {
-    logger.warn(`文件已存在：${outputPath}`)
-    return imageUrl
-  }
-
-  // 将 Buffer 写入文件
-  fs.writeFileSync(outputPath, buffer)
-
-  // 返回图片 URL
-  return imageUrl
+  
+  // 识别 Content-Type
+  const type = await fileType.fileTypeFromBuffer(buffer)
+  const contentType = type ? type.mime : 'image/png'
+  
+  const result = await storageService.upload(buffer, filename, 'image', { contentType })
+  
+  // 如果 baseUrl 存在且 result.url 是相对路径，进行拼接
+  const finalUrl = (baseUrl && result.url.startsWith('/')) ? `${baseUrl}${result.url}` : result.url
+  return finalUrl
 }
 
 async function bufferToImageUrl(baseUrl, buffer) {
-  const outputDir = path.join(process.cwd(), 'output', 'generated', 'file')
-
-  // 如果目录不存在，则创建目录
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true })
-  }
-
   // 生成唯一的文件名
   const filename = await getBufferName(buffer)
-  const outputPath = path.join(outputDir, filename)
-
-  // 检查文件是否已存在
-  if (fs.existsSync(outputPath)) {
-    logger.warn(`文件已存在：${outputPath}`)
-    return `${baseUrl}/f/gen/image/${filename}`
-  }
-
-  // 将Buffer写入文件
-  fs.writeFileSync(outputPath, buffer)
-
-  // 返回图片的URL
-  return `${baseUrl}/f/gen/image/${filename}`
+  
+  // 识别 Content-Type
+  const type = await fileType.fileTypeFromBuffer(buffer)
+  const contentType = type ? type.mime : 'image/png'
+  
+  const result = await storageService.upload(buffer, filename, 'image', { contentType })
+  
+  const finalUrl = (baseUrl && result.url.startsWith('/')) ? `${baseUrl}${result.url}` : result.url
+  return finalUrl
 }
 
 export { imgUrlToBase64, getBufferName, base64ToImageUrl, bufferToImageUrl }

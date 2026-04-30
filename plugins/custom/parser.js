@@ -5,21 +5,22 @@ export default class parseFile extends MioFunction {
   constructor() {
     super({
       name: 'parseFiles',
-      description: 'A tool to get text from files.',
+      description: 'A tool to extract text content from files. Supports remote URLs and local file paths (using file:// protocol).',
       parameters: {
         type: 'object',
         properties: {
           fileUrls: {
             type: 'array',
             description:
-              'The URLs of the files to parse for content extraction.',
+              'The URLs or local paths (file://) of the files to parse.',
             items: {
               type: 'string',
             },
           },
         },
+        required: ['fileUrls'],
       },
-      required: ['file_urls'],
+      adminOnly: true
     })
     this.func = this.parseFile
   }
