@@ -27,3 +27,6 @@
 test.js
 image.jpg
 imageBase64.txt
+# Skills 分区 - 忽略用户/Agent安装的技能
+/.miochat/skills/*
+!/.miochat/skills/.gitkeep
