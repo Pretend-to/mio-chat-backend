@@ -1,31 +1,121 @@
 ---
 name: skill-manager
-description: Manage the Agent's skill library. Use this to discover, install, and organize skills that extend your capabilities.
+description: Expert guide for discovering, validating, and installing Agent Skills into MioChat. Use this when the user wants to install a skill from GitHub, a local path, or when you encounter an `npx skills install` command.
 version: 1.0.0
 author: Mio-Chat
 ---
 
-# Skill Management Guide
+# MioChat Skill Manager
 
-You have the ability to expand your own capabilities by installing new "Skills" from the community or specialized repositories.
+You are the **Skill Librarian** for MioChat. Your job is to intelligently discover, validate, and install agent skills using standard bash tools — never blindly clone without verifying contents first.
 
-## When to use this skill
-- When the user asks you to learn a new ability (e.g., "Learn how to use AWS").
-- When you identify a task that could be better handled by a specialized skill found on GitHub or [skills.sh](https://skills.sh).
-- When you need to organize or list your current expert capabilities.
+## Skill Directory Structure
 
-## How to Install a New Skill
-1. **Identify the Source**: Find a GitHub repository that follows the Agent Skills standard (contains a `SKILL.md`).
-2. **Call the Install Tool**: Use `InstallSkill(repo_url="...")` to clone the skill into your library.
-3. **Verify Installation**: After the tool returns success, the new skill is automatically added to your catalog.
-4. **Load the New Skill**: If the user wants you to use it immediately, call `Skill(skill_name="...")` to read the new instructions.
+There are two partitions. Know which one to use:
 
-## Best Practices
-- **Respect User Intent**: Always inform the user before installing a new skill unless they explicitly asked you to "install" or "learn" it.
-- **Progressive Discovery**: If you aren't sure which skill is best, you can search GitHub first using your search tools.
-- **Verification**: After installing, it's good practice to briefly explain to the user what new capabilities you've just acquired.
+```
+<project_root>/
+├── lib/chat/llm/skills/        ← System built-in skills (tracked by git, DO NOT touch)
+│   ├── config-manager/
+│   ├── skill-creator/
+│   ├── skill-manager/
+│   └── ...
+│
+└── .miochat/skills/            ← User-installed skills (gitignored, safe to modify)
+    ├── my-custom-skill/
+    │   ├── SKILL.md            ← REQUIRED
+    │   ├── README.md           ← Optional but recommended
+    │   └── scripts/            ← Optional helper scripts
+    └── ...
+```
 
-## Example Workflow
-User: "You should learn the Kubernetes skill from anthropics/skills."
-Agent: (Calls `InstallSkill(repo_url="anthropics/skills", skill_folder_name="k8s")`)
-Agent: "I've successfully learned the Kubernetes skill! I can now help you manage clusters, deploy pods, and troubleshoot K8s environments."
+**All user-installed skills go into `.miochat/skills/`**. This directory is gitignored, so it won't pollute the repository.
+
+---
+
+## Installation Workflow
+
+### Phase 1: Inspect Before You Commit
+
+**From a GitHub repo:**
+```bash
+# Clone to a temp location first
+git clone --depth 1 <repo_url> /tmp/skill-preview
+
+# Read what it is
+ls /tmp/skill-preview
+cat /tmp/skill-preview/README.md
+find /tmp/skill-preview -name "SKILL.md"
+```
+
+**From a local path:**
+```bash
+ls <local_path>
+find <local_path> -name "SKILL.md" -maxdepth 3
+```
+
+### Phase 2: Validate
+
+A valid MioChat skill MUST have at least one `SKILL.md` file with meaningful content.
+
+| Check | Pass Condition |
+|:---|:---|
+| Has `SKILL.md` | Found at root or first-level subdirectory |
+| Not empty | Content > 100 characters |
+
+If validation **fails**, clean up and report:
+```bash
+rm -rf /tmp/skill-preview
+```
+Then tell the user: _"该仓库不包含有效的 MioChat Skill（未找到 SKILL.md），无法安装。"_
+
+### Phase 3: Install
+
+Once validated, copy to the user skills partition and refresh:
+```bash
+# Ensure the user skills directory exists
+mkdir -p .miochat/skills
+
+# Copy from temp (if cloned) or directly from local path
+cp -r /tmp/skill-preview .miochat/skills/<skill_name>
+
+# Clean up temp if used
+rm -rf /tmp/skill-preview
+```
+
+After copying, trigger a skill reload via the API or tell the user to click "同步" in settings.
+
+---
+
+## Handling `npx skills install` Commands
+
+If the user pastes a command like:
+```bash
+npx skills install user/some-skill
+npx miochat-skills install https://github.com/user/repo
+```
+
+**DO NOT run `npx` directly.** These are third-party CLIs that may not work here.
+
+Instead, intercept and translate:
+1. Extract the `user/repo` or URL from the command.
+2. Tell the user: _"我检测到这是一个技能安装命令，我来帮你直接完成安装，不需要通过 npx。"_
+3. Follow the **Installation Workflow** above using `git clone` + `cp`.
+
+---
+
+## Managing Existing Skills
+
+**List all loaded skills:**
+```bash
+node -e "
+import skillService from './lib/chat/llm/services/SkillService.js';
+await skillService.initialize();
+console.log(skillService.getSkillCatalog().map(s => s.name));
+"
+```
+
+**Remove a user skill:**
+```bash
+rm -rf .miochat/skills/<skill_name>
+```
