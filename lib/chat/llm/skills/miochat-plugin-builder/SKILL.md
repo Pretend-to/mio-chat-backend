@@ -77,6 +77,21 @@ lib/plugins/my-complex-plugin/
     └── advanced_tool.js # References files in ../lib/
 ```
 
+**`index.js` Template (copy exactly):**
+```javascript
+import Plugin from '../../plugin.js'
+
+export default class MyComplexPlugin extends Plugin {
+  constructor() {
+    super({ importMetaUrl: import.meta.url })
+  }
+}
+```
+
+> [!IMPORTANT]
+> Always pass `{ importMetaUrl: import.meta.url }` to `super()`. This tells the base class where your plugin lives so it can auto-discover your `tools/` directory.
+> You do NOT need to implement `getFilePath()` or `getInitialConfig()` — the base class handles this automatically.
+
 ## Hot Reloading
 - **Single-File Tools**: Simply write the file to `plugins/custom/`. The system's file watcher will automatically detect and load it.
 - **Project-Level**: After creating the files, you may need to trigger a global reload via the system API if not using watch mode.
