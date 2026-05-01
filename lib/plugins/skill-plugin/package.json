@@ -1,0 +1,8 @@
+{
+  "name": "skill-plugin",
+  "version": "1.0.0",
+  "description": "Internal plugin for managing Anthropic Agent Skills",
+  "type": "module",
+  "main": "index.js",
+  "author": "mio"
+}
