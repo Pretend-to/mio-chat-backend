@@ -16,6 +16,10 @@ These are standalone tools that are hot-reloaded automatically by the system.
 - **Location**: `plugins/custom/<tool_name>.js`
 - **Structure**: A single ES module exporting a class that extends `MioFunction`.
 
+> [!IMPORTANT]
+> **DO NOT override the `run(e)` method.** The base class `MioFunction` uses `run(e)` to perform security and permission checks. 
+> To implement your tool logic, assign your method to `this.func` in the constructor or implement it as a separate method and bind it to `this.func`.
+
 **Template:**
 ```javascript
 import { MioFunction } from '../../lib/function.js'
@@ -25,19 +29,15 @@ export default class MyCustomTool extends MioFunction {
     super({
       name: 'MyToolName',
       description: 'Describe what this tool does.',
-      parameters: {
-        type: 'object',
-        properties: {
-          input: { type: 'string' }
-        },
-        required: ['input']
-      }
+      parameters: { /* ... */ },
+      adminOnly: true // This will now work correctly!
     })
+    // Point the executor to your logic method
+    this.func = this.execute.bind(this)
   }
 
-  async run(e) {
+  async execute(e) {
     const { input } = e.params
-    // Logic here
     return { result: `Processed: ${input}` }
   }
 }
