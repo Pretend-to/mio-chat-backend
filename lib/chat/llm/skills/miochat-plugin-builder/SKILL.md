@@ -46,6 +46,8 @@ export default class MyCustomTool extends MioFunction {
 ### 2. Advanced File Editing (Surgical Mode)
 When modifying existing files, **ALWAYS** prefer using the `file-editor-plugin` tools over full file writes. This is safer and more efficient.
 
+- **`writeFile`**: Use this for creating NEW files or completely overwriting existing ones. It handles directory creation automatically.
+- **`appendFile`**: Use this to quickly add content to the end of a file (e.g., adding imports or logging).
 - **`replaceBlock`**: Use this for single, precise modifications. You must provide the exact original text.
 - **`multiReplace`**: Use this for multiple changes in the same file (e.g., refactoring).
 - **`insertAround`**: Use this to inject code before or after a specific line or pattern.
