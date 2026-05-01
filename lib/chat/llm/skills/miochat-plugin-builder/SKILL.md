@@ -43,7 +43,21 @@ export default class MyCustomTool extends MioFunction {
 }
 ```
 
-### 2. Project-Level Plugins (For Complex Integrations)
+### 2. Advanced File Editing (Surgical Mode)
+When modifying existing files, **ALWAYS** prefer using the `file-editor-plugin` tools over full file writes. This is safer and more efficient.
+
+- **`replaceBlock`**: Use this for single, precise modifications. You must provide the exact original text.
+- **`multiReplace`**: Use this for multiple changes in the same file (e.g., refactoring).
+- **`insertAround`**: Use this to inject code before or after a specific line or pattern.
+
+**Important Note on Tool Loading:**
+MioChat uses an **auto-discovery** mechanism for tools. You do NOT need to manually register tools in a plugin's `index.js`. 
+Simply create the tool file in the `tools/` directory of the plugin, and the system will automatically load it.
+
+> [!TIP]
+> If `replaceBlock` fails due to "Target not found", read the file again to ensure you have the exact indentation and whitespace.
+
+### 3. Project-Level Plugins (For Complex Integrations)
 Full plugins with their own directory, configuration, and multiple tools. Since we are in a **Monorepo**, project-level plugins can have their own dependencies and internal library structure.
 - **Location**: `lib/plugins/<plugin-name>/`
 - **Recommended Structure**:
