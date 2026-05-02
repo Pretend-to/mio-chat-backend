@@ -19,6 +19,8 @@ model Preset {
   opening     String   @default("")
   textwrapper String   @default("")
   tools       String   @default("[]") // JSON 格式存储工具列表
+  provider    String   @default("") // LLM 渠道名（displayName），空则使用系统默认
+  model       String   @default("") // 模型名，空则使用渠道默认
   recommended Boolean  @default(false)
   hidden      Boolean  @default(false)
   createdAt   DateTime @default(now()) @map("created_at")
@@ -114,4 +116,28 @@ model LogStat {
   @@index([date])
   @@index([level])
   @@map("log_stats")
+}
+
+// 定时任务表
+model Task {
+  id          String   @id // 任务唯一 ID (taskId)
+  name        String?
+  cron        String   // Cron 表达式，或者 "once"
+  runAt       DateTime? @map("run_at") // 指定运行时间（用于一次性延迟任务）
+  preset      String   // 绑定的 Agent 预设名
+  systemPrompt String? @map("system_prompt") // 可选的系统提示词覆盖
+  tools       String?  @default("[]") // 可选的工具列表覆盖 (JSON)
+  prompt      String   // 任务提示词
+  userId      String?  @map("user_id") // 结果推送的目标用户
+  contactorId String?  @map("contactor_id") // 前端对话框 ID
+  provider    String?  // LLM 渠道 (快照)
+  model       String?  // 模型名称 (快照)
+  status      String   @default("active") // 'active' | 'disabled' | 'finished'
+  lastRunAt   DateTime? @map("last_run_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([status])
+  @@map("tasks")
 }

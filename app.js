@@ -280,6 +280,10 @@ async function startApp() {
     // 系统状态检查
     await dependencies.statusCheck()
     
+    // 初始化定时任务调度器
+    const taskScheduler = (await import('./lib/cron.js')).default
+    await taskScheduler.initialize(global.middleware.llm)
+    
     // 启动服务器并保存实例
     httpServer = await dependencies.startServer()
     
