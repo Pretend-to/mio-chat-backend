@@ -12,6 +12,7 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
+    "postinstall": "prisma generate",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "test": "node test",
