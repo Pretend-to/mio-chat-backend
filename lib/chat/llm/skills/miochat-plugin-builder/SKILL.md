@@ -1,26 +1,73 @@
 ---
 name: miochat-plugin-builder
 description: Master Guide for building and managing MioChat plugins using terminal and file-editor tools.
-version: 2.2.0
+version: 3.0.0
 author: Mio-Chat
 ---
 
 # MioChat Plugin Builder: Master Edition
 
-You are a Master Architect of the MioChat ecosystem. You extend the system by managing files in the `plugins/custom/` directory.
+You are a Master Architect of the MioChat ecosystem. You extend the system by managing plugins in the `lib/plugins/` (Core) or `plugins/custom/` (Agile) directories.
 
-## 📁 Lifecycle Management via Terminal
+## 📦 Monorepo Dependency Management
 
-Since `custom` plugins are hot-reloaded local files, you manage them using standard shell commands via the **`executeCommand`** tool:
+MioChat uses a **pnpm monorepo** architecture. 
 
-- **List Plugins**: `executeCommand(command: "ls -lh plugins/custom/")`
-- **Read Source**: `executeCommand(command: "cat plugins/custom/your_tool.js")`
-- **Delete Plugin**: `executeCommand(command: "rm plugins/custom/obsolete_tool.js")`
-- **Check Logs**: `executeCommand(command: "tail -n 50 logs/app.log")` (if needed to debug loading)
+### Best Practice for Dependencies:
+1.  **Modify `package.json`**: Add your required dependencies to the `package.json` file inside your specific plugin directory (e.g., `lib/plugins/my-plugin/package.json`).
+2.  **Run Install at ROOT**: Always run the install command at the **project root** to let pnpm handle workspace linking and deduplication.
+    - `executeCommand(command: "pnpm install")` (from root)
+3.  **CRITICAL**: NEVER run `npm install` or `pnpm install` inside the plugin subdirectory. This will break the monorepo link and cause runtime module errors.
 
-## ⚡ Plugin Types
+---
 
-### 1. Single-File Custom Tools (Agile Development)
+## 🏗️ Project-Level Plugins (Standard)
+
+Standard plugins are structured as a package with metadata and configuration support.
+
+- **Location**: `lib/plugins/<plugin-name>/`
+- **Structure**:
+  ```text
+  lib/plugins/my-plugin/
+  ├── package.json      # Metadata & Dependencies
+  ├── index.js          # Plugin Entry Class
+  └── tools/            # Directory for MioFunction tools
+  ```
+
+### 1. `index.js` Implementation
+The `index.js` file should be as minimal as possible. By passing `importMetaUrl`, the base class automatically determines the plugin's path.
+
+```javascript
+import Plugin from '../../plugin.js'
+
+export default class MyPlugin extends Plugin {
+  constructor() {
+    // PASS importMetaUrl for automatic path & metadata detection
+    super({ importMetaUrl: import.meta.url })
+  }
+
+  /**
+   * Define the default configuration schema and initial values
+   * This will be persisted in the database and accessible via this.configData
+   */
+  getInitialConfig() {
+    return {
+      apiKey: '',
+      enableFeature: true
+    }
+  }
+}
+```
+
+### 2. Adding Tools
+Tools should be placed in the `tools/` subdirectory. The system automatically loads all `.js` files in that directory as tools associated with your plugin.
+
+---
+
+## ⚡ Custom Tools (Agile)
+
+For quick additions, use a single-file tool.
+
 - **Location**: `plugins/custom/<tool_name>.js`
 - **Template**:
 ```javascript
@@ -31,46 +78,34 @@ export default class MyCustomTool extends MioFunction {
     super({
       name: 'MyToolName',
       description: 'Concise description.',
-      parameters: { /* ... */ },
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string' }
+        }
+      },
       adminOnly: true
     })
     this.func = this.execute.bind(this)
   }
 
   async execute(e) {
-    // Logic here
-    return { result: 'Done' }
+    const { query } = e.body
+    return { result: `Executed: ${query}` }
   }
 }
 ```
 
-> [!IMPORTANT]
-> **Base Class Rule**: Never override `run(e)`. The `MioFunction` base class handles security and context. Assign your logic to `this.func`.
+---
 
-### 2. Project-Level Plugins
-- **Location**: `lib/plugins/<plugin-name>/`
-- **Template**:
-```javascript
-import Plugin from '../../plugin.js'
+---
+## 🛠️ Master Workflow
 
-export default class MyPlugin extends Plugin {
-  constructor() {
-    super({ importMetaUrl: import.meta.url })
-  }
-}
-```
-
-## 🏗️ Editing Tools
-For creating and updating files, use the **`file-editor-plugin`**:
-- **`writeFile`**: Create new files or overwrite.
-- **`replace_block` / `multi_replace`**: Surgical edits to existing plugins.
-- **`read_context`**: Get better file context for editing.
-
-## 🔄 Master Workflow
-1. **Explore**: Use `executeCommand("ls ...")` to see existing tools.
-2. **Read**: Use `executeCommand("cat ...")` to understand logic.
-3. **Draft**: Create new tools using `writeFile`.
-4. **Iterate**: Use surgical edit tools to refine logic based on runtime behavior.
+1.  **Plan**: Determine if it's a Core plugin (`lib/plugins/`) or a Custom tool (`plugins/custom/`).
+2.  **Setup**: For Core plugins, create the directory and `package.json` first.
+3.  **Dependencies**: If needed, update `package.json` and run `pnpm install` from the **ROOT**.
+4.  **Develop**: Implement `index.js` and add tools in `tools/`.
+5.  **Hot Reload**: The system monitors changes and reloads automatically. Check logs for success.
 
 ---
 *Note: Call `Skill(skill_name: "miochat-plugin-builder")` to refresh these instructions.*
