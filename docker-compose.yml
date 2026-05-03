@@ -22,8 +22,10 @@ services:
       - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-info}
 
-    # 正式版本：不挂载任何目录，使用容器内自带的文件
-    # volumes: []
+    # 数据持久化
+    volumes:
+      - ./data:/app/prisma/data  # SQLite 数据库
+      - ./output:/app/output     # 生成的文件、截图等
 
     # 健康检查（支持动态端口）
     healthcheck:

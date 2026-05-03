@@ -8,9 +8,10 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'lib/**'
+      - 'plugins/**'
+      - 'prisma/**'
       - 'config/**'
       - '.github/workflows/docker-publish.yml'
-      - 'dist/**'
   pull_request:
     branches: [ production ]
     paths:
@@ -18,6 +19,8 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'lib/**'
+      - 'plugins/**'
+      - 'prisma/**'
       - 'config/**'
       - '.github/workflows/docker-publish.yml'
   # 手动触发
