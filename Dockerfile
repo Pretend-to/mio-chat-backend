@@ -5,7 +5,7 @@ FROM node:20-alpine
 WORKDIR /app
 
 # 安装必要的系统工具和 Chrome（用于 puppeteer）
-RUN apk add --no-cache \
+RUN apk update && apk add --no-cache \
     curl \
     bash \
     python3 \
@@ -19,6 +19,8 @@ RUN apk add --no-cache \
     ca-certificates \
     ttf-freefont \
     git \
+    openssl \
+    libc6-compat \
     && npm install -g pnpm
 
 # 复制 package.json 和 pnpm-lock.yaml
