@@ -65,7 +65,15 @@ export default class MyPlugin extends Plugin {
 ```
 
 ### 2. Adding Tools
-Tools should be placed in the `tools/` subdirectory. The system automatically loads all `.js` files in that directory as tools associated with your plugin.
+Tools should be placed in the `tools/` subdirectory. Since these are one level deeper, the import path to the base class changes:
+
+```javascript
+import { MioFunction } from '../../../lib/function.js' // NOTE: 3 levels up for tools in a subdirectory
+
+export default class MyPluginTool extends MioFunction {
+  // ...
+}
+```
 
 ---
 
@@ -73,10 +81,10 @@ Tools should be placed in the `tools/` subdirectory. The system automatically lo
 
 For quick additions, use a single-file tool.
 
-- **Location**: `plugins/custom/<tool_name>.js`
+- **Location**: `/plugins/custom/<tool_name>.js`
 - **Template**:
 ```javascript
-import { MioFunction } from '../../lib/function.js'
+import { MioFunction } from '../../lib/function.js' // NOTE: 2 levels up for custom tools
 
 export default class MyCustomTool extends MioFunction {
   constructor() {
