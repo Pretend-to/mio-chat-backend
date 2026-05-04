@@ -1,6 +1,6 @@
 const CACHE_DATABASE_NAME = "my-cache-db";
 const CACHE_OBJECT_STORE_NAME = "responses";
-const CACHE_VERSION = 13; // 每次修改 Service Worker 文件时，更新此版本号！
+const CACHE_VERSION = 14; // 每次修改 Service Worker 文件时，更新此版本号！
 const MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 天的缓存有效期 (毫秒)
 const CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // 每天清理一次 (毫秒)
 let db;
@@ -154,11 +154,11 @@ function generateCacheKey(request) {
   );
   // 获取 Accept 头部，用于区分响应类型
   const acceptHeader = request.headers.get("Accept") || ""; // 避免 null 值
-  // 其他重要的头部，例如 Content-Type
-  const contentTypeHeader = request.headers.get("Content-Type") || "";
+  // 获取请求模式 (cors, no-cors, navigate 等)，防止缓存碰撞
+  const requestMode = request.mode || "";
 
   // 组合成缓存 Key
-  const cacheKey = `${request.method}-${pathname}?${sortedSearchParams.toString()}-${acceptHeader}-${contentTypeHeader}`;
+  const cacheKey = `${request.method}-${pathname}?${sortedSearchParams.toString()}-${acceptHeader}-${requestMode}`;
   return cacheKey;
 }
 
@@ -213,8 +213,17 @@ function getCachedResponse(cacheKey) {
 async function storeResponseInCache(cacheKey, response) {
   try {
     if (!dbInitialized) {
-      throw new Error("IndexedDB not initialized"); // 如果数据库未初始化，抛出错误
+      throw new Error("IndexedDB not initialized");
     }
+
+    // 检查响应类型
+    // 如果是 opaque (不透明响应，通常来自跨域 no-cors 请求)，
+    // 我们无法读取其 body (arrayBuffer)，因此无法存入 IndexedDB。
+    if (response.type === "opaque") {
+      console.warn(`Cannot store opaque response in IndexedDB for: ${cacheKey}`);
+      return;
+    }
+
     // 将 Response 的 body 转换为 ArrayBuffer
     const arrayBuffer = await response.clone().arrayBuffer();
     const responseData = {
@@ -238,7 +247,7 @@ async function storeResponseInCache(cacheKey, response) {
       const objectStore = transaction.objectStore(CACHE_OBJECT_STORE_NAME);
       const request = objectStore.put(responseData);
       request.onsuccess = () => {
-        console.log(`Response stored in cache for ${cacheKey}`); // 保留：更新缓存时
+        // console.log(`Response stored in cache for ${cacheKey}`);
         resolve();
       };
       request.onerror = (event) => {
@@ -247,7 +256,8 @@ async function storeResponseInCache(cacheKey, response) {
       };
     });
   } catch (error) {
-    console.error("Error cloning and storing response:", error); // 保留：请求失败时
+    // 捕获所有存储错误，不影响主流程
+    console.error("Error cloning and storing response:", error);
   }
 }
 
@@ -274,6 +284,11 @@ function deleteCachedResponse(cacheKey) {
 
 self.addEventListener("fetch", (event) => {
   if (isDevMode) {
+    // 对于跨域资源，在开发模式下直接跳过 Service Worker 的干预
+    // 这样可以让浏览器原生处理 CORS，避免 SW 转发导致的请求上下文问题
+    if (!event.request.url.includes(self.location.hostname)) {
+      return; 
+    }
     console.log("Dev mode: bypassing cache for", event.request.url);
     event.respondWith(fetch(event.request));
   } else {
