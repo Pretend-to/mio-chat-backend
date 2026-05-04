@@ -1,7 +1,7 @@
 ---
 name: miochat-plugin-builder
 description: Master Guide for building and managing MioChat plugins using terminal and file-editor tools.
-version: 3.0.0
+version: 3.1.0
 author: Mio-Chat
 ---
 
@@ -51,10 +51,6 @@ export default class MyPlugin extends Plugin {
     super({ importMetaUrl: import.meta.url })
   }
 
-  /**
-   * Define the default configuration schema and initial values
-   * This will be persisted in the database and accessible via this.configData
-   */
   getInitialConfig() {
     return {
       apiKey: '',
@@ -64,61 +60,42 @@ export default class MyPlugin extends Plugin {
 }
 ```
 
-### 2. Adding Tools
-Tools should be placed in the `tools/` subdirectory. Since these are one level deeper, the import path to the base class changes:
+---
 
-```javascript
-import { MioFunction } from '../../../lib/function.js' // NOTE: 3 levels up for tools in a subdirectory
+## 🧪 Debugging & Validation (The Loop)
 
-export default class MyPluginTool extends MioFunction {
-  // ...
-}
+After writing code, you MUST verify the tool logic using the built-in Debug API.
+
+### 1. Find the Full Tool Name
+MioChat adds a hash suffix to tool names to prevent collisions. Before debugging, fetch the actual name:
+- **API**: `GET /api/plugins/:pluginName/tools`
+- **Header**: `X-Admin-Code: 123456`
+- **Example**: `pubWebpage` might actually be `pubWebpage_mid_b1a2a1`.
+
+### 2. Execute Debug Call
+Use `curl` to call the debug endpoint. This bypasses LLM orchestration and executes the tool directly.
+- **API**: `POST /api/plugins/:pluginName/tools/:toolName/debug`
+- **Body**: `{"parameters": { ...your test params... }}`
+- **Authentication**: Requires `X-Admin-Code` header.
+
+```bash
+# Example Debug Command
+curl -X POST http://127.0.0.1:3000/api/plugins/web-plugin/tools/pubWebpage_mid_b1a2a1/debug \
+-H "Content-Type: application/json" \
+-H "X-Admin-Code: 123456" \
+-d '{"parameters": {"localPath": "/path/to/test/site"}}'
 ```
 
 ---
 
-## ⚡ Custom Tools (Agile)
+## 🛠️ Master Workflow (Complete Loop)
 
-For quick additions, use a single-file tool.
-
-- **Location**: `/plugins/custom/<tool_name>.js`
-- **Template**:
-```javascript
-import { MioFunction } from '../../lib/function.js' // NOTE: 2 levels up for custom tools
-
-export default class MyCustomTool extends MioFunction {
-  constructor() {
-    super({
-      name: 'MyToolName',
-      description: 'Concise description.',
-      parameters: {
-        type: 'object',
-        properties: {
-          query: { type: 'string' }
-        }
-      },
-      adminOnly: true
-    })
-    this.func = this.execute.bind(this)
-  }
-
-  async execute(e) {
-    const { query } = e.body
-    return { result: `Executed: ${query}` }
-  }
-}
-```
-
----
-
----
-## 🛠️ Master Workflow
-
-1.  **Plan**: Determine if it's a Core plugin (`lib/plugins/`) or a Custom tool (`plugins/custom/`).
-2.  **Setup**: For Core plugins, create the directory and `package.json` first.
-3.  **Dependencies**: If needed, update `package.json` and run `pnpm install` from the **ROOT**.
-4.  **Develop**: Implement `index.js` and add tools in `tools/`.
-5.  **Hot Reload**: The system monitors changes and reloads automatically. Check logs for success.
+1.  **Plan**: Core plugin (`lib/plugins/`) or Custom tool (`plugins/custom/`).
+2.  **Develop**: Implement code logic and define parameters.
+3.  **Hot Reload**: Save files. Check backend logs to confirm `[PluginName] 工具加载完成`.
+4.  **Identify**: Call `GET /api/plugins/:pluginName/tools` to find the hashed tool name.
+5.  **Validate**: Call `POST /.../debug` with test parameters.
+6.  **Refine**: If it fails, fix the code and repeat from step 3.
 
 ---
 *Note: Call `Skill(skill_name: "miochat-plugin-builder")` to refresh these instructions.*
