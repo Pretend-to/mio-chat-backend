@@ -33,3 +33,6 @@ imageBase64.txt
 /.agents/skills/*
 !/.agents/skills/.gitkeep
 !/.miochat/skills/.gitkeep
+
+# Scratch directory
+scratch/

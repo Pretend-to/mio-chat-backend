@@ -21,7 +21,7 @@ MioChat uses a **pnpm monorepo** architecture.
 ### Best Practice for Dependencies:
 1.  **Modify `package.json`**: Add your required dependencies to the `package.json` file inside your specific plugin directory (e.g., `/plugins/my-plugin/package.json`).
 2.  **Run Install at ROOT**: Always run the install command at the **project root** to let pnpm handle workspace linking and deduplication.
-    - `executeCommand(command: "pnpm install")` (from root)
+    - `sh(command: "pnpm install")` (from root)
 3.  **CRITICAL**: NEVER run `npm install` or `pnpm install` inside the plugin subdirectory. This will break the monorepo link and cause runtime module errors.
 
 ---
@@ -75,7 +75,7 @@ MioChat adds a hash suffix to tool names to prevent collisions. Before debugging
 ### 2. Execute Debug Call
 Use `curl` to call the debug endpoint. This bypasses LLM orchestration and executes the tool directly.
 - **API**: `POST /api/plugins/:pluginName/tools/:toolName/debug`
-- **Body**: `{"parameters": { ...your test params... }}`
+- **Body**: `{"parameters": { ...your test params... }}` (MUST wrap params in `parameters`)
 - **Authentication**: Requires `X-Admin-Code` header.
 
 ```bash
@@ -85,6 +85,13 @@ curl -X POST http://127.0.0.1:3000/api/plugins/web-plugin/tools/pubWebpage_mid_b
 -H "X-Admin-Code: 123456" \
 -d '{"parameters": {"localPath": "/path/to/test/site"}}'
 ```
+
+### 💡 Expert Debugging Tips
+- **Find Admin Code**: If you don't know the code, run: `node scripts/utils/get-admin-code.js`.
+- **IPv4 vs IPv6**: On macOS, Node.js may bind to IPv6. If `localhost` fails (Exit code 7), explicitly use **`127.0.0.1`**.
+- **Identify Active Port**: Use `lsof -i -P -n | grep LISTEN` to confirm the backend port (usually `3000` or `3080`).
+- **Payload Structure**: The Debug API expects `{"parameters": {...}}`, NOT just the raw params. If you see `Cannot read properties of undefined`, check your JSON wrapping.
+- **Hot Reload**: Saving a tool file (`tools/*.js`) triggers an automatic tool reload. Saving a plugin entry (`index.js`) may require calling the `.../reload` API or restarting the server to refresh the class definition.
 
 ---
 
