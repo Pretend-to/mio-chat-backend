@@ -100,3 +100,7 @@ mio-chat-backend/
 
 ## 🤝 贡献与协议
 欢迎提交 PR 贡献代码。本项目基于 **MIT License** 开源。
+
+## 🧪 Webhook Diff 测试
+
+验证 githook 修复后的 diff 邮件是否正常显示变更内容 —— 2026-05-06 v2
