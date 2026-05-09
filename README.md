@@ -42,13 +42,24 @@ pnpm install
 ```
 
 ### 2. 启动应用
-```bash
-pnpm run dev
-```
-项目会在启动时**自动完成初始化**：
-- 自动生成 `.env` 配置文件并生成安全的访问码。
-- 自动配置 SQLite 数据库并推送表结构。
-- 自动生成 Prisma 客户端。
+
+项目支持多种启动模式，无论哪种方式，启动时均会**自动完成初始化**（生成 `.env`、配置数据库、生成 Prisma 客户端）。
+
+- **开发模式**（推荐，支持热重载）：
+  ```bash
+  pnpm dev
+  ```
+
+- **生产模式（前台运行）**：
+  ```bash
+  node app.js
+  ```
+
+- **生产模式（后台运行）**：
+  ```bash
+  pnpm start
+  ```
+  > **PM2 说明**：后台运行依赖 [PM2](https://pm2.keymetrics.io/)。如果未安装，请执行：`npm install -g pm2`
 
 启动后访问 `http://localhost:3000`，使用控制台打印的 `ADMIN_CODE` 登录。
 
@@ -58,13 +69,17 @@ pnpm run dev
 
 ### 1. 使用 Docker Compose (推荐)
 ```bash
-cp .env.example .env
 docker compose up -d
 ```
 
-### 2. 使用 PM2
+### 2. 使用 PM2 后台运行
 ```bash
-pm2 start config/pm2.json
+pnpm start
+```
+若需查看日志或管理进程：
+```bash
+pm2 logs
+pm2 list
 ```
 
 > **详细部署手册**：关于 Nginx 转发、SSL、Systemd 及更多环境配置，请查阅 **[生产部署指南](./docs/DEPLOYMENT.md)**。
@@ -99,4 +114,3 @@ mio-chat-backend/
 
 ## 🤝 贡献与协议
 欢迎提交 PR 贡献代码。本项目基于 **MIT License** 开源。
-## githook final test 1778065983
