@@ -1,5 +1,5 @@
 packages:
-  - plugins/*
+  - 'plugins/*'
 
 ignoredBuiltDependencies:
   - es5-ext
