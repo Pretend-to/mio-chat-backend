@@ -1,5 +1,5 @@
-# 使用 Node.js 20 LTS Alpine 镜像（支持 chrome-devtools-mcp）
-FROM node:20-alpine
+# 使用 Node.js 22 LTS Alpine 镜像（支持 chrome-devtools-mcp）
+FROM node:22-alpine
 
 # 设置工作目录
 WORKDIR /app
