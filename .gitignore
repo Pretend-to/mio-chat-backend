@@ -22,8 +22,7 @@
 /plugins/*
 !/plugins/custom/
 /plugins/custom/*
-!/plugins/custom/exec.js
-!/plugins/custom/parser.js
+!/plugins/custom/.gitkeep
 
 test.js
 image.jpg
