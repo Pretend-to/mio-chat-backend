@@ -44,7 +44,6 @@
 ### 启动命令
 ```bash
 pnpm install
-pnpm run init
 pm2 start config/pm2.json
 ```
 

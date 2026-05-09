@@ -41,17 +41,16 @@ cd mio-chat-backend
 pnpm install
 ```
 
-### 2. 初始化环境
-```bash
-pnpm run init
-```
-该指令会自动生成数据库客户端、初始化 SQLite 并在 `.env` 中生成管理员访问码。
-
-### 3. 启动应用
+### 2. 启动应用
 ```bash
 pnpm run dev
 ```
-启动后访问 `http://localhost:3000`，使用 `.env` 中的 `ADMIN_CODE` 登录。
+项目会在启动时**自动完成初始化**：
+- 自动生成 `.env` 配置文件并生成安全的访问码。
+- 自动配置 SQLite 数据库并推送表结构。
+- 自动生成 Prisma 客户端。
+
+启动后访问 `http://localhost:3000`，使用控制台打印的 `ADMIN_CODE` 登录。
 
 ---
 

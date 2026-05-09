@@ -31,59 +31,6 @@ async function checkAndPerformAutoMigration(AutoMigrationDetector) {
 }
 
 /**
- * 检查并修复 Prisma 客户端
- */
-async function checkAndFixPrisma() {
-  try {
-    const _fs = await import('fs')
-    const _path = await import('path')
-    
-    // 尝试导入 Prisma 客户端（让 Node.js 自己解析路径）
-    const { PrismaClient } = await import('@prisma/client')
-    
-    // 尝试创建实例（这会触发真正的错误如果客户端有问题）
-    const testClient = new PrismaClient()
-    await testClient.$disconnect()
-    
-    logger.info('Prisma 客户端检查通过')
-  } catch (error) {
-    if (error.message.includes('.prisma/client') || 
-        error.message.includes('Prisma client directory not found') ||
-        error.message.includes('Cannot find module')) {
-      logger.warn('检测到 Prisma 客户端未生成，正在自动修复...')
-      
-      try {
-        const { execSync } = await import('child_process')
-        
-        // 生成 Prisma 客户端
-        logger.info('正在生成 Prisma 客户端...')
-        execSync('npx prisma generate', { 
-          stdio: 'inherit',
-          cwd: process.cwd()
-        })
-        
-        // 推送数据库架构
-        logger.info('正在推送数据库架构...')
-        execSync('npx prisma db push', { 
-          stdio: 'inherit',
-          cwd: process.cwd()
-        })
-        
-        logger.info('✅ Prisma 客户端修复完成')
-      } catch (fixError) {
-        logger.error('❌ Prisma 客户端修复失败:', fixError.message)
-        logger.error('请手动运行以下命令修复：')
-        logger.error('  npx prisma generate')
-        logger.error('  npx prisma db push')
-        process.exit(1)
-      }
-    } else {
-      throw error
-    }
-  }
-}
-
-/**
  * 动态导入所有依赖模块
  */
 async function importDependencies() {
@@ -264,8 +211,9 @@ async function gracefulShutdown(signal) {
 // 应用启动流程
 async function startApp() {
   try {
-    // 首先检查并修复 Prisma 客户端
-    await checkAndFixPrisma()
+    // 自动初始化：从 lib/initialization 导入并执行
+    const { performFullInitialization } = await import('./lib/initialization/index.js')
+    await performFullInitialization()
     
     // 动态导入所有依赖
     const dependencies = await importDependencies()

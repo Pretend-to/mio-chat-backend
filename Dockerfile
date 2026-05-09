@@ -67,4 +67,4 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     NODE_ENV=production
 
 # 初始化数据库并启动应用
-CMD ["sh", "-c", "pnpm run db:push && node app.js"]
+CMD ["node", "app.js"]

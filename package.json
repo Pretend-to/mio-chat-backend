@@ -7,7 +7,6 @@
   "scripts": {
     "dev": "node --watch app.js",
     "start": "pm2 start ./config/pm2.json",
-    "init": "node scripts/setup.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
