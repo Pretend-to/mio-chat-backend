@@ -208,12 +208,8 @@ async function testUpdateServerConfig() {
       const { response: verifyResponse, data: verifyData } = await makeRequest(`${BASE_URL}/api/config/server`)
       
       if (verifyResponse.ok && verifyData.code === 0) {
-        const updatedServerConfig = verifyData.data
-
-        
         logger.info('✓ 服务器配置更新验证成功')
         return true
-        }
       } else {
         logger.error(`✗ 获取更新后的服务器配置失败: ${verifyData.message}`)
         return false
