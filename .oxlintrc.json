@@ -17,12 +17,17 @@
     "middleware": "readonly",
     "logger": "readonly"
   },
-  "ignore": [
+  "ignorePatterns": [
     "node_modules/**",
     "dist/**",
     "output/**",
     "logs/**",
     ".git/**",
+    "docs/**",
+    "web-articles/**",
+    "pdf_report/**",
+    "scratch/**",
+    "projects/**",
     "**/*.min.js",
     "**/*.bundle.js"
   ]

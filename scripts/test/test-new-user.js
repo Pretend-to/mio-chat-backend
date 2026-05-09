@@ -5,7 +5,7 @@
  * 模拟新用户克隆项目后的操作流程
  */
 
-import { spawn, execSync } from 'child_process'
+import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import logger from '../utils/logger.js'
@@ -60,7 +60,7 @@ async function testNewUserExperience() {
         console.error(data.toString())
       })
       
-      child.on('close', (code) => {
+      child.on('close', (_code) => {
         if (hasStarted) {
           logger.info('✅ 新用户体验测试通过')
         } else {

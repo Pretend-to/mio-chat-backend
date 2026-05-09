@@ -14,12 +14,12 @@
     "postinstall": "prisma generate",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "test": "node test",
+    "test": "bash scripts/utils/run-tests.sh",
     "format": "prettier --write .",
     "docker:build": "docker build -t mio-chat-backend .",
-    "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down",
-    "docker:logs": "docker-compose logs -f"
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
   },
   "keywords": [
     "gpt"
@@ -60,9 +60,6 @@
     "ws": "^8.20.0",
     "zod": "^4.3.6"
   },
-  "workspaces": [
-    "plugins/*"
-  ],
   "pnpm": {
     "overrides": {
       "underscore": ">=1.13.8",

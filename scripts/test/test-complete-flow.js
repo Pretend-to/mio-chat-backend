@@ -82,7 +82,7 @@ async function testCompleteFlow() {
         console.error(data.toString())
       })
       
-      child.on('close', (code) => {
+      child.on('close', (_code) => {
         logger.info('')
         if (hasStarted && hasAccessCodes) {
           logger.info('🎉 完整流程测试通过！')

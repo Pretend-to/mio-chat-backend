@@ -263,7 +263,7 @@ async function testAuthRequired() {
   logger.info('=== 测试权限验证 ===')
   
   try {
-    const { response, data } = await makeRequest(`${BASE_URL}/api/config`, {
+    const { response } = await makeRequest(`${BASE_URL}/api/config`, {
       method: 'PUT',
       headers: {
         'x-admin-code': 'wrong-code'

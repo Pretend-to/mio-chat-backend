@@ -110,19 +110,6 @@ async function testGetPluginConfig(pluginName) {
   return data
 }
 
-async function testUpdatePluginConfig(pluginName, newConfig) {
-  console.log(`\n✏️  4. 测试: 更新插件配置 (${pluginName})`)
-  console.log('─'.repeat(60))
-  
-  const data = await apiCall('PUT', `/api/plugins/${pluginName}/config`, newConfig)
-  
-  if (data) {
-    console.log(`   ${data.message}`)
-    console.log(`   新配置已写入文件`)
-  }
-  
-  return data
-}
 
 async function testGetPluginTools(pluginName) {
   console.log(`\n🛠️  5. 测试: 获取插件工具列表 (${pluginName})`)

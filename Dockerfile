@@ -21,7 +21,7 @@ RUN apk update && apk add --no-cache \
     git \
     openssl \
     libc6-compat \
-    && npm install -g pnpm
+    && npm install -g pnpm@10
 
 # 复制 package.json 和 pnpm-lock.yaml
 COPY package.json pnpm-lock.yaml* ./
