@@ -3,11 +3,11 @@ import path from 'path'
 import yaml from 'js-yaml'
 import { execSync } from 'child_process'
 import { fileURLToPath } from 'url'
-import prismaManager from '../lib/database/prisma.js'
-import PresetService from '../lib/database/services/PresetService.js'
-import SystemSettingsService from '../lib/database/services/SystemSettingsService.js'
-import PluginConfigService from '../lib/database/services/PluginConfigService.js'
-import logger from '../utils/logger.js'
+import prismaManager from '../../lib/database/prisma.js'
+import PresetService from '../../lib/database/services/PresetService.js'
+import SystemSettingsService from '../../lib/database/services/SystemSettingsService.js'
+import PluginConfigService from '../../lib/database/services/PluginConfigService.js'
+import logger from '../../utils/logger.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -23,7 +23,7 @@ class DataMigrator {
       systemSettings: { success: 0, failed: 0, skipped: 0 },
       pluginConfigs: { success: 0, failed: 0, skipped: 0 }
     }
-    this.backupDir = path.resolve(__dirname, '../backup', new Date().toISOString().split('T')[0])
+    this.backupDir = path.resolve(__dirname, '../../backup', new Date().toISOString().split('T')[0])
   }
 
   /**
@@ -67,7 +67,7 @@ class DataMigrator {
   async checkAndFixPrisma() {
     try {
       // 检查 .prisma/client 目录是否存在
-      const prismaClientPath = path.resolve(__dirname, '../node_modules/.prisma/client')
+      const prismaClientPath = path.resolve(__dirname, '../../node_modules/.prisma/client')
       
       if (!fs.existsSync(prismaClientPath)) {
         throw new Error('Prisma client directory not found')
@@ -92,14 +92,14 @@ class DataMigrator {
           logger.info('正在生成 Prisma 客户端...')
           execSync('npx prisma generate', { 
             stdio: 'inherit',
-            cwd: path.resolve(__dirname, '..')
+            cwd: path.resolve(__dirname, '../..')
           })
           
           // 推送数据库架构
           logger.info('正在推送数据库架构...')
           execSync('npx prisma db push', { 
             stdio: 'inherit',
-            cwd: path.resolve(__dirname, '..')
+            cwd: path.resolve(__dirname, '../..')
           })
           
           logger.info('✅ Prisma 客户端修复完成')
@@ -143,12 +143,12 @@ class DataMigrator {
     const backupTasks = [
       // 备份预设目录
       {
-        source: path.resolve(__dirname, '../presets'),
+        source: path.resolve(__dirname, '../../presets'),
         target: path.join(this.backupDir, 'presets')
       },
       // 备份配置目录
       {
-        source: path.resolve(__dirname, '../config'),
+        source: path.resolve(__dirname, '../../config'),
         target: path.join(this.backupDir, 'config')
       }
     ]
@@ -168,7 +168,7 @@ class DataMigrator {
   async migratePresets() {
     logger.info('开始迁移预设数据...')
     
-    const presetsDir = path.resolve(__dirname, '../presets')
+    const presetsDir = path.resolve(__dirname, '../../presets')
     const builtInDir = path.join(presetsDir, 'built-in')
     const customDir = path.join(presetsDir, 'custom')
 
@@ -237,13 +237,13 @@ class DataMigrator {
     
     // 尝试多个可能的配置文件位置
     const configPaths = [
-      path.resolve(__dirname, '../backup/2025-12-17/config/config/config.yaml'),
-      path.resolve(__dirname, '../config/config/config.yaml')
+      path.resolve(__dirname, '../../backup/2025-12-17/config/config/config.yaml'),
+      path.resolve(__dirname, '../../config/config.yaml')
     ]
     
     const ownersPaths = [
-      path.resolve(__dirname, '../backup/2025-12-17/config/config/owners.yaml'),
-      path.resolve(__dirname, '../config/config/owners.yaml')
+      path.resolve(__dirname, '../../backup/2025-12-17/config/config/owners.yaml'),
+      path.resolve(__dirname, '../../config/owners.yaml')
     ]
     
     // 迁移主配置文件
@@ -475,8 +475,8 @@ class DataMigrator {
     
     // 尝试多个可能的插件配置目录
     const pluginsDirs = [
-      path.resolve(__dirname, '../backup/2025-12-17/config/plugins'),
-      path.resolve(__dirname, '../config/plugins')
+      path.resolve(__dirname, '../../backup/2025-12-17/config/plugins'),
+      path.resolve(__dirname, '../../config/plugins')
     ]
     
     let pluginsDir = null

@@ -5,9 +5,9 @@
  * 将 PluginConfigService 中的 onebotConfig 迁移到 SystemSettingsService 中的 onebot 配置
  */
 
-import logger from '../utils/logger.js'
-import PluginConfigService from '../lib/database/services/PluginConfigService.js'
-import SystemSettingsService from '../lib/database/services/SystemSettingsService.js'
+import logger from '../../utils/logger.js'
+import PluginConfigService from '../../lib/database/services/PluginConfigService.js'
+import SystemSettingsService from '../../lib/database/services/SystemSettingsService.js'
 
 class OneBotConfigMigrator {
   constructor(options = {}) {
