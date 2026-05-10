@@ -532,10 +532,7 @@ export class EnhancedLogger extends EventEmitter {
         return value
       }, 2)
       
-      // 保持原有行为：输出到控制台
-      console.log(jsonString)
-      
-      // 新增：同时通过日志系统推送（用于实时流）
+      // 通过日志系统推送（用于实时流和文件输出）
       this.log('INFO', jsonString, { type: 'json', originalObject: obj })
     } catch (error) {
       this.error('JSON序列化失败', error)
