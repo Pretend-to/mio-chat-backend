@@ -23,6 +23,7 @@ model Preset {
   model       String   @default("") // 模型名，空则使用渠道默认
   recommended Boolean  @default(false)
   hidden      Boolean  @default(false)
+  avatar      String   @default("")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
