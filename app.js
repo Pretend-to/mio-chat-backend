@@ -42,6 +42,7 @@ async function importDependencies() {
   const PluginConfigService = (await import('./lib/database/services/PluginConfigService.js')).default
   const initializeDefaults = (await import('./scripts/initialize-defaults.js')).default
   const AutoMigrationDetector = (await import('./lib/migration/autoMigrationDetector.js')).default
+  const TaskService = (await import('./lib/database/services/TaskService.js')).default
   
   return {
     statusCheck,
@@ -51,7 +52,8 @@ async function importDependencies() {
     SystemSettingsService,
     PluginConfigService,
     initializeDefaults,
-    AutoMigrationDetector
+    AutoMigrationDetector,
+    TaskService
   }
 }
 
@@ -65,7 +67,8 @@ async function initializeDatabase(dependencies) {
     SystemSettingsService, 
     PluginConfigService, 
     initializeDefaults,
-    AutoMigrationDetector
+    AutoMigrationDetector,
+    TaskService
   } = dependencies
   
   try {
@@ -78,6 +81,7 @@ async function initializeDatabase(dependencies) {
     await PresetService.initialize()
     await SystemSettingsService.initialize()
     await PluginConfigService.initialize()
+    await TaskService.initialize()
     
     // 检查并执行自动迁移
     await checkAndPerformAutoMigration(AutoMigrationDetector)

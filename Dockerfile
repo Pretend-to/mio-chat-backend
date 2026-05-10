@@ -21,16 +21,19 @@ RUN apk update && apk add --no-cache \
     git \
     openssl \
     libc6-compat \
+    build-base \
+    make \
+    g++ \
     && npm install -g pnpm@10
 
 # 复制 package.json 和 pnpm-lock.yaml
 COPY package.json pnpm-lock.yaml* ./
 
 # 安装 Node.js 依赖
-# 跳过 puppeteer 的 Chromium 下载（使用系统安装的）
+# 移除 --ignore-scripts 以允许编译 better-sqlite3 等原生模块
 RUN PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
-    pnpm install --frozen-lockfile --ignore-scripts
+    pnpm install --frozen-lockfile
 
 # 复制 Prisma Schema 并生成客户端
 COPY prisma/ ./prisma/
