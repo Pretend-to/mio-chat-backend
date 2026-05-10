@@ -83,13 +83,17 @@ async function initializeDatabase(dependencies) {
     await PluginConfigService.initialize()
     await TaskService.initialize()
     
+    // 3. 执行完整初始化流程（包含环境检查和数据库自愈）
+    const { performFullInitialization } = await import('./lib/initialization/index.js')
+    await performFullInitialization()
+    
+    // 4. 初始化默认配置（如果数据库中没有）
+    logger.info('初始化默认配置...')
+    await initializeDefaults()
+    
     // 检查并执行自动迁移
     await checkAndPerformAutoMigration(AutoMigrationDetector)
     
-    // 初始化默认配置
-    logger.info('初始化默认配置...')
-    await initializeDefaults()
-
     // 重新加载内存中的配置以同步刚刚写入数据库的默认值，
     // 避免后续的状态检查重复生成访问码
     try {
