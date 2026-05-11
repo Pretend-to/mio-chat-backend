@@ -72,20 +72,21 @@ async function initializeDatabase(dependencies) {
   } = dependencies
   
   try {
+    // 1. 执行完整初始化流程（包含环境检查和数据库自愈）
+    // 必须最先执行，以确保 .env 存在、数据库目录存在且 Schema 已同步
+    const { performFullInitialization } = await import('./lib/initialization/index.js')
+    await performFullInitialization()
+
     logger.info('初始化数据库连接...')
     
-    // 初始化 Prisma 管理器
+    // 2. 初始化 Prisma 管理器
     await prismaManager.initialize()
     
-    // 初始化所有服务
+    // 3. 初始化所有服务
     await PresetService.initialize()
     await SystemSettingsService.initialize()
     await PluginConfigService.initialize()
     await TaskService.initialize()
-    
-    // 3. 执行完整初始化流程（包含环境检查和数据库自愈）
-    const { performFullInitialization } = await import('./lib/initialization/index.js')
-    await performFullInitialization()
     
     // 4. 初始化默认配置（如果数据库中没有）
     logger.info('初始化默认配置...')
