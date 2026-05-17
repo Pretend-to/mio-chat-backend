@@ -15,7 +15,7 @@ model Preset {
   name        String   @unique
   type        String   @default("custom") // 'built-in' | 'custom'
   category    String   @default("common") // 'common' | 'recommended' | 'hidden'
-  history     String   // JSON 格式存储对话历史
+  history     String // JSON 格式存储对话历史
   opening     String   @default("")
   textwrapper String   @default("")
   tools       String   @default("[]") // JSON 格式存储工具列表
@@ -51,7 +51,7 @@ model PluginConfig {
 model SystemSetting {
   id          Int      @id @default(autoincrement())
   key         String   @unique
-  value       String   // JSON 格式存储复杂配置
+  value       String // JSON 格式存储复杂配置
   category    String   @default("general") // 'general' | 'server' | 'web' | 'onebot' | 'llm'
   description String?
   createdAt   DateTime @default(now()) @map("created_at")
@@ -82,7 +82,7 @@ model LLMAdapter {
 model ModelOwner {
   id        Int      @id @default(autoincrement())
   owner     String
-  keywords  String   // JSON 数组格式存储关键词
+  keywords  String // JSON 数组格式存储关键词
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -121,24 +121,61 @@ model LogStat {
 
 // 定时任务表
 model Task {
-  id          String   @id // 任务唯一 ID (taskId)
-  name        String?
-  cron        String   // Cron 表达式，或者 "once"
-  runAt       DateTime? @map("run_at") // 指定运行时间（用于一次性延迟任务）
-  preset      String   // 绑定的 Agent 预设名
-  systemPrompt String? @map("system_prompt") // 可选的系统提示词覆盖
-  tools       String?  @default("[]") // 可选的工具列表覆盖 (JSON)
-  prompt      String   // 任务提示词
-  userId      String?  @map("user_id") // 结果推送的目标用户
-  contactorId String?  @map("contactor_id") // 前端对话框 ID
-  provider    String?  // LLM 渠道 (快照)
-  model       String?  // 模型名称 (快照)
-  status      String   @default("active") // 'active' | 'disabled' | 'finished'
-  lastRunAt   DateTime? @map("last_run_at")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id           String    @id // 任务唯一 ID (taskId)
+  name         String?
+  cron         String // Cron 表达式，或者 "once"
+  runAt        DateTime? @map("run_at") // 指定运行时间（用于一次性延迟任务）
+  preset       String // 绑定的 Agent 预设名
+  systemPrompt String?   @map("system_prompt") // 可选的系统提示词覆盖
+  tools        String?   @default("[]") // 可选的工具列表覆盖 (JSON)
+  prompt       String // 任务提示词
+  userId       String?   @map("user_id") // 结果推送的目标用户
+  contactorId  String?   @map("contactor_id") // 前端对话框 ID
+  provider     String? // LLM 渠道 (快照)
+  model        String? // 模型名称 (快照)
+  status       String    @default("active") // 'active' | 'disabled' | 'finished'
+  lastRunAt    DateTime? @map("last_run_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
   @@index([userId])
   @@index([status])
   @@map("tasks")
+}
+
+// LLM 调用审计日志表
+model LLMCallLog {
+  id               Int      @id @default(autoincrement())
+  requestId        String   @map("request_id") // 关联事件请求 ID (e.requestId)
+  userId           String?  @map("user_id") // 触发调用的用户 ID (e.user?.id)
+  userIp           String?  @map("user_ip") // 触发调用的 IP 地址 (e.user?.ip)
+  contactorId      String?  @map("contactor_id") // 触发会话的窗口 ID (e.body?.contactorId)
+  presetName       String?  @map("preset_name") // 使用的 Agent 预设名称 (e.body?.settings?.presetSettings?.name)
+  provider         String // 适配器渠道 (openai, deepseek, gemini, vertex 等)
+  model            String // 调用的具体模型 (如 deepseek-chat, gpt-5.4-nano 等)
+  isStream         Boolean  @default(true) @map("is_stream") // 是否流式请求
+  trafficType      String?  @map("traffic_type") // 计费流量类型 (如 Gemini: ON_DEMAND)
+  promptTokens     Int      @default(0) @map("prompt_tokens") // 输入 Token 数
+  candidatesTokens Int      @default(0) @map("candidates_tokens") // 输出 Token 数
+  thinkingTokens   Int      @default(0) @map("thinking_tokens") // 深度思考 Token 数
+  toolsCalled      String?  @default("[]") @map("tools_called") // JSON 数组，记录调用的多个工具名称 (如 ["memory_query", "web_search"])
+  cacheHitTokens   Int      @default(0) @map("cache_hit_tokens") // 缓存命中 Token 数
+  cacheMissTokens  Int      @default(0) @map("cache_miss_tokens") // 缓存未命中 Token 数
+  totalTokens      Int      @default(0) @map("total_tokens") // 总 Token 数
+  latency          Int // 总耗时/延迟 (单位: ms)
+  ttft             Int? // 首字延迟 (Time-To-First-Token, 单位: ms)，非流式则为 null
+  tps              Float? // 响应速度 (Tokens Per Second, 仅针对 candidates)
+  status           String   @default("SUCCESS") // 状态: SUCCESS (成功) | FAILED (异常失败) | ABORTED (用户中止)
+  errorMessage     String?  @map("error_message") // 失败异常时的错误堆栈/原因
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([requestId])
+  @@index([userId])
+  @@index([userIp])
+  @@index([contactorId])
+  @@index([provider])
+  @@index([model])
+  @@index([status])
+  @@index([createdAt])
+  @@map("llm_call_logs")
 }

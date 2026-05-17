@@ -11,6 +11,7 @@
 /data/
 /prisma/data/
 /prisma/generated/
+/prisma/.schema_hash
 *.db
 *.sqlite
 *.sqlite3
