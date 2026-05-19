@@ -18,6 +18,7 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "test": "bash scripts/utils/run-tests.sh",
+    "test:unit": "node --test tests/**/*.test.js",
     "format": "prettier --write .",
     "docker:build": "docker build -t mio-chat-backend .",
     "docker:up": "docker compose up -d",
