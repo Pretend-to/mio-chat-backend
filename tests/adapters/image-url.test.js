@@ -34,6 +34,25 @@ test('Image URL pre-processing and data wrapping', async (t) => {
     assert.strictEqual(contents[0].parts[1].inline_data.mime_type, 'image/jpeg');
   });
 
+  await t.test('GeminiAdapter: should handle imageGeneration object/boolean correctly and not set responseModalities when disabled', async () => {
+    const adapter = new GeminiAdapter({ api_key: 'test', base_url: 'http://localhost' });
+    const body = {
+      messages: messages,
+      settings: {
+        base: { model: 'gemini-2.5-flash', stream: true },
+        chatParams: { temperature: 0.7 },
+        toolCallSettings: { mode: 'NONE', tools: [] },
+        extraSettings: {
+          gemini: {
+            imageGeneration: { enabled: false }
+          }
+        }
+      }
+    };
+    const prepared = await adapter._prepareChatBody(body);
+    assert.strictEqual(prepared.responseModalities, undefined);
+  });
+
   await t.test('OpenAIAdapter: should correctly process base64 image messages and wrap data', async () => {
     const adapter = new OpenAIAdapter({ api_key: 'test', base_url: 'http://localhost' });
     const processed = await adapter._processMessages(messages);
