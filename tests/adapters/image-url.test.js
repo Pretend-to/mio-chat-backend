@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import './mock-env.js';
-import GeminiAdapter from '../../lib/chat/llm/adapters/gemini.js';
-import OpenAIAdapter from '../../lib/chat/llm/adapters/openai.js';
+import GeminiAdapter from '../../lib/chat/llm/adapters/implementations/gemini.js';
+import OpenAIAdapter from '../../lib/chat/llm/adapters/implementations/openai.js';
 
 test('Image URL pre-processing and data wrapping', async (t) => {
   const base64Data = 'data:image/jpeg;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import './mock-env.js';
 import { runGenericAdapterTests } from './test-suite.js';
-import AgentPlatformAdapter from '../../lib/chat/llm/adapters/agentPlatform.js';
+import AgentPlatformAdapter from '../../lib/chat/llm/adapters/implementations/agentPlatform.js';
 
 test('Agent Platform Adapter', async (t) => {
   const config = {

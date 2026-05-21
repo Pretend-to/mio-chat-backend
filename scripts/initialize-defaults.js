@@ -41,7 +41,7 @@ function loadDefaultOwners() {
  * 初始化默认系统设置
  */
 async function initializeDefaultSystemSettings() {
-  logger.info('正在初始化默认系统设置...')
+  logger.debug('正在初始化默认系统设置...')
   
   // 使用全局的 generateSecureCode 函数
 
@@ -127,7 +127,7 @@ async function initializeDefaultSystemSettings() {
           logger.warn('⚠️  请妥善保存此访问码！')
         }
       } else {
-        logger.info(`- 设置已存在: ${setting.key}`)
+        // logger.debug(`- 设置已存在: ${setting.key}`)
       }
     } catch (error) {
       logger.error(`创建默认设置失败 ${setting.key}:`, error)
@@ -139,7 +139,7 @@ async function initializeDefaultSystemSettings() {
  * 初始化默认插件配置
  */
 async function initializeDefaultPluginConfig() {
-  logger.info('正在初始化默认插件配置...')
+  logger.debug('正在初始化默认插件配置...')
   
   try {
     const existing = await SystemSettingsService.get('onebot')
@@ -272,7 +272,7 @@ async function initializeDefaultPluginConfig() {
       
       logger.info('✓ 创建默认 OneBot 配置')
     } else {
-      logger.info('- OneBot 配置已存在')
+      // logger.debug('- OneBot 配置已存在')
     }
   } catch (error) {
     logger.error('创建默认插件配置失败:', error)
@@ -284,7 +284,7 @@ async function initializeDefaultPluginConfig() {
  */
 async function main() {
   try {
-    logger.info('开始初始化默认配置...')
+    logger.debug('开始初始化默认配置...')
     
     // 初始化数据库连接
     await prismaManager.initialize()
@@ -297,7 +297,7 @@ async function main() {
     await initializeDefaultSystemSettings()
     await initializeDefaultPluginConfig()
     
-    logger.info('默认配置初始化完成!')
+    logger.debug('默认配置初始化完成!')
     
   } catch (error) {
     logger.error('初始化默认配置失败:', error)

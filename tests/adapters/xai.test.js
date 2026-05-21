@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import './mock-env.js';
 import { runGenericAdapterTests } from './test-suite.js';
-import XAIAdapter from '../../lib/chat/llm/adapters/xai.js';
+import XAIAdapter from '../../lib/chat/llm/adapters/implementations/xai.js';
 
 test('xAI Adapter', async (t) => {
   const config = {

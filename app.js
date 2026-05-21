@@ -77,7 +77,7 @@ async function initializeDatabase(dependencies) {
     const { performFullInitialization } = await import('./lib/initialization/index.js')
     await performFullInitialization()
 
-    logger.info('初始化数据库连接...')
+    logger.debug('初始化数据库连接...')
     
     // 2. 初始化 Prisma 管理器
     await prismaManager.initialize()
@@ -89,7 +89,7 @@ async function initializeDatabase(dependencies) {
     await TaskService.initialize()
     
     // 4. 初始化默认配置（如果数据库中没有）
-    logger.info('初始化默认配置...')
+    logger.debug('初始化默认配置...')
     await initializeDefaults()
     
     // 检查并执行自动迁移
@@ -100,12 +100,12 @@ async function initializeDatabase(dependencies) {
     try {
       const config = (await import('./lib/config.js')).default
       await config.reload()
-      logger.info('配置已从数据库重新加载以应用默认值')
+      logger.debug('配置已从数据库重新加载以应用默认值')
     } catch (err) {
       logger.warn('重新加载配置时发生问题，可能导致配置不同步:', err.message)
     }
     
-    logger.info('数据库和服务初始化完成')
+    logger.debug('数据库和服务初始化完成')
   } catch (error) {
     logger.error('数据库初始化失败:', error)
     process.exit(1)

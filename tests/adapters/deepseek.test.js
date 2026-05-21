@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import './mock-env.js';
 import { runGenericAdapterTests } from './test-suite.js';
-import DeepSeekAdapter from '../../lib/chat/llm/adapters/deepseek.js';
+import DeepSeekAdapter from '../../lib/chat/llm/adapters/implementations/deepseek.js';
 
 test('DeepSeek Adapter', async (t) => {
   const config = {

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import './mock-env.js';
 import { runGenericAdapterTests } from './test-suite.js';
-import OpenAIBot from '../../lib/chat/llm/adapters/openai.js';
+import OpenAIBot from '../../lib/chat/llm/adapters/implementations/openai.js';
 
 test('OpenAI Adapter', async (t) => {
   const config = {

@@ -362,11 +362,6 @@ export class EnhancedLogger extends EventEmitter {
     // 检查全局 debug 标志（保持原有行为）
     if (global.debug || process.env.NODE_ENV === 'development') {
       this.log('DEBUG', msg, extra)
-      // 保持原有控制台输出行为
-      if (this.config.console) {
-        console.log(msg)
-        console.log('\x1b[0m')
-      }
     }
   }
 
