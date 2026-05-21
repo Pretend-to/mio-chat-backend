@@ -26,18 +26,14 @@ RUN apk update && apk add --no-cache \
     g++ \
     && npm install -g pnpm@10
 
-# 复制 package.json 和 pnpm-lock.yaml
+# 复制 package.json 和 pnpm-lock.yaml 以及 prisma
 COPY package.json pnpm-lock.yaml* ./
+COPY prisma/ ./prisma/
 
-# 安装 Node.js 依赖
-# 移除 --ignore-scripts 以允许编译 better-sqlite3 等原生模块
+# 安装 Node.js 依赖（编译 better-sqlite3 并自动执行 prisma generate）
 RUN PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
     pnpm install --frozen-lockfile
-
-# 复制 Prisma Schema 并生成客户端
-COPY prisma/ ./prisma/
-RUN pnpm run db:generate
 
 # 创建 logs 目录
 RUN mkdir -p logs
