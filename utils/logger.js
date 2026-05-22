@@ -377,6 +377,11 @@ export class EnhancedLogger extends EventEmitter {
     if (str.startsWith('data:')) {
       return true
     }
+
+    // 检查 base64:// 格式
+    if (str.startsWith('base64://')) {
+      return true
+    }
     
     // 检查纯 base64 字符串（必须很长且符合base64格式）
     if (str.length > 100) {
@@ -431,6 +436,15 @@ export class EnhancedLogger extends EventEmitter {
         return `${mimeType}[BASE64_DATA:${dataLength}chars]`
       }
       return '[DATA_URL]'
+    }
+
+    // 处理 base64:// 格式
+    if (str.startsWith('base64://')) {
+      const base64Data = str.substring(9)
+      const dataLength = base64Data.length
+      const preview = base64Data.substring(0, 8)
+      const suffix = base64Data.substring(base64Data.length - 8)
+      return `base64://[BASE64_DATA:${dataLength}chars:${preview}...${suffix}]`
     }
     
     // 处理纯 base64 字符串
@@ -497,7 +511,7 @@ export class EnhancedLogger extends EventEmitter {
         // 处理字符串值
         if (typeof value === 'string') {
           // 只对明确的 data URL 进行处理
-          if (value.startsWith('data:image/') || value.startsWith('data:video/') || value.startsWith('data:audio/')) {
+          if (value.startsWith('data:image/') || value.startsWith('data:video/') || value.startsWith('data:audio/') || value.startsWith('base64://')) {
             return this.maskBase64(value)
           }
           
@@ -509,7 +523,7 @@ export class EnhancedLogger extends EventEmitter {
         
         // 只对明确的图片/媒体数据字段进行处理
         if (key === 'data' && typeof value === 'string') {
-          if (value.startsWith('data:image/') || value.startsWith('data:video/') || value.startsWith('data:audio/')) {
+          if (value.startsWith('data:image/') || value.startsWith('data:video/') || value.startsWith('data:audio/') || value.startsWith('base64://')) {
             return this.maskBase64(value)
           }
           // 对于其他 data 字段，只有在确实很长时才简化
@@ -520,7 +534,11 @@ export class EnhancedLogger extends EventEmitter {
           }
         }
         
-        if (key === 'url' && typeof value === 'string' && value.startsWith('data:')) {
+        if (key === 'url' && typeof value === 'string' && (value.startsWith('data:') || value.startsWith('base64://'))) {
+          return this.maskBase64(value)
+        }
+
+        if (key === 'file' && typeof value === 'string' && (value.startsWith('data:') || value.startsWith('base64://'))) {
           return this.maskBase64(value)
         }
         
