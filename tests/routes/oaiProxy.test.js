@@ -71,12 +71,39 @@ global.middleware.llm = {
         
         e.complete()
       }
+    },
+    'gemini-stream-tools': {
+      models: [
+        { owner: 'Google', models: ['gemini-stream-tools'] }
+      ],
+      guestModels: [],
+      async handleChatRequest(e) {
+        // Emit toolCall twice with cumulative arguments (simulating Gemini stream repetition)
+        e.update({
+          type: 'toolCall',
+          content: {
+            id: 'call_123',
+            name: 'my_tool',
+            parameters: { user_prompt: 'hello' }
+          }
+        })
+        e.update({
+          type: 'toolCall',
+          content: {
+            id: 'call_123',
+            name: 'my_tool',
+            parameters: { user_prompt: 'hello' }
+          }
+        })
+        e.complete()
+      }
     }
   },
   instanceMetadata: {
     'openai-1': { displayName: 'OpenAI-主要', adapterType: 'openai' },
     'gemini-1': { displayName: 'Gemini-主要', adapterType: 'gemini' },
-    'tool-adapter': { displayName: 'Tools-Instance', adapterType: 'openai' }
+    'tool-adapter': { displayName: 'Tools-Instance', adapterType: 'openai' },
+    'gemini-stream-tools': { displayName: 'Gemini-Stream-Tools', adapterType: 'gemini' }
   }
 }
 
@@ -247,5 +274,32 @@ test('OpenAI Proxy Route - Tool Call Interception', async (t) => {
     assert.ok(res.body.choices[0].message.tool_calls)
     assert.strictEqual(res.body.choices[0].message.tool_calls[0].function.name, 'get_weather')
     assert.strictEqual(res.body.choices[0].finish_reason, 'tool_calls')
+  })
+})
+
+test('OpenAI Proxy Route - Chat Completions (Stream) De-duplication', async (t) => {
+  await t.test('should only output the first instance of cumulative tool call arguments and ignore duplicates', async () => {
+    const { req, res } = createMockReqRes({
+      model: 'Gemini-Stream-Tools/gemini-stream-tools',
+      messages: [{ role: 'user', content: 'run tool' }],
+      stream: true
+    })
+
+    await oaiProxyController.chatCompletions(req, res)
+
+    assert.strictEqual(res.headers['Content-Type'], 'text/event-stream')
+    assert.ok(res.writeBuffer.length > 0)
+
+    // Filter writeBuffer to find toolCall chunks
+    const toolCallChunks = res.writeBuffer
+      .filter(chunk => chunk.startsWith('data: ') && !chunk.includes('[DONE]'))
+      .map(chunk => JSON.parse(chunk.substring(6)))
+      .filter(data => data.choices[0].delta.tool_calls)
+
+    // Should only have exactly 1 tool_calls delta package sent (since the second one is a duplicate)
+    assert.strictEqual(toolCallChunks.length, 1)
+    const functionCall = toolCallChunks[0].choices[0].delta.tool_calls[0].function
+    assert.strictEqual(functionCall.name, 'my_tool')
+    assert.strictEqual(functionCall.arguments, JSON.stringify({ user_prompt: 'hello' }))
   })
 })
