@@ -1,6 +1,8 @@
 import https from 'https'
 import http from 'http'
 import crypto from 'crypto'
+import fs from 'fs'
+import path from 'path'
 import * as fileType from 'file-type'
 import storageService from '../lib/storage/StorageService.js'
 
@@ -93,4 +95,43 @@ async function bufferToImageUrl(baseUrl, buffer) {
   return finalUrl
 }
 
-export { imgUrlToBase64, getBufferName, base64ToImageUrl, bufferToImageUrl }
+async function getLocalFileAsBase64(url) {
+  try {
+    let filePath
+    if (url.startsWith('/f/up/')) {
+      const parts = url.split('/')
+      const type = parts[3]
+      const name = parts[4]
+      filePath = path.join(process.cwd(), 'output', 'uploaded', type, name)
+    } else if (url.startsWith('/f/gen/')) {
+      const parts = url.split('/')
+      const name = parts[4]
+      filePath = path.join(process.cwd(), 'output', 'generated', 'file', name)
+    } else if (url.startsWith('/')) {
+      filePath = path.join(process.cwd(), url)
+    }
+
+    if (filePath && fs.existsSync(filePath)) {
+      const buffer = fs.readFileSync(filePath)
+      const ext = path.extname(filePath).toLowerCase()
+      const mimeMap = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp'
+      }
+      const mimeType = mimeMap[ext] || 'image/png'
+      return `data:${mimeType};base64,${buffer.toString('base64')}`
+    }
+  } catch (err) {
+    if (typeof logger !== 'undefined') {
+      logger.error('Failed to read local file to base64:', err)
+    } else {
+      console.error('Failed to read local file to base64:', err)
+    }
+  }
+  return null
+}
+
+export { imgUrlToBase64, getBufferName, base64ToImageUrl, bufferToImageUrl, getLocalFileAsBase64 }

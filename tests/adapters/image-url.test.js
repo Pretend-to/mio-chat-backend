@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
+import fs from 'fs';
+import path from 'path';
 import './mock-env.js';
 import GeminiAdapter from '../../lib/chat/llm/adapters/implementations/gemini.js';
 import OpenAIAdapter from '../../lib/chat/llm/adapters/implementations/openai.js';
@@ -62,5 +64,20 @@ test('Image URL pre-processing and data wrapping', async (t) => {
     const content = processed[0].content;
     assert.strictEqual(content[1].type, 'image_url');
     assert.strictEqual(content[1].image_url.url, base64Data);
+  });
+
+  await t.test('GeminiAdapter: should handle raw base64 string by auto-wrapping it', async () => {
+    const rawBase64 = 'iVBORw0KGgoAAAANS';
+    const rawMessages = [
+      {
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: rawBase64 }
+        ]
+      }
+    ];
+    const adapter = new GeminiAdapter({ api_key: 'test', base_url: 'http://localhost' });
+    const processed = await adapter._processMessages(rawMessages);
+    assert.strictEqual(processed[0].content[0].image_url.url, `data:image/jpeg;base64,${rawBase64}`);
   });
 });
