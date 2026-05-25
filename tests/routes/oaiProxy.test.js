@@ -97,13 +97,29 @@ global.middleware.llm = {
         })
         e.complete()
       }
+    },
+    'args-echo': {
+      models: [
+        { owner: 'Test', models: ['args-echo'] }
+      ],
+      guestModels: [],
+      // Captures the last assistant tool_calls arguments seen in e.body.messages
+      async handleChatRequest(e) {
+        const msgs = e.body.messages
+        const assistantMsg = [...msgs].reverse().find(m => m.role === 'assistant' && Array.isArray(m.tool_calls))
+        if (assistantMsg) {
+          e.update({ type: 'content', content: assistantMsg.tool_calls[0].function.arguments })
+        }
+        e.complete()
+      }
     }
   },
   instanceMetadata: {
     'openai-1': { displayName: 'OpenAI-主要', adapterType: 'openai' },
     'gemini-1': { displayName: 'Gemini-主要', adapterType: 'gemini' },
     'tool-adapter': { displayName: 'Tools-Instance', adapterType: 'openai' },
-    'gemini-stream-tools': { displayName: 'Gemini-Stream-Tools', adapterType: 'gemini' }
+    'gemini-stream-tools': { displayName: 'Gemini-Stream-Tools', adapterType: 'gemini' },
+    'args-echo': { displayName: 'Args-Echo', adapterType: 'test' }
   }
 }
 
@@ -301,5 +317,65 @@ test('OpenAI Proxy Route - Chat Completions (Stream) De-duplication', async (t) 
     const functionCall = toolCallChunks[0].choices[0].delta.tool_calls[0].function
     assert.strictEqual(functionCall.name, 'my_tool')
     assert.strictEqual(functionCall.arguments, JSON.stringify({ user_prompt: 'hello' }))
+  })
+})
+
+test('OpenAI Proxy Route - Message Sanitization (duplicated tool_calls.arguments)', async (t) => {
+  await t.test('should strip the duplicated JSON suffix from tool_calls arguments before passing to adapter', async () => {
+    const validArgs = JSON.stringify({ code: 'import bpy\nprint(1)' })
+    const duplicatedArgs = validArgs + validArgs  // Simulate stream-repetition bug
+
+    const { req, res } = createMockReqRes({
+      model: 'Args-Echo/args-echo',
+      messages: [
+        { role: 'user', content: 'run script' },
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{
+            id: 'call_dup1',
+            type: 'function',
+            function: { name: 'run_blender', arguments: duplicatedArgs }
+          }]
+        },
+        { role: 'tool', tool_call_id: 'call_dup1', content: 'done' }
+      ],
+      stream: false
+    })
+
+    await oaiProxyController.chatCompletions(req, res)
+
+    assert.strictEqual(res.statusCode, 200)
+    // The adapter echoes back what it sees for arguments; it should be the clean version
+    const echoed = res.body.choices[0].message.content
+    assert.strictEqual(echoed, validArgs, `Expected clean args but got: ${echoed}`)
+  })
+
+  await t.test('should leave already-valid arguments unchanged', async () => {
+    const validArgs = JSON.stringify({ user_prompt: 'hello', code: 'print(1)' })
+
+    const { req, res } = createMockReqRes({
+      model: 'Args-Echo/args-echo',
+      messages: [
+        { role: 'user', content: 'go' },
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{
+            id: 'call_ok1',
+            type: 'function',
+            function: { name: 'run_blender', arguments: validArgs }
+          }]
+        },
+        { role: 'tool', tool_call_id: 'call_ok1', content: 'ok' }
+      ],
+      stream: false
+    })
+
+    await oaiProxyController.chatCompletions(req, res)
+
+    assert.strictEqual(res.statusCode, 200)
+    const echoed = res.body.choices[0].message.content
+    assert.strictEqual(echoed, validArgs)
   })
 })
