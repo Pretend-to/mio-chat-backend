@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import './mock-env.js';
-import { scanFrontendTurns } from '../../lib/chat/llm/services/CrystallizationService.js';
+import { scanFrontendTurns, compress } from '../../lib/chat/llm/services/CrystallizationService.js';
 
 test('Crystallization - scanFrontendTurns', async (t) => {
   await t.test('should return 0 for empty or null messages', () => {
@@ -172,3 +172,62 @@ test('Crystallization - Memory Tool integration', async (t) => {
     assert.strictEqual(event.body.settings.previous_summary, result.summary);
   });
 });
+
+test('Crystallization - compress process', async (t) => {
+  await t.test('should run compression successfully and reconstruct message chain', async () => {
+    const updates = [];
+    const mockEvent = {
+      body: {
+        messages: [
+          { role: 'user', content: 'hello 1' },
+          { role: 'assistant', content: 'hi 1' },
+          { role: 'user', content: 'hello 2' },
+          { role: 'assistant', content: 'hi 2' },
+        ],
+        settings: {
+          crystallization_keep_turns: 1, // keep 'hello 2' and 'hi 2'
+          previous_summary: '<long_term_profile>\nUser likes Rust\n</long_term_profile>',
+        }
+      },
+      update: (data) => {
+        updates.push(data);
+      }
+    };
+
+    const mockLlmService = {
+      llms: {
+        mock_channel: {
+          models: [{ models: ['mock-model'] }],
+          handleChatRequest: async (compressEvent) => {
+            compressEvent.update({
+              type: 'content',
+              content: '<long_term_profile>\nUser likes JavaScript\n</long_term_profile>',
+            });
+            compressEvent.complete();
+          }
+        }
+      }
+    };
+
+    const result = await compress(mockEvent, mockLlmService);
+
+    assert.ok(result);
+    assert.strictEqual(result.summary, '<long_term_profile>\nUser likes JavaScript\n</long_term_profile>');
+    
+    // The reconstructed message chain should be: [crystalSystemMessage, ...recentMessages]
+    // recentMessages: hello 2 (index 2) and hi 2 (index 3)
+    assert.strictEqual(result.messages.length, 3);
+    assert.strictEqual(result.messages[0].role, 'system');
+    assert.strictEqual(result.messages[0]._is_crystal, true);
+    assert.ok(result.messages[0].content.includes('User likes JavaScript'));
+    assert.strictEqual(result.messages[1].content, 'hello 2');
+    assert.strictEqual(result.messages[2].content, 'hi 2');
+
+    // Verify updates stream was triggered
+    assert.ok(updates.length > 0);
+    assert.strictEqual(updates[0].type, 'crystallize');
+    assert.strictEqual(updates[0].content.status, 'running');
+    assert.strictEqual(updates[0].content.summary, '<long_term_profile>\nUser likes JavaScript\n</long_term_profile>');
+  });
+});
+
