@@ -1,0 +1,12 @@
+{
+  "name": "terminal-pty",
+  "version": "1.0.0",
+  "description": "PTY-based terminal execution plugin with persistent session support",
+  "type": "module",
+  "main": "index.js",
+  "dependencies": {
+    "node-pty": "^1.1.0",
+    "@xterm/headless": "^6.0.0",
+    "strip-ansi": "^7.1.0"
+  }
+}

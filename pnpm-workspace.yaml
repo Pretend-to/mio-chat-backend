@@ -1,4 +1,5 @@
 packages:
+  - 'lib/plugins/*'
   - 'plugins/*'
 
 ignoredBuiltDependencies:
@@ -9,3 +10,4 @@ onlyBuiltDependencies:
   - '@prisma/client'
   - '@prisma/engines'
   - prisma
+  - node-pty
