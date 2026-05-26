@@ -40,6 +40,9 @@ importers:
       '@prisma/client-runtime-utils':
         specifier: 7.8.0
         version: 7.8.0
+      '@puppeteer/browsers':
+        specifier: ^2.13.0
+        version: 2.13.0
       api:
         specifier: ^6.1.3
         version: 6.1.3(openapi-types@12.1.3)
