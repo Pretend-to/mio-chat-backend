@@ -151,6 +151,7 @@ model LLMCallLog {
   userIp           String?  @map("user_ip") // 触发调用的 IP 地址 (e.user?.ip)
   contactorId      String?  @map("contactor_id") // 触发会话的窗口 ID (e.body?.contactorId)
   presetName       String?  @map("preset_name") // 使用的 Agent 预设名称 (e.body?.settings?.presetSettings?.name)
+  sessionTitle     String?  @map("session_title") // 关联会话的主题/第一条输入
   provider         String // 适配器渠道 (openai, deepseek, gemini, vertex 等)
   model            String // 调用的具体模型 (如 deepseek-chat, gpt-5.4-nano 等)
   isStream         Boolean  @default(true) @map("is_stream") // 是否流式请求
@@ -159,6 +160,7 @@ model LLMCallLog {
   candidatesTokens Int      @default(0) @map("candidates_tokens") // 输出 Token 数
   thinkingTokens   Int      @default(0) @map("thinking_tokens") // 深度思考 Token 数
   toolsCalled      String?  @default("[]") @map("tools_called") // JSON 数组，记录调用的多个工具名称 (如 ["memory_query", "web_search"])
+  toolDetails      String?  @default("[]") @map("tool_details") // JSON 数组，记录调用的多个工具详细信息 { name, arguments, output }
   cacheHitTokens   Int      @default(0) @map("cache_hit_tokens") // 缓存命中 Token 数
   cacheMissTokens  Int      @default(0) @map("cache_miss_tokens") // 缓存未命中 Token 数
   totalTokens      Int      @default(0) @map("total_tokens") // 总 Token 数
