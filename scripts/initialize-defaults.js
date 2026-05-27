@@ -41,7 +41,11 @@ const DEFAULT_MODEL_OWNERS = [
   { owner: '美团', keywords: ['meituan', 'longcat'] },
   { owner: 'OpenRouter', keywords: ['openrouter'] },
   { owner: 'Groq', keywords: ['groq'] },
-  { owner: 'GitHub', keywords: ['github', 'copilot'] }
+  { owner: 'GitHub', keywords: ['github', 'copilot'] },
+  { owner: '零一万物', keywords: ['zeroone', '01.ai', 'yi'] },
+  { owner: '百川智能', keywords: ['baichuan'] },
+  { owner: '阶跃星辰', keywords: ['stepfun', 'step', 'yuewen'] },
+  { owner: 'Perplexity', keywords: ['perplexity'] }
 ]
 
 /**
