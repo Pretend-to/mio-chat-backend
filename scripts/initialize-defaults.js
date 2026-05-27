@@ -38,7 +38,10 @@ const DEFAULT_MODEL_OWNERS = [
   { owner: 'Minimax', keywords: ['minimax'] },
   { owner: '火山引擎', keywords: ['volcengine', 'volc', 'ark'] },
   { owner: '快手', keywords: ['kuaishou', 'kling', 'kwaiyii', 'kwai'] },
-  { owner: '美团', keywords: ['meituan', 'longcat'] }
+  { owner: '美团', keywords: ['meituan', 'longcat'] },
+  { owner: 'OpenRouter', keywords: ['openrouter'] },
+  { owner: 'Groq', keywords: ['groq'] },
+  { owner: 'GitHub', keywords: ['github', 'copilot'] }
 ]
 
 /**
