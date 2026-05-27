@@ -9,9 +9,6 @@ import prismaManager from '../lib/database/prisma.js'
 import SystemSettingsService from '../lib/database/services/SystemSettingsService.js'
 import PluginConfigService from '../lib/database/services/PluginConfigService.js'
 import logger from '../utils/logger.js'
-import fs from 'fs'
-import path from 'path'
-import yaml from 'js-yaml'
 import crypto from 'crypto'
 
 /**
@@ -22,20 +19,27 @@ function generateSecureCode() {
 }
 
 /**
- * 加载默认的 owners 配置
+ * 默认模型所有者/分组配置
  */
-function loadDefaultOwners() {
-  try {
-    const ownersPath = path.join(process.cwd(), 'config', 'owners.yaml')
-    if (fs.existsSync(ownersPath)) {
-      const ownersContent = fs.readFileSync(ownersPath, 'utf8')
-      return yaml.load(ownersContent)
-    }
-  } catch (error) {
-    logger.warn('加载默认 owners 配置失败:', error.message)
-  }
-  return []
-}
+const DEFAULT_MODEL_OWNERS = [
+  { owner: 'OpenAI', keywords: ['gpt', 'o1', 'o3', 'o4'] },
+  { owner: 'Cohere', keywords: ['command'] },
+  { owner: 'Anthropic', keywords: ['claude'] },
+  { owner: 'Google', keywords: ['gemini', 'PaLM', 'gemma'] },
+  { owner: 'X.AI', keywords: ['grok'] },
+  { owner: 'DeepSeek', keywords: ['deepseek'] },
+  { owner: '智谱清言', keywords: ['glm'] },
+  { owner: '豆包', keywords: ['doubao'] },
+  { owner: '月之暗面 (kimi)', keywords: ['moonshot', 'kimi'] },
+  { owner: '科大讯飞', keywords: ['sparkdesk'] },
+  { owner: '通义千问', keywords: ['qwen', 'qwq', 'qvq'] },
+  { owner: '腾讯混元', keywords: ['hunyuan'] },
+  { owner: '小米', keywords: ['mimo'] },
+  { owner: 'Minimax', keywords: ['minimax'] },
+  { owner: '火山引擎', keywords: ['volcengine', 'volc', 'ark'] },
+  { owner: '快手', keywords: ['kuaishou', 'kling', 'kwaiyii', 'kwai'] },
+  { owner: '美团', keywords: ['meituan', 'longcat'] }
+]
 
 /**
  * 初始化默认系统设置
@@ -72,10 +76,11 @@ async function initializeDefaultSystemSettings() {
     },
     {
       key: 'model_owners',
-      value: loadDefaultOwners(),
+      value: DEFAULT_MODEL_OWNERS,
       category: 'general',
       description: '模型所有者配置'
     },
+
     {
       key: 'web_full_screen',
       value: process.env.WEB_FULL_SCREEN === 'false' ? false : true,
@@ -176,11 +181,18 @@ async function initializeDefaultSystemSettings() {
           logger.warn(`🔐 自动生成的${setting.description}: ${setting.value}`)
           logger.warn('⚠️  请妥善保存此访问码！')
         }
+      } else if (setting.key === 'model_owners') {
+        // 无感更新模型所有者配置：如果与硬编码的默认值不一致，自动更新数据库中的值
+        const existingValue = existing.value
+        if (JSON.stringify(existingValue) !== JSON.stringify(setting.value)) {
+          await SystemSettingsService.set(setting.key, setting.value, setting.category, setting.description)
+          logger.info(`✓ 无感更新模型所有者配置 (${setting.key})`)
+        }
       } else {
         // logger.debug(`- 设置已存在: ${setting.key}`)
       }
     } catch (error) {
-      logger.error(`创建默认设置失败 ${setting.key}:`, error)
+      logger.error(`创建/更新默认设置失败 ${setting.key}:`, error)
     }
   }
 }

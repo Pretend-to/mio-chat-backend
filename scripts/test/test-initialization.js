@@ -4,12 +4,12 @@
  * 测试初始化流程脚本
  */
 
-import prismaManager from '../lib/database/prisma.js'
-import SystemSettingsService from '../lib/database/services/SystemSettingsService.js'
-import PluginConfigService from '../lib/database/services/PluginConfigService.js'
-import PresetService from '../lib/database/services/PresetService.js'
-import initializeDefaults from './initialize-defaults.js'
-import logger from '../utils/logger.js'
+import prismaManager from '../../lib/database/prisma.js'
+import SystemSettingsService from '../../lib/database/services/SystemSettingsService.js'
+import PluginConfigService from '../../lib/database/services/PluginConfigService.js'
+import PresetService from '../../lib/database/services/PresetService.js'
+import initializeDefaults from '../initialize-defaults.js'
+import logger from '../../utils/logger.js'
 
 async function testInitialization() {
   try {
@@ -31,7 +31,7 @@ async function testInitialization() {
     
     // 4. 测试配置加载
     logger.info('4. 测试配置加载...')
-    const config = (await import('../lib/config.js')).default
+    const config = (await import('../../lib/config.js')).default
     await config._waitForInit()
     
     // 5. 验证配置
