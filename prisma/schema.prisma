@@ -134,6 +134,8 @@ model Task {
   provider     String? // LLM 渠道 (快照)
   model        String? // 模型名称 (快照)
   status       String    @default("active") // 'active' | 'disabled' | 'finished'
+  history      String?   @default("[]") // 存储任务运行的连续前端格式对话历史
+  shWhitelist  String?   @default("")   // 自定义命令白名单，换行或逗号分隔
   lastRunAt    DateTime? @map("last_run_at")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
