@@ -209,7 +209,7 @@ test('Crystallization - compress process', async (t) => {
       }
     };
 
-    const result = await compress(mockEvent, mockLlmService);
+    const result = await compress(mockEvent, mockLlmService, 2);
 
     assert.ok(result);
     assert.strictEqual(result.summary, '<long_term_profile>\nUser likes JavaScript\n</long_term_profile>');
