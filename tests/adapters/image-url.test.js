@@ -78,6 +78,6 @@ test('Image URL pre-processing and data wrapping', async (t) => {
     ];
     const adapter = new GeminiAdapter({ api_key: 'test', base_url: 'http://localhost' });
     const processed = await adapter._processMessages(rawMessages);
-    assert.strictEqual(processed[0].content[0].image_url.url, `data:image/jpeg;base64,${rawBase64}`);
+    assert.strictEqual(processed[0].content[0].image_url.url, `data:image/png;base64,${rawBase64}`);
   });
 });
