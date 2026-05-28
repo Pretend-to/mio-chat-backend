@@ -60,5 +60,48 @@ test('Gemini Adapter', async (t) => {
     }
   });
 
+  await t.test('_processStreamResponse handles SSE line split across chunks', async () => {
+    const { Gemini } = await import('../../lib/chat/llm/adapters/lib/geminiHttpClient.js');
+    const gemini = new Gemini({ base_url: 'https://mock', api_key: 'key' });
+
+    // 完整的 SSE 行
+    const fullLine1 = 'data: {"candidates":[{"content":{"parts":[{"text":"Hello"}]}}]}\n';
+    // 第二行被切成两个 chunk
+    const fullLine2 = 'data: {"candidates":[{"content":{"parts":[{"text":"World"}]}}]}\n';
+    
+    const chunk1 = fullLine1 + fullLine2.substring(0, 30);
+    const chunk2 = fullLine2.substring(30);
+
+    const encoder = new TextEncoder();
+
+    let readIndex = 0;
+    const chunks = [encoder.encode(chunk1), encoder.encode(chunk2)];
+    
+    const mockResponse = {
+      body: {
+        getReader() {
+          return {
+            async read() {
+              if (readIndex < chunks.length) {
+                return { done: false, value: chunks[readIndex++] };
+              }
+              return { done: true, value: undefined };
+            },
+            releaseLock() {}
+          };
+        }
+      }
+    };
+
+    const results = [];
+    for await (const chunk of gemini._processStreamResponse(mockResponse)) {
+      results.push(chunk);
+    }
+
+    assert.strictEqual(results.length, 2);
+    assert.strictEqual(results[0].candidates[0].content.parts[0].text, 'Hello');
+    assert.strictEqual(results[1].candidates[0].content.parts[0].text, 'World');
+  });
+
   await runGenericAdapterTests(t, GeminiAdapter, config, mocks);
 });
