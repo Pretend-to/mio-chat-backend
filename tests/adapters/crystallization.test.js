@@ -194,22 +194,18 @@ test('Crystallization - compress process', async (t) => {
       }
     };
 
-    const mockLlmService = {
-      llms: {
-        mock_channel: {
-          models: [{ models: ['mock-model'] }],
-          handleChatRequest: async (compressEvent) => {
-            compressEvent.update({
-              type: 'content',
-              content: '<long_term_profile>\nUser likes JavaScript\n</long_term_profile>',
-            });
-            compressEvent.complete();
-          }
-        }
+    const mockLlm = {
+      models: [{ models: ['mock-model'] }],
+      handleChatRequest: async (compressEvent) => {
+        compressEvent.update({
+          type: 'content',
+          content: '<long_term_profile>\nUser likes JavaScript\n</long_term_profile>',
+        });
+        compressEvent.complete();
       }
     };
 
-    const result = await compress(mockEvent, mockLlmService, 2);
+    const result = await compress(mockEvent, mockLlm, 2);
 
     assert.ok(result);
     assert.strictEqual(result.summary, '<long_term_profile>\nUser likes JavaScript\n</long_term_profile>');
