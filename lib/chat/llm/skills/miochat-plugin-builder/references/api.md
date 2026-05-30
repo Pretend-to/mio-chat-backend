@@ -39,6 +39,12 @@ class MioFunction {
   async requestUserApproval(e, prompt, meta = {}) {
     // Returns approval result payload: { approved: boolean, reason: string | null }
   }
+
+  // Push preset UI render configurations to the frontend (e.g. dynamic alert, images, links)
+  // renders: Array<object>, e.g. [{ type: 'link', url: '...', text: '...' }]
+  setExtraRender(e, renders) {
+    // Pushes extra render array to the chat event stream
+  }
 }
 ```
 

@@ -59,8 +59,81 @@ export default class MyPlugin extends Plugin {
   }
 }
 ```
+## 🎨 Extra Render UI (extraRender)
+
+You can output custom frontend UI components in the chat interface by returning or setting an `extraRender` list. This is useful for directly displaying links, images, or formatted alerts as part of the tool execution feedback, without polluting the plain text response.
+
+There are two ways to provide `extraRender` content:
+
+### Option A: Return as part of tool execution result
+You can return an object containing the standard tool `result` and an `extraRender` array:
+```javascript
+async myToolFunction(e) {
+  const imageUrl = "https://example.com/image.png";
+  return {
+    result: { success: true, url: imageUrl },
+    extraRender: [
+      {
+        type: 'image',
+        url: imageUrl
+      }
+    ]
+  }
+}
+```
+
+### Option B: Call dynamically via Base Class
+You can also call the `setExtraRender(e, renders)` helper method on the tool class instance to stream UI renderings before completion:
+```javascript
+async myToolFunction(e) {
+  this.setExtraRender(e, [
+    {
+      type: 'alert',
+      title: 'Task progress',
+      alertType: 'info',
+      description: 'Preparing environment...'
+    }
+  ]);
+  // Perform long-running tasks...
+}
+```
+
+### Supported extraRender Item Types
+The frontend supports the following `extraRender` structures:
+1. **Link**:
+   ```json
+   {
+     "type": "link",
+     "url": "https://example.com",
+     "text": "Open link 🌐"
+   }
+   ```
+2. **Image**:
+   ```json
+   {
+     "type": "image",
+     "url": "https://example.com/image.jpg"
+   }
+   ```
+3. **Text**:
+   ```json
+   {
+     "type": "text",
+     "content": "Custom text block to show on the card."
+   }
+   ```
+4. **Alert** (Element UI alert):
+   ```json
+   {
+     "type": "alert",
+     "title": "Alert Title",
+     "alertType": "success" | "info" | "warning" | "error",
+     "description": "Optional detailed description"
+   }
+   ```
 
 ---
+
 
 ## 🧪 Debugging & Validation (The Loop)
 
