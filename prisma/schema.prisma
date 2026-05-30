@@ -128,7 +128,7 @@ model Task {
   preset       String // 绑定的 Agent 预设名
   systemPrompt String?   @map("system_prompt") // 可选的系统提示词覆盖
   tools        String?   @default("[]") // 可选的工具列表覆盖 (JSON)
-  prompt       String // 任务提示词
+  triggerPrompt String?   @default("") @map("prompt") // 任务唤起/触发提示词
   userId       String?   @map("user_id") // 结果推送的目标用户
   contactorId  String?   @map("contactor_id") // 前端对话框 ID
   provider     String? // LLM 渠道 (快照)
