@@ -43,3 +43,7 @@ scratch/
 # 环境配置文件
 .env
 .env.*
+
+# 忽略 public 静态资源存放目录
+public/
+
