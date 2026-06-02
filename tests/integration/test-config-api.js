@@ -4,9 +4,9 @@
  * 测试配置 API
  */
 
-import prismaManager from '../lib/database/prisma.js'
-import SystemSettingsService from '../lib/database/services/SystemSettingsService.js'
-import logger from '../utils/logger.js'
+import prismaManager from '../../lib/database/prisma.js'
+import SystemSettingsService from '../../lib/database/services/SystemSettingsService.js'
+import logger from '../../utils/logger.js'
 
 async function testConfigAPI() {
   try {
@@ -23,7 +23,7 @@ async function testConfigAPI() {
     
     // 测试 getFullConfig
     logger.info('\n测试 getFullConfig...')
-    const { getFullConfig } = await import('../lib/server/http/services/configService.js')
+    const { getFullConfig } = await import('../../lib/server/http/services/configService.js')
     const fullConfig = await getFullConfig()
     
     logger.info('完整配置结构:')

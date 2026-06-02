@@ -4,11 +4,11 @@
  * 测试Socket.IO广播模型更新功能
  */
 
-import config from '../lib/config.js'
-import logger from '../utils/logger.js'
-import { updateConfigSection, broadcastModelUpdate } from '../lib/server/http/services/configService.js'
+import config from '../../lib/config.js'
+import logger from '../../utils/logger.js'
+import { updateConfigSection, broadcastModelUpdate } from '../../lib/server/http/services/configService.js'
 // 导入check.js来初始化全局中间件
-import '../lib/check.js'
+import '../../lib/check.js'
 
 async function testSocketIOBroadcast() {
   try {

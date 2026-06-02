@@ -5,8 +5,8 @@
  * 测试文档中提到的所有 OneBot 配置相关接口
  */
 
-import logger from '../utils/logger.js'
-import SystemSettingsService from '../lib/database/services/SystemSettingsService.js'
+import logger from '../../utils/logger.js'
+import SystemSettingsService from '../../lib/database/services/SystemSettingsService.js'
 
 class OneBotAPITester {
   constructor(baseUrl = 'http://localhost:3080', adminCode = null) {

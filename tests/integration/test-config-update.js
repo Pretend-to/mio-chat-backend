@@ -5,7 +5,7 @@
  */
 
 import fetch from 'node-fetch'
-import logger from '../utils/logger.js'
+import logger from '../../utils/logger.js'
 
 const BASE_URL = 'http://127.0.0.1:3001'
 const ADMIN_CODE = 'gb6u1soOivcvg62rz1iuYg=='

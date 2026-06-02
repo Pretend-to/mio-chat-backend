@@ -5,9 +5,9 @@
  * 验证 OneBot 配置是否正确加载和保存
  */
 
-import logger from '../utils/logger.js'
-import SystemSettingsService from '../lib/database/services/SystemSettingsService.js'
-import config from '../lib/config.js'
+import logger from '../../utils/logger.js'
+import SystemSettingsService from '../../lib/database/services/SystemSettingsService.js'
+import config from '../../lib/config.js'
 
 async function testOneBotConfig() {
   try {

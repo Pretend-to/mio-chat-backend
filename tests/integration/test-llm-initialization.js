@@ -5,9 +5,9 @@
  * 验证即使没有配置适配器，LLM 模块也能正确初始化
  */
 
-import logger from '../utils/logger.js'
-import config from '../lib/config.js'
-import Middleware from '../lib/middleware.js'
+import logger from '../../utils/logger.js'
+import config from '../../lib/config.js'
+import Middleware from '../../lib/middleware.js'
 
 async function testLLMInitialization() {
   try {

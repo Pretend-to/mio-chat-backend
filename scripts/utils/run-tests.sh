@@ -51,7 +51,7 @@ fi
 # 运行快速测试
 echo ""
 echo "🧪 运行快速测试..."
-if BASE_URL="$BASE_URL" ADMIN_CODE="$ADMIN_CODE" node scripts/test/quick-test-onebot-api.js; then
+if BASE_URL="$BASE_URL" ADMIN_CODE="$ADMIN_CODE" node tests/integration/quick-test-onebot-api.js; then
     echo "✅ 快速测试通过"
 else
     echo "❌ 快速测试失败"
@@ -61,7 +61,7 @@ fi
 # 运行完整测试
 echo ""
 echo "🧪 运行完整测试..."
-if BASE_URL="$BASE_URL" ADMIN_CODE="$ADMIN_CODE" EXPORT_RESULTS=true node scripts/test/test-onebot-api.js; then
+if BASE_URL="$BASE_URL" ADMIN_CODE="$ADMIN_CODE" EXPORT_RESULTS=true node tests/integration/test-onebot-api.js; then
     echo "✅ 完整测试通过"
 else
     echo "❌ 完整测试失败"
@@ -71,7 +71,7 @@ fi
 # 运行配置测试
 echo ""
 echo "🧪 运行配置测试..."
-if node scripts/test/test-onebot-config.js; then
+if node tests/integration/test-onebot-config.js; then
     echo "✅ 配置测试通过"
 else
     echo "❌ 配置测试失败"

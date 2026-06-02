@@ -8,7 +8,7 @@
 import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
-import logger from '../utils/logger.js'
+import logger from '../../utils/logger.js'
 
 async function testNewUserExperience() {
   logger.info('🧪 测试新用户体验...')
