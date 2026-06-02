@@ -3,8 +3,6 @@
 ## 📋 目录结构
 
 ### 🚀 用户指南
-- [NEW_USER_GUIDE.md](NEW_USER_GUIDE.md) - 新用户完整指南
-- [NEW_USER_DATABASE_INIT.md](NEW_USER_DATABASE_INIT.md) - 新用户数据库初始化指南
 - [DATABASE_SETUP.md](DATABASE_SETUP.md) - 数据库设置说明
 - [DOCKER.md](DOCKER.md) - Docker 部署指南
 
@@ -16,7 +14,6 @@
 
 ### 🔧 开发指南
 - [INITIALIZATION_FIX.md](INITIALIZATION_FIX.md) - 初始化修复指南
-- [LLM_INITIALIZATION_FIX.md](LLM_INITIALIZATION_FIX.md) - LLM 初始化修复
 - [TOOL_DEBUG_GUIDE.md](TOOL_DEBUG_GUIDE.md) - 工具调试指南
 - [ADAPTER_DISCOVERY.md](ADAPTER_DISCOVERY.md) - 适配器发现机制
 - [ADAPTER_TEMPLATE.js](ADAPTER_TEMPLATE.js) - 适配器模板
@@ -32,9 +29,6 @@
 - [PLUGIN_CRUD_EXAMPLES.md](PLUGIN_CRUD_EXAMPLES.md) - 插件 CRUD 示例
 - [PRESET_CRUD_DEVELOPMENT.md](PRESET_CRUD_DEVELOPMENT.md) - 预设 CRUD 开发
 - [VERTEX_MANUAL_MODELS_IMPLEMENTATION.md](VERTEX_MANUAL_MODELS_IMPLEMENTATION.md) - Vertex 手动模型实现
-
-### 🔒 安全文档
-- [masked-fields-protection.md](masked-fields-protection.md) - 敏感字段保护
 
 ### 📡 API 文档
 - [api.md](api.md) - API 接口文档
@@ -52,9 +46,8 @@
 ## 📖 文档使用指南
 
 ### 新用户
-1. 先阅读 [NEW_USER_GUIDE.md](NEW_USER_GUIDE.md)
-2. 按照 [DATABASE_SETUP.md](DATABASE_SETUP.md) 设置数据库
-3. 如需 Docker 部署，参考 [DOCKER.md](DOCKER.md)
+1. 按照 [DATABASE_SETUP.md](DATABASE_SETUP.md) 设置数据库
+2. 如需 Docker 部署，参考 [DOCKER.md](DOCKER.md)
 
 ### 老用户迁移
 1. 阅读 [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)
