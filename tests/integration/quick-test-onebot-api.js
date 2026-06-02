@@ -5,7 +5,7 @@
  * 快速验证文档中提到的接口是否可用
  */
 
-import logger from '../utils/logger.js'
+import logger from '../../utils/logger.js'
 
 // 简单的测试用例
 const tests = [

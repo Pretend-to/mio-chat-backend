@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 import axios from 'axios'
-import logger from '../utils/logger.js'
-import prismaManager from '../lib/database/prisma.js'
-import SystemSettingsService from '../lib/database/services/SystemSettingsService.js'
+import logger from '../../utils/logger.js'
+import prismaManager from '../../lib/database/prisma.js'
+import SystemSettingsService from '../../lib/database/services/SystemSettingsService.js'
 
 /**
  * LLM 适配器管理测试

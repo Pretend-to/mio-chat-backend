@@ -1,8 +1,8 @@
-import prismaManager from '../lib/database/prisma.js'
-import PresetService from '../lib/database/services/PresetService.js'
-import SystemSettingsService from '../lib/database/services/SystemSettingsService.js'
-import PluginConfigService from '../lib/database/services/PluginConfigService.js'
-import logger from '../utils/logger.js'
+import prismaManager from '../../lib/database/prisma.js'
+import PresetService from '../../lib/database/services/PresetService.js'
+import SystemSettingsService from '../../lib/database/services/SystemSettingsService.js'
+import PluginConfigService from '../../lib/database/services/PluginConfigService.js'
+import logger from '../../utils/logger.js'
 
 /**
  * 测试数据库功能
