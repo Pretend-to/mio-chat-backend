@@ -1,6 +1,6 @@
 const CACHE_DATABASE_NAME = "my-cache-db";
 const CACHE_OBJECT_STORE_NAME = "responses";
-const CACHE_VERSION = 14; // 每次修改 Service Worker 文件时，更新此版本号！
+const CACHE_VERSION = 15; // 每次修改 Service Worker 文件时，更新此版本号！
 const MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 天的缓存有效期 (毫秒)
 const CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // 每天清理一次 (毫秒)
 let db;
@@ -317,10 +317,19 @@ self.addEventListener("fetch", (event) => {
 
         // 1. HTML 页面 (index.html)
         if (request.mode === "navigate" && request.destination === "document") {
-          // 网络优先策略 for index.html
+          // 网络优先策略 for index.html，后端重启时避免展示 nginx 502 页面
           try {
-            const networkResponse = await fetch(request); // 尝试从网络获取
-            // 可以选择在这里更新 Cache API 中的 index.html 缓存 (可选)
+            const networkResponse = await fetch(request);
+            // 后端重启时 nginx 返回 502/504，用缓存的 index.html 代替
+            if (!networkResponse.ok) {
+              console.log("Network error", networkResponse.status, "falling back to cached index.html");
+              const cachedResponse = await caches.match(request);
+              if (cachedResponse) {
+                return cachedResponse;
+              }
+              return networkResponse;
+            }
+            // 正常响应，更新缓存
             const cache = await caches.open("html-cache");
             await cache.put(request, networkResponse.clone());
             return networkResponse;
