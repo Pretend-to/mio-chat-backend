@@ -140,9 +140,37 @@ model Task {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
+  executions   TaskExecution[]
+
   @@index([userId])
   @@index([status])
   @@map("tasks")
+}
+
+// 任务执行记录表（每次定时触发对应一条）
+model TaskExecution {
+  id                Int       @id @default(autoincrement())
+  taskId            String    @map("task_id")
+  round             Int       @default(1)
+  userId            String?   @map("user_id")
+  contactorId       String?   @map("contactor_id")
+  provider          String?
+  model             String?
+  triggerPrompt     String?   @map("trigger_prompt")
+  inputMessages     String    @map("input_messages") // JSON: 发送给 LLM 的完整 messages 数组
+  outputChunks      String    @default("[]") @map("output_chunks") // JSON: 原始 streamCache chunks 全量
+  finalAssistantMsg String?   @map("final_assistant_msg") // JSON: 组装后的 assistant 消息
+  status            String    @default("running") // running | completed | failed
+  startedAt         DateTime  @default(now()) @map("started_at")
+  finishedAt        DateTime? @map("finished_at")
+  errorMessage      String?   @map("error_message")
+
+              task              Task      @relation(fields: [taskId], references: [id])
+
+  @@index([taskId])
+  @@index([taskId, round])
+  @@index([status])
+  @@map("task_executions")
 }
 
 // LLM 调用审计日志表
