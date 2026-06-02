@@ -39,3 +39,7 @@ agents.md
 
 # Scratch directory
 scratch/
+
+# 环境配置文件
+.env
+.env.*
