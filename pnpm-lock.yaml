@@ -110,8 +110,8 @@ importers:
         specifier: ^1.1.0-beta21
         version: 1.1.0
       nodemailer:
-        specifier: ^6.10.1
-        version: 6.10.1
+        specifier: ^8.0.10
+        version: 8.0.10
       officeparser:
         specifier: ^5.2.2
         version: 5.2.2
@@ -4008,10 +4008,6 @@ packages:
 
   node-readfiles@0.2.0:
     resolution: {integrity: sha512-SU00ZarexNlE4Rjdm83vglt5Y9yiQ+XI1XpflWlb7q7UTN1JUItm69xMeiQCTxtTfnzt+83T8Cx+vI2ED++VDA==}
-
-  nodemailer@6.10.1:
-    resolution: {integrity: sha512-Z+iLaBGVaSjbIzQ4pX6XV41HrooLsQ10ZWPUehGmuantvzWoDVBnmsdUcOIDM1t+yPor5pDhVlDESgOMEGxhHA==}
-    engines: {node: '>=6.0.0'}
 
   nodemailer@8.0.10:
     resolution: {integrity: sha512-BLFuSth7QtHOkBzyqTehWWyub0NTRDuK2Q2SQfnGLsrJnzyU+Yeh4WpV1eZGuARFj1xQJHIdnTuJZLP+b9R1GQ==}
@@ -10162,8 +10158,6 @@ snapshots:
   node-readfiles@0.2.0:
     dependencies:
       es6-promise: 3.3.1
-
-  nodemailer@6.10.1: {}
 
   nodemailer@8.0.10: {}
 
