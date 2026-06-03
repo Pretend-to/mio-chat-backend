@@ -1,6 +1,6 @@
 const CACHE_DATABASE_NAME = "my-cache-db";
 const CACHE_OBJECT_STORE_NAME = "responses";
-const CACHE_VERSION = 15; // 每次修改 Service Worker 文件时，更新此版本号！
+const CACHE_VERSION = 16; // 每次修改 Service Worker 文件时，更新此版本号！
 const MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 天的缓存有效期 (毫秒)
 const CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // 每天清理一次 (毫秒)
 let db;
@@ -283,12 +283,13 @@ function deleteCachedResponse(cacheKey) {
 }
 
 self.addEventListener("fetch", (event) => {
+  // 对于跨域资源，直接跳过 Service Worker 的干预
+  // 这样可以让浏览器原生处理 CORS，避免 SW 转发导致的请求上下文问题
+  if (!event.request.url.includes(self.location.hostname)) {
+    return;
+  }
+
   if (isDevMode) {
-    // 对于跨域资源，在开发模式下直接跳过 Service Worker 的干预
-    // 这样可以让浏览器原生处理 CORS，避免 SW 转发导致的请求上下文问题
-    if (!event.request.url.includes(self.location.hostname)) {
-      return; 
-    }
     console.log("Dev mode: bypassing cache for", event.request.url);
     event.respondWith(fetch(event.request));
   } else {
