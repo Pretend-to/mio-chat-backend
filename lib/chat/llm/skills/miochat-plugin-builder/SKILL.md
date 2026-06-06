@@ -61,9 +61,14 @@ export default class MyPlugin extends Plugin {
 ```
 ## 🎨 Extra Render UI (extraRender)
 
-You can output custom frontend UI components in the chat interface by returning or setting an `extraRender` list. This is useful for directly displaying links, images, or formatted alerts as part of the tool execution feedback, without polluting the plain text response.
+You can output custom frontend UI components in the chat interface by returning or setting an `extraRender` list. This is useful for directly displaying links, images, audio, or formatted alerts, either folded inside the tool call bar (`inner`) or directly embedded in the chat timeline (`outer`), without polluting the plain text response.
 
-There are two ways to provide `extraRender` content:
+### Placement Modes:
+Each rendering item can specify its display location using the `placement` field:
+- **`'inner'`** (Default): Renders inside the collapsible `<ToolCallBar>` box.
+- **`'outer'`**: Renders directly in the message flow below the tool call bar.
+
+There are three ways to provide `extraRender` content:
 
 ### Option A: Return as part of tool execution result
 You can return an object containing the standard tool `result` and an `extraRender` array:
@@ -75,15 +80,16 @@ async myToolFunction(e) {
     extraRender: [
       {
         type: 'image',
-        url: imageUrl
+        url: imageUrl,
+        placement: 'outer' // Direct message stream display
       }
     ]
   }
 }
 ```
 
-### Option B: Call dynamically via Base Class
-You can also call the `setExtraRender(e, renders)` helper method on the tool class instance to stream UI renderings before completion:
+### Option B: Call dynamically via `setExtraRender`
+Call `this.setExtraRender(e, renders)` on the tool class instance to stream UI renderings before completion. Items default to `placement: 'inner'` if not specified:
 ```javascript
 async myToolFunction(e) {
   this.setExtraRender(e, [
@@ -91,44 +97,71 @@ async myToolFunction(e) {
       type: 'alert',
       title: 'Task progress',
       alertType: 'info',
-      description: 'Preparing environment...'
+      description: 'Preparing environment...',
+      placement: 'inner'
     }
   ]);
   // Perform long-running tasks...
 }
 ```
 
+### Option C: Call dynamically via `setOuterRender`
+Call `this.setOuterRender(e, renders)` to quickly stream elements with `placement: 'outer'` directly to the chat timeline:
+```javascript
+async myToolFunction(e) {
+  this.setOuterRender(e, [
+    {
+      type: 'audio',
+      url: 'https://example.com/voice.mp3'
+    }
+  ]);
+}
+```
+
 ### Supported extraRender Item Types
-The frontend supports the following `extraRender` structures:
-1. **Link**:
+The frontend supports the following `extraRender` structures (any type can be marked with `placement: 'inner' | 'outer'`):
+
+1. **Audio** (Audio player):
+   ```json
+   {
+     "type": "audio",
+     "url": "https://example.com/audio.mp3",
+     "placement": "outer"
+   }
+   ```
+2. **Link** (Download/Resource URL):
    ```json
    {
      "type": "link",
      "url": "https://example.com",
-     "text": "Open link 🌐"
+     "text": "Open link 🌐",
+     "placement": "outer"
    }
    ```
-2. **Image**:
+3. **Image**:
    ```json
    {
      "type": "image",
-     "url": "https://example.com/image.jpg"
+     "url": "https://example.com/image.jpg",
+     "placement": "outer"
    }
    ```
-3. **Text**:
+4. **Text** (Reference quote block):
    ```json
    {
      "type": "text",
-     "content": "Custom text block to show on the card."
+     "content": "Custom text block to show on the card.",
+     "placement": "inner"
    }
    ```
-4. **Alert** (Element UI alert):
+5. **Alert** (Element UI alert message):
    ```json
    {
      "type": "alert",
      "title": "Alert Title",
      "alertType": "success" | "info" | "warning" | "error",
-     "description": "Optional detailed description"
+     "description": "Optional detailed description",
+     "placement": "inner"
    }
    ```
 

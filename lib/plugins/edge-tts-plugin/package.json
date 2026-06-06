@@ -1,0 +1,12 @@
+{
+  "name": "edge-tts-plugin",
+  "version": "1.0.0",
+  "description": "Edge TTS Plugin - 基于 Microsoft Edge 在线 TTS 服务的语音合成插件，免费、无需 API Key",
+  "main": "index.js",
+  "type": "module",
+  "keywords": ["tts", "text-to-speech", "edge", "microsoft", "语音合成"],
+  "license": "ISC",
+  "dependencies": {
+    "edge-tts-universal": "^1.4.0"
+  }
+}
