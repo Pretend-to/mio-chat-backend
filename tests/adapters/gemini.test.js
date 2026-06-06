@@ -237,10 +237,10 @@ test('Gemini Adapter', async (t) => {
       assert.strictEqual(result.toolCalls.length, 2);
       
       assert.strictEqual(result.toolCalls[0].function.name, 'toolA');
-      assert.strictEqual(result.toolCalls[0].id, 'sigA'); // 应该保留 sigA，而不是被 sigB 覆盖
+      assert.strictEqual(result.toolCalls[0].id, 'gemini://sigA|'); // 应该保留 sigA，而不是被 sigB 覆盖
       
       assert.strictEqual(result.toolCalls[1].function.name, 'toolB');
-      assert.strictEqual(result.toolCalls[1].id, 'sigB');
+      assert.strictEqual(result.toolCalls[1].id, 'gemini://sigB|');
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -311,12 +311,11 @@ test('Gemini Adapter', async (t) => {
     assert.strictEqual(toolResponsesContent.role, 'user');
     assert.strictEqual(toolResponsesContent.parts.length, 2);
 
-    // toolA response has valid id
+    // toolA response has no id (since thoughtSignature is not sent as functionResponse.id)
     assert.deepStrictEqual(toolResponsesContent.parts[0], {
       functionResponse: {
         name: 'toolA',
-        response: { name: 'toolA', content: 'resultA' },
-        id: realSigA
+        response: { name: 'toolA', content: 'resultA' }
       }
     });
 
@@ -325,6 +324,55 @@ test('Gemini Adapter', async (t) => {
       functionResponse: {
         name: 'toolB',
         response: { name: 'toolB', content: 'resultB' }
+      }
+    });
+  });
+
+  await t.test('_preProcessMessage correctly translates tool calls and tool responses with new gemini:// ID format', async () => {
+    const { Gemini } = await import('../../lib/chat/llm/adapters/lib/geminiHttpClient.js');
+    const gemini = new Gemini({ base_url: 'https://mock', api_key: 'key' });
+
+    const thoughtSig = 'someReasoningStateSig';
+    const fcId = 'call_abc123';
+    const combinedId = `gemini://${thoughtSig}|${fcId}`;
+
+    const messages = [
+      {
+        role: 'assistant',
+        content: 'Running tool',
+        tool_calls: [
+          {
+            id: combinedId,
+            function: { name: 'myTool', arguments: '{}' }
+          }
+        ]
+      },
+      {
+        role: 'tool',
+        name: 'myTool',
+        content: 'ok',
+        tool_call_id: combinedId
+      }
+    ];
+
+    const { contents } = await gemini._preProcessMessage(messages);
+
+    assert.strictEqual(contents.length, 2);
+
+    // Assistant turn
+    const assistantContent = contents[0];
+    assert.deepStrictEqual(assistantContent.parts[1], {
+      functionCall: { name: 'myTool', args: {}, id: fcId },
+      thoughtSignature: thoughtSig
+    });
+
+    // Tool turn
+    const toolResponsesContent = contents[1];
+    assert.deepStrictEqual(toolResponsesContent.parts[0], {
+      functionResponse: {
+        name: 'myTool',
+        response: { name: 'myTool', content: 'ok' },
+        id: fcId
       }
     });
   });
