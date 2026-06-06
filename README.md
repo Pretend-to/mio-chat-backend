@@ -132,12 +132,9 @@ npm install -g pnpm
 pnpm install
 ```
 
-#### 3. 初始化数据库结构
-```bash
-pnpm db:push
-```
+#### 3. 启动与守护运行 (包含自动数据库初始化与自愈)
+项目内部集成了**数据库自动侦测与自愈机制**。启动时，应用会**自动检测 Schema 变更并同步数据库结构**，无需您手动运行任何数据库迁移命令。
 
-#### 4. 使用 PM2 守护运行
 ```bash
 # 全局安装 PM2 (如未安装)
 npm install -g pm2
@@ -180,10 +177,7 @@ git pull --depth 1
 # 2. 安装并更新任何可能新增的 npm 依赖包
 pnpm install
 
-# 3. 升级数据库模型 (会自动检测 Prisma schema 变更并应用，不丢失数据)
-pnpm db:push
-
-# 4. PM2 平滑热重载 (零停机无缝重启)
+# 3. PM2 平滑热重载 (应用启动时，app.js 将全自动完成数据库 Schema 检测与热升级)
 pm2 reload mio-chat-backend
 ```
 
