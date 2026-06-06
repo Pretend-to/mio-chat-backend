@@ -33,6 +33,15 @@ test('ToolsManager - list tools', async (t) => {
     }
   ]
 
+  await t.test('should dynamically generate description containing tool names', () => {
+    const jsonSchema = tool.json('openai')
+    const desc = jsonSchema.function.description
+    assert.ok(desc.includes('cron'))
+    assert.ok(desc.includes('toolsmanager'))
+    assert.ok(desc.includes('crawl'))
+    assert.ok(desc.includes('CRITICAL'))
+  })
+
   await t.test('should list all tools with correct enabled status', async () => {
     const e = {
       params: { action: 'list' },
