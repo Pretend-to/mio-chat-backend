@@ -103,5 +103,67 @@ test('Gemini Adapter', async (t) => {
     assert.strictEqual(results[1].candidates[0].content.parts[0].text, 'World');
   });
 
+  await t.test('_executeChatRequest handles thought blocks and avoids appending to cachedMessage.content', async () => {
+    const adapter = new GeminiAdapter({
+      api_key: 'mock-key',
+      base_url: 'https://generativelanguage.googleapis.com'
+    });
+
+    const updates = [];
+    const mockEvent = {
+      requestId: 'test-req',
+      body: {
+        model: 'gemini-2.0-flash',
+        messages: [{ role: 'user', content: 'test' }],
+        settings: {}
+      },
+      update(up) {
+        updates.push(up);
+      },
+      client: {
+        popEvent() {},
+        popConnection() {}
+      }
+    };
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      const fullLine1 = 'data: {"candidates":[{"content":{"parts":[{"text":"Thinking hard...", "thought": true}]}}]}\\n';
+      const fullLine2 = 'data: {"candidates":[{"content":{"parts":[{"text":"Final answer"}]}}]}\\n';
+      const encoder = new TextEncoder();
+      const chunks = [encoder.encode(fullLine1), encoder.encode(fullLine2)];
+      let index = 0;
+
+      return {
+        ok: true,
+        body: {
+          getReader() {
+            return {
+              async read() {
+                if (index < chunks.length) {
+                  return { done: false, value: chunks[index++] };
+                }
+                return { done: true, value: undefined };
+              },
+              releaseLock() {}
+            };
+          }
+        }
+      };
+    };
+
+    try {
+      await adapter._executeChatRequest(mockEvent.body, mockEvent);
+      
+      // Verify updates received both reasoningContent and content
+      assert.deepStrictEqual(updates, [
+        { type: 'reasoningContent', content: 'Thinking hard...' },
+        { type: 'content', content: 'Final answer' }
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   await runGenericAdapterTests(t, GeminiAdapter, config, mocks);
 });
