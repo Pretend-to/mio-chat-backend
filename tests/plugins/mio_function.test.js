@@ -91,3 +91,49 @@ test('LLMMessageEvent - update caching rules', async (t) => {
   // Clean up
   streamCache.delete('user_1', 'contactor_123')
 })
+
+test('LLMMessageEvent - triggerType behavior', async (t) => {
+  const mockClient = {
+    id: 'user_1',
+    ip: '127.0.0.1',
+    isAdmin: true,
+    origin: 'http://localhost',
+    sendOpenaiMessage(type, data, requestId) {},
+    popEvent(id) {}
+  }
+
+  // 1. Standard chat event (default fallback)
+  const reqChat = {
+    request_id: 'req_123',
+    data: {},
+    metaData: {
+      contactorId: 'contactor_123'
+    }
+  }
+  const eventChat = new LLMMessageEvent(reqChat, mockClient)
+  assert.strictEqual(eventChat.metaData.triggerType, 'chat')
+
+  // 2. Task event (isTask: true)
+  const reqTask = {
+    request_id: 'req_456',
+    data: {},
+    metaData: {
+      contactorId: 'contactor_123',
+      isTask: true
+    }
+  }
+  const eventTask = new LLMMessageEvent(reqTask, mockClient)
+  assert.strictEqual(eventTask.metaData.triggerType, 'task')
+
+  // 3. Pre-defined triggerType should be preserved
+  const reqPreserved = {
+    request_id: 'req_789',
+    data: {},
+    metaData: {
+      contactorId: 'contactor_123',
+      triggerType: 'custom_trigger'
+    }
+  }
+  const eventPreserved = new LLMMessageEvent(reqPreserved, mockClient)
+  assert.strictEqual(eventPreserved.metaData.triggerType, 'custom_trigger')
+})
