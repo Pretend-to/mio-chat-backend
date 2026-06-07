@@ -81,6 +81,10 @@ export default class MyRateLimitHook extends BaseHook {
 }
 ```
 
+> [!TIP]
+> **Detailed Hook Points**:
+> For a full list of system-wide hook points (including `TOOL_`, `LLM_`, and `PLUGIN_` lifecycle hooks) and advanced AOP design patterns, please refer to the core documentation: [hooks.md](file:///home/mio/servers/mio-chat-backend/docs/core/hooks.md).
+
 ### 3. Using Presets (`presets/`)
 Any `.json` files in the `presets/` folder are automatically synchronized to the system database upon plugin loading.
 

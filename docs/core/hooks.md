@@ -17,6 +17,7 @@ Hooks 是 Mio-Chat V3 引入的 AOP（面向切面编程）架构体系。它允
 ### 对话执行流 (`LLM_`)
 *   **`LLM_BEFORE_CHAT`**: 消息发送给 LLM 之前触发。用于敏感词过滤、余额检查、系统提示词动态注入（如 Skill/Preset 注入）。
 *   **`LLM_AFTER_CHAT`**: LLM 响应结束并获得 Token 用量后触发。用于用量审计、计费落库、回复内容过滤。
+*   **`LLM_TOOL_RESULTS`**: 这一轮对话调用的所有工具执行完毕后触发。用于合并记录多工具并行调用的详细入参和执行结果，规避在 `TOOL_AFTER_EXECUTE` 中因并发写造成的数据库竞争与锁表问题。
 
 ### 插件生命周期 (`PLUGIN_`)
 *   **`PLUGIN_BEFORE_INIT` / `PLUGIN_AFTER_INIT`**: 插件初始化前后触发。

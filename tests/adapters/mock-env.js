@@ -24,6 +24,8 @@ prismaManager.getClient = () => {
     },
     lLMCallLog: {
       create: async () => ({ id: 1 }),
+      update: async () => ({ id: 1 }),
+      updateMany: async () => ({ count: 1 }),
     },
   };
 };
