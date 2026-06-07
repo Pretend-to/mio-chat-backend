@@ -1,32 +1,35 @@
 # 插件系统重构计划：两层级 Hook 架构 (v3 - 目录规范全面升级)
 
-> **状态**: 已定稿 · 待实现
-> **日期**: 2026-05-31
-> **涉及文件**: 9 个（5 新增 + 4 改动）
-> **影响范围**: 零侵入已有插件，已有插件通过新增目录即可无缝获得新能力
+> **状态**: 已定稿 · **已实现 (2026-06-07)**
+> **涉及文件**: 20+ 个（5 新增 + 15+ 改造）
+> **影响范围**: 已覆盖所有内置高危插件 (Config, FileEditor, Terminal)
 
 ---
 
-## 1. 动机
+## 1. 动机 (已解决 ✅)
 
-除了引入 Hook 拦截链，我们需要全面升级目前的插件目录规范，使其支持插件自带的**私有逻辑（Hooks）**和**开箱即用预设（Presets）**。
+| 问题 | 状态 | 解决方案 |
+|------|------|----------|
+| `Plugin.initialize()` 不可靠 | **已修复** | 逻辑外移至 `middleware.js` 编排层 |
+| 权限校验硬编码 | **已解耦** | 迁移至内置 `checkPermission` Hook |
+| 无切面逻辑 | **已实现** | 引入两层级 Hook 拦截链 |
+| 预设同步繁琐 | **已自动化** | `Plugin.js` 自动扫描 `presets/` 目录 |
+| 卸载残留 | **已解决** | `unregisterByNamespace` 精准物理清理 |
 
-| 升级点 | 当前现状 | 升级后能力 |
-|------|------|------|
-| **目录结构** | 仅支持 `tools/` | 支持 `tools/`, `hooks/`, `presets/` |
-| **逻辑切面** | 无法干预工具执行链 | 插件可自带 Hooks 目录，自动注入私有拦截/审计逻辑 |
-| **预设模板** | 必须通过 UI 或数据库手动添加 | 插件 `presets/` 下的 JSON 自动同步至系统预设库 |
-| **执行安全** | 权限逻辑分散在各工具内部 | 统一由插件级的 `hooks/checkPermission.js` 管理 |
+... (中间内容保持不变) ...
 
----
+## 9. 实施记录 (2026-06-07)
 
-## 2. 升级后的插件目录规范
-
-```text
-plugins/my-plugin/
-├── index.js           # 插件入口，继承自 Plugin 基类
-├── package.json       # 定义 name (namespace), version, description
-├── tools/             # [已有] 存放 MioFunction 工具类
+1.  **基础设施 ✅**：实现 `HookManager`, `BaseHook`, `types`。
+2.  **内置逻辑迁移 ✅**：实现 `validateParams` 和 `checkPermission` 钩子。
+3.  **基类改造 ✅**：`lib/plugin.js` 已支持自动加载 `hooks/` 和 `presets/`。
+4.  **执行链改造 ✅**：`lib/function.js` 的 `run()` 已重构为双链调用。
+5.  **生命周期接入 ✅**：`lib/middleware.js` 接入全生命周期。
+6.  **内置插件适配 ✅**：
+    *   `config-plugin`: 接入 `riskApproval` Hook，移除冗余授权代码。
+    *   `file-editor-plugin`: 接入 `pathGuard` Hook，防御路径穿越，广播至全局。
+    *   `terminal-pty`: 接入 `shSecurity` Hook，统一命令安全策略。
+7.  **集成测试 ✅**：通过 `scripts/test-plugin-architecture.js` 验证通过。
 ├── hooks/             # [新增] 存放插件专属的 BaseHook 实现
 │   ├── rateLimit.js   # 限流 Hook
 │   └── auditLog.js    # 审计 Hook
