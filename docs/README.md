@@ -1,70 +1,28 @@
-# 📚 文档目录
+# 📚 Mio-Chat 文档中心
 
-## 📋 目录结构
+欢迎来到 Mio-Chat 开发与运维文档中心。这里记录了系统的核心设计思想、API 协议以及开发指南。
 
-### 🚀 用户指南
-- [DATABASE_SETUP.md](DATABASE_SETUP.md) - 数据库设置说明
-- [DOCKER.md](DOCKER.md) - Docker 部署指南
+## 🧠 核心机制 (Core Concepts)
+深入了解 Agent 操作系统底层的运行逻辑。
+*   [**Hooks 拦截机制**](./core/hooks.md): V3 架构的灵魂，AOP 编程模型。
+*   [**上下文压缩机制**](./core/context-compression.md): 如何实现极致的上下文压缩与 Cache 优化。
 
-### 🔄 迁移指南
-- [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) - SQLite 迁移向导
-- [PRISMA_MIGRATION_GUIDE.md](PRISMA_MIGRATION_GUIDE.md) - Prisma 迁移指南
-- [SQLITE_MIGRATION_PLAN.md](SQLITE_MIGRATION_PLAN.md) - SQLite 迁移计划
-- [SQLITE_IMPLEMENTATION_GUIDE.md](SQLITE_IMPLEMENTATION_GUIDE.md) - SQLite 实现指南
+## 🛠️ 扩展与开发 (Development)
+手把手教你如何为系统增加新能力。
+*   [**插件开发指南**](./plugins/PLUGIN_DEVELOPMENT_GUIDE.md): Tools + Hooks + Presets。
+*   [**工具调试手册**](./plugins/TOOL_DEBUG_GUIDE.md): 如何在不调用 LLM 的情况下调试工具逻辑。
+*   [**适配器开发模版**](./adapters/ADAPTER_TEMPLATE.js): 接入新的大模型供应商。*   [**主流厂商配置指南**](./adapters/PROVIDER_GUIDE.md): Vertex AI / Gemini OAuth 等复杂认证说明。
 
-### 🔧 开发指南
-- [INITIALIZATION_FIX.md](INITIALIZATION_FIX.md) - 初始化修复指南
-- [TOOL_DEBUG_GUIDE.md](TOOL_DEBUG_GUIDE.md) - 工具调试指南
-- [ADAPTER_DISCOVERY.md](ADAPTER_DISCOVERY.md) - 适配器发现机制
-- [ADAPTER_TEMPLATE.js](ADAPTER_TEMPLATE.js) - 适配器模板
 
-### 🔌 插件开发
-- [PLUGIN_DEVELOPMENT_GUIDE.md](PLUGIN_DEVELOPMENT_GUIDE.md) - 插件开发完整指南
-- [PLUGIN_TEMPLATE.md](PLUGIN_TEMPLATE.md) - 插件开发模板和示例
-- [PLUGIN_QUICK_REFERENCE.md](PLUGIN_QUICK_REFERENCE.md) - 插件开发快速参考
+## 🌐 接口协议 (API & Protocols)
+*   [**Socket.io 协议详解**](./api/socket_protocol_zod.ts): 前后端流式通信的契约。
+*   [**HTTP REST API**](./api/api.md): 系统配置与管理接口。
+*   [**系统配置项说明**](./api/config-api.md): 环境变量与 .env 指南。
 
-### 🏗️ 架构文档
-- [PLUGIN_CRUD_ARCHITECTURE.md](PLUGIN_CRUD_ARCHITECTURE.md) - 插件 CRUD 架构
-- [PLUGIN_CRUD_IMPLEMENTATION.md](PLUGIN_CRUD_IMPLEMENTATION.md) - 插件 CRUD 实现
-- [PLUGIN_CRUD_EXAMPLES.md](PLUGIN_CRUD_EXAMPLES.md) - 插件 CRUD 示例
-- [PRESET_CRUD_DEVELOPMENT.md](PRESET_CRUD_DEVELOPMENT.md) - 预设 CRUD 开发
-- [VERTEX_MANUAL_MODELS_IMPLEMENTATION.md](VERTEX_MANUAL_MODELS_IMPLEMENTATION.md) - Vertex 手动模型实现
+## 🚀 部署与运维 (Ops)
+*   [**Docker 部署手册**](./deployment/DOCKER.md)
+*   [**生产环境部署 (PM2)**](./deployment/DEPLOYMENT.md)
+*   [**数据库初始化指南**](./deployment/DATABASE_SETUP.md)
 
-### 📡 API 文档
-- [api.md](api.md) - API 接口文档
-- [adapter-types-api.md](adapter-types-api.md) - 适配器类型 API
-- [config-api.md](config-api.md) - 配置 API
-- [logs-api.md](logs-api.md) - 日志 API
-- [plugin-api.md](plugin-api.md) - 插件 API
-- [presets-api.md](presets-api.md) - 预设 API
-- [socketio-admin-api.md](socketio-admin-api.md) - Socket.IO 管理 API
-- [websocket-fetch-api.md](websocket-fetch-api.md) - WebSocket 获取 API
-
-### 🔄 更新文档
-- [models-update-push.md](models-update-push.md) - 模型更新推送
-
-## 📖 文档使用指南
-
-### 新用户
-1. 按照 [DATABASE_SETUP.md](DATABASE_SETUP.md) 设置数据库
-2. 如需 Docker 部署，参考 [DOCKER.md](DOCKER.md)
-
-### 老用户迁移
-1. 阅读 [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)
-2. 按照 [PRISMA_MIGRATION_GUIDE.md](PRISMA_MIGRATION_GUIDE.md) 执行迁移
-
-### 开发者
-1. 查看 [PLUGIN_CRUD_ARCHITECTURE.md](PLUGIN_CRUD_ARCHITECTURE.md) 了解架构
-2. 参考 [API 文档](#-api-文档) 了解接口
-3. 使用 [TOOL_DEBUG_GUIDE.md](TOOL_DEBUG_GUIDE.md) 进行调试
-
-### 插件开发者
-1. 阅读 [PLUGIN_DEVELOPMENT_GUIDE.md](PLUGIN_DEVELOPMENT_GUIDE.md) 了解插件开发
-2. 使用 [PLUGIN_TEMPLATE.md](PLUGIN_TEMPLATE.md) 中的模板快速开始
-3. 参考 [PLUGIN_QUICK_REFERENCE.md](PLUGIN_QUICK_REFERENCE.md) 查找常用代码片段
-
-## 📝 文档维护
-
-- 所有技术文档统一放在 `docs/` 目录
-- 用户常用文档（README、快速启动、迁移指南）保留在项目根目录
-- 过时文档及时删除或归档
+---
+**提示**：如果你在寻找旧版本的迁移指南或历史设计，请前往 [归档目录](./archive/)。
