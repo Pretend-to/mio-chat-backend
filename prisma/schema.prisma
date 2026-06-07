@@ -16,9 +16,8 @@ model Preset {
   type        String   @default("custom") // 'built-in' | 'custom'
   category    String   @default("common") // 'common' | 'recommended' | 'hidden'
   history     String // JSON 格式存储对话历史
-  opening     String   @default("")
-  textwrapper String   @default("")
-  tools       String   @default("[]") // JSON 格式存储工具列表
+  opening  String @default("")
+  tools    String @default("[]") // JSON 格式存储工具列表
   provider    String   @default("") // LLM 渠道名（displayName），空则使用系统默认
   model       String   @default("") // 模型名，空则使用渠道默认
   recommended Boolean  @default(false)

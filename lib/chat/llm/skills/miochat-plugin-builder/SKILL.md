@@ -1,11 +1,11 @@
 ---
 name: miochat-plugin-builder
 description: Master Guide for building and managing MioChat plugins using terminal and file-editor tools.
-version: 3.1.0
+version: 3.2.0
 author: Mio-Chat
 ---
 
-# MioChat Plugin Builder: Master Edition
+# MioChat Plugin Builder: Master Edition (V3 Hook Architecture)
 
 You are a Master Architect of the MioChat ecosystem. You extend the system by managing plugins in the root `/plugins/` (Standard Project-Level) or `/plugins/custom/` (Agile Single-File) directories.
 
@@ -14,21 +14,9 @@ You are a Master Architect of the MioChat ecosystem. You extend the system by ma
 > - **`/plugins/<plugin-name>/`**: The ONLY place for new project-level plugins. 
 > - **`lib/plugins/`**: RESERVED for system core plugins. Do not add new plugins here.
 
-## 📦 Monorepo Dependency Management
+## 🏗️ Project-Level Plugins (V3 Standard)
 
-MioChat uses a **pnpm monorepo** architecture. 
-
-### Best Practice for Dependencies:
-1.  **Modify `package.json`**: Add your required dependencies to the `package.json` file inside your specific plugin directory (e.g., `/plugins/my-plugin/package.json`).
-2.  **Run Install at ROOT**: Always run the install command at the **project root** to let pnpm handle workspace linking and deduplication.
-    - `sh(command: "pnpm install")` (from root)
-3.  **CRITICAL**: NEVER run `npm install` or `pnpm install` inside the plugin subdirectory. This will break the monorepo link and cause runtime module errors.
-
----
-
-## 🏗️ Project-Level Plugins (Standard)
-
-Standard plugins are structured as a package with metadata and configuration support.
+V3 plugins support logic-separation via hooks and automatic configuration via presets.
 
 - **Location**: `/plugins/<plugin-name>/`
 - **Structure**:
@@ -36,179 +24,120 @@ Standard plugins are structured as a package with metadata and configuration sup
   plugins/my-plugin/
   ├── package.json      # Metadata & Dependencies
   ├── index.js          # Plugin Entry Class
-  └── tools/            # Directory for MioFunction tools
+  ├── tools/            # MioFunction tools (Business Logic)
+  ├── hooks/            # [Optional] BaseHook implementations (AOP Logic)
+  └── presets/          # [Optional] Preset JSON files (Auto-Seeding)
   ```
 
 ### 1. `index.js` Implementation
-The `index.js` file should be as minimal as possible. By passing `importMetaUrl`, the base class automatically determines the plugin's path.
+The `index.js` should handle initialization and optional hook propagation.
 
 ```javascript
-import Plugin from '../../lib/plugin.js' // Note the relative path to lib/plugin.js
+import Plugin from '../../lib/plugin.js' 
 
 export default class MyPlugin extends Plugin {
   constructor() {
-    // PASS importMetaUrl for automatic path & metadata detection
     super({ importMetaUrl: import.meta.url })
   }
 
+  async initialize() {
+    await super.initialize() // MUST call super to load tools/hooks
+    
+    // Optional: Propagate private hooks to the global execution chain
+    // this._propagateHooks() 
+  }
+
   getInitialConfig() {
-    return {
-      apiKey: '',
-      enableFeature: true
-    }
+    return { apiKey: '', maxRequests: 100 }
   }
 }
 ```
-## 🎨 Extra Render UI (extraRender)
 
-You can output custom frontend UI components in the chat interface by returning or setting an `extraRender` list. This is useful for directly displaying links, images, audio, or formatted alerts, either folded inside the tool call bar (`inner`) or directly embedded in the chat timeline (`outer`), without polluting the plain text response.
+### 2. Developing Hooks (`hooks/`)
+Hooks allow you to intercept tool execution. Just place files inheriting `BaseHook` in the `hooks/` directory.
+
+```javascript
+import BaseHook from '../../../lib/hooks/BaseHook.js'
+import { HOOK_POINTS } from '../../../lib/hooks/types.js'
+
+export default class MyRateLimitHook extends BaseHook {
+  constructor(options) {
+    super({
+      name: 'my-limiter',
+      hookPoint: HOOK_POINTS.TOOL_BEFORE_EXECUTE,
+      priority: 80,
+      namespace: options.namespace // Injected automatically
+    })
+  }
+
+  async execute(ctx) {
+    const { user, config } = ctx
+    if (user.usage > config.maxRequests) {
+      ctx.error = 'Usage limit exceeded'
+      return false // Block execution
+    }
+    return true
+  }
+}
+```
+
+### 3. Using Presets (`presets/`)
+Any `.json` files in the `presets/` folder are automatically synchronized to the system database upon plugin loading.
+
+**Preset JSON Structure:**
+```json
+{
+  "name": "Expert Role",
+  "category": "common",      // common | recommended | hidden
+  "hidden": true,            // [IMPORTANT] Set to true to hide from UI preset list
+  "opening": "Hello world",
+  "history": [
+    { "role": "system", "content": "System prompt goes here" }
+  ],
+  "tools": ["sh", "read"],
+  "model": "gpt-4o",
+  "provider": "plugin-name",
+  "recommended": false,
+  "avatar": "url"
+}
+```
+*Note: The system prompt should be the first element in the `history` array with `role: \"system\"`.*
+
+You can output custom frontend UI components by setting `extraRender` in the tool result or calling `this.setOuterRender(e, renders)`.
 
 ### Placement Modes:
-Each rendering item can specify its display location using the `placement` field:
-- **`'inner'`** (Default): Renders inside the collapsible `<ToolCallBar>` box.
-- **`'outer'`**: Renders directly in the message flow below the tool call bar.
-
-There are three ways to provide `extraRender` content:
-
-### Option A: Return as part of tool execution result
-You can return an object containing the standard tool `result` and an `extraRender` array:
-```javascript
-async myToolFunction(e) {
-  const imageUrl = "https://example.com/image.png";
-  return {
-    result: { success: true, url: imageUrl },
-    extraRender: [
-      {
-        type: 'image',
-        url: imageUrl,
-        placement: 'outer' // Direct message stream display
-      }
-    ]
-  }
-}
-```
-
-### Option B: Call dynamically via `setExtraRender`
-Call `this.setExtraRender(e, renders)` on the tool class instance to stream UI renderings before completion. Items default to `placement: 'inner'` if not specified:
-```javascript
-async myToolFunction(e) {
-  this.setExtraRender(e, [
-    {
-      type: 'alert',
-      title: 'Task progress',
-      alertType: 'info',
-      description: 'Preparing environment...',
-      placement: 'inner'
-    }
-  ]);
-  // Perform long-running tasks...
-}
-```
-
-### Option C: Call dynamically via `setOuterRender`
-Call `this.setOuterRender(e, renders)` to quickly stream elements with `placement: 'outer'` directly to the chat timeline:
-```javascript
-async myToolFunction(e) {
-  this.setOuterRender(e, [
-    {
-      type: 'audio',
-      url: 'https://example.com/voice.mp3'
-    }
-  ]);
-}
-```
-
-### Supported extraRender Item Types
-The frontend supports the following `extraRender` structures (any type can be marked with `placement: 'inner' | 'outer'`):
-
-1. **Audio** (Audio player):
-   ```json
-   {
-     "type": "audio",
-     "url": "https://example.com/audio.mp3",
-     "placement": "outer"
-   }
-   ```
-2. **Link** (Download/Resource URL):
-   ```json
-   {
-     "type": "link",
-     "url": "https://example.com",
-     "text": "Open link 🌐",
-     "placement": "outer"
-   }
-   ```
-3. **Image**:
-   ```json
-   {
-     "type": "image",
-     "url": "https://example.com/image.jpg",
-     "placement": "outer"
-   }
-   ```
-4. **Text** (Reference quote block):
-   ```json
-   {
-     "type": "text",
-     "content": "Custom text block to show on the card.",
-     "placement": "inner"
-   }
-   ```
-5. **Alert** (Element UI alert message):
-   ```json
-   {
-     "type": "alert",
-     "title": "Alert Title",
-     "alertType": "success" | "info" | "warning" | "error",
-     "description": "Optional detailed description",
-     "placement": "inner"
-   }
-   ```
+- **`'inner'`**: Inside the collapsible tool box.
+- **`'outer'`**: Directly in the message flow.
 
 ---
-
 
 ## 🧪 Debugging & Validation (The Loop)
 
-After writing code, you MUST verify the tool logic using the built-in Debug API.
-
-### 1. Find the Full Tool Name
-MioChat adds a hash suffix to tool names to prevent collisions. Before debugging, fetch the actual name:
+### 1. Find Hashed Tool Name
 - **API**: `GET /api/plugins/:pluginName/tools`
-- **Header**: `X-Admin-Code: 123456`
-- **Example**: `pubWebpage` might actually be `pubWebpage_mid_b1a2a1`.
+- **Header**: `X-Admin-Code: ******`
 
 ### 2. Execute Debug Call
-Use `curl` to call the debug endpoint. This bypasses LLM orchestration and executes the tool directly.
 - **API**: `POST /api/plugins/:pluginName/tools/:toolName/debug`
-- **Body**: `{"parameters": { ...your test params... }}` (MUST wrap params in `parameters`)
-- **Authentication**: Requires `X-Admin-Code` header.
-
-```bash
-# Example Debug Command
-curl -X POST http://127.0.0.1:3000/api/plugins/web-plugin/tools/pubWebpage_mid_b1a2a1/debug \
--H "Content-Type: application/json" \
--H "X-Admin-Code: 123456" \
--d '{"parameters": {"localPath": "/path/to/test/site"}}'
-```
+- **Body**: `{"parameters": { ... }}`
 
 ### 💡 Expert Debugging Tips
-- **Find Admin Code**: If you don't know the code, run: `node scripts/utils/get-admin-code.js`.
-- **IPv4 vs IPv6**: On macOS, Node.js may bind to IPv6. If `localhost` fails (Exit code 7), explicitly use **`127.0.0.1`**.
-- **Identify Active Port**: Use `lsof -i -P -n | grep LISTEN` to confirm the backend port (usually `3000` or `3080`).
-- **Payload Structure**: The Debug API expects `{"parameters": {...}}`, NOT just the raw params. If you see `Cannot read properties of undefined`, check your JSON wrapping.
-- **Hot Reload**: Saving a tool file (`tools/*.js`) triggers an automatic tool reload. Saving a plugin entry (`index.js`) may require calling the `.../reload` API or restarting the server to refresh the class definition.
+- **Active Port**: Usually `3080` for the production/live instance.
+- **Hot Reload**: 
+  - Saving `tools/*.js`: Automatic reload.
+  - Saving `hooks/*.js`: Automatic reload via `Plugin.initialize`.
+  - Saving `index.js`: Triggers plugin-level hot reload via `middleware.js` watcher.
 
 ---
 
-## 🛠️ Master Workflow (Complete Loop)
+## 🛠️ Master Workflow (V3 Loop)
 
-1.  **Plan**: Core plugin (`lib/plugins/`) or Custom tool (`plugins/custom/`).
-2.  **Develop**: Implement code logic and define parameters.
-3.  **Hot Reload**: Save files. Check backend logs to confirm `[PluginName] 工具加载完成`.
-4.  **Identify**: Call `GET /api/plugins/:pluginName/tools` to find the hashed tool name.
+1.  **Plan**: Define tools, hooks (for security/audit), and presets (for UX).
+2.  **Develop**: Implement logic.
+3.  **Hot Reload**: Save files. Observe logs: `[PluginName] 已加载 N 个私有钩子`.
+4.  **Identify**: Call `GET /.../tools` to find names.
 5.  **Validate**: Call `POST /.../debug` with test parameters.
-6.  **Refine**: If it fails, fix the code and repeat from step 3.
+6.  **Refine**: Fix code and repeat.
 
 ---
 *Note: Call `Skill(skill_name: "miochat-plugin-builder")` to refresh these instructions.*
