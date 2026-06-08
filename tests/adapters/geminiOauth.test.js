@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { MockEvent } from './mock-env.js';
 import GeminiOauthAdapter from '../../lib/chat/llm/adapters/implementations/geminiOauth.js';
-import { ClientID } from '../../lib/chat/llm/adapters/lib/geminiOauthHelper.js';
+import { ClientID, sessionStore } from '../../lib/chat/llm/adapters/lib/geminiOauthHelper.js';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -38,6 +38,17 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
     assert.ok(description.includes('accounts.google.com/o/oauth2/v2/auth'));
     assert.ok(description.includes(ClientID));
     assert.ok(description.includes('http%3A%2F%2Flocalhost%3A8085%2Fcallback'));
+
+    // Extract state from description
+    const stateMatch = description.match(/state=([^&^)]+)/);
+    assert.ok(stateMatch, 'Should contain state parameter in auth URL');
+    const state = decodeURIComponent(stateMatch[1]);
+
+    // Check that it was saved in sessionStore
+    const session = sessionStore.get(state);
+    assert.ok(session, 'Session should be saved in sessionStore');
+    assert.strictEqual(typeof session.verifier, 'string');
+    assert.strictEqual(session.verifier.length, 43); // Base64URL encoded 32 bytes is 43 chars
   });
 
   await t.test('url extraction of code and state', () => {
@@ -214,7 +225,7 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
     const payload = chatReq.options.body;
     assert.strictEqual(payload.project, 'project-xyz');
     assert.strictEqual(payload.model, 'gemini-2.5-pro');
-    assert.strictEqual(payload.userAgent, 'antigravity');
+    assert.strictEqual(payload.userAgent, 'antigravity/1.23.2 windows/amd64');
     assert.strictEqual(payload.requestType, 'agent');
     
     // Verify session ID maps to stable hash of 'hello'
@@ -440,6 +451,58 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
     // 验证 onConfigUpdate 被回写触发
     assert.ok(updates.some(u => u.api_key === 'ya29.cached_access_token' && u.refresh_token === 'refresh_token_cached'));
     assert.ok(updates.some(u => u.project_id === 'project-cached' && u.privacy_mode === 'privacy_set'));
+  });
+
+  await t.test('fallback to newest session verifier when state is missing or mismatched', async () => {
+    // 放入两个 session 到 sessionStore
+    const state1 = 'state_old';
+    const state2 = 'state_new';
+    
+    sessionStore.set(state1, { verifier: 'verifier_old', createdAt: Date.now() - 10000 });
+    sessionStore.set(state2, { verifier: 'verifier_new', createdAt: Date.now() });
+
+    // 创建一个只含有 raw code 或者是错误 state 的 api_key
+    const adapter = new GeminiOauthAdapter({
+      api_key: 'http://localhost:8085/callback?code=code_test&state=state_mismatched',
+      base_url: 'https://cloudcode-pa.googleapis.com'
+    });
+
+    const requests = [];
+    globalThis.fetch = async (url, options) => {
+      requests.push({ url, body: options.body });
+      if (url.includes('/token')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            access_token: 'ya29.new_token_test',
+            refresh_token: 'refresh_token_test',
+            expires_in: 3600
+          })
+        };
+      }
+      if (url.includes('/v1internal:loadCodeAssist')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ cloudaicompanionProject: 'proj-xyz' })
+        };
+      }
+      if (url.includes('/v1internal:setUserSettings') || url.includes('/v1internal:fetchUserInfo')) {
+        return { ok: true, status: 200, json: async () => ({ userSettings: {} }) };
+      }
+      return { ok: false };
+    };
+
+    await adapter.core._ensureInitialized();
+
+    const tokenReq = requests.find(r => r.url.includes('/token'));
+    assert.ok(tokenReq);
+    // 应该匹配并使用最新 session 的 verifier: 'verifier_new'
+    assert.ok(tokenReq.body.includes('code_verifier=verifier_new'));
+    
+    // 应该将 state2 从 store 中删掉
+    assert.strictEqual(sessionStore.get(state2), undefined);
   });
 });
 
