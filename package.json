@@ -74,6 +74,12 @@
     "zod": "^4.3.6"
   },
   "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "node-pty",
+      "prisma",
+      "@prisma/engines"
+    ],
     "overrides": {
       "underscore": ">=1.13.8",
       "file-type": "^21.3.4",
