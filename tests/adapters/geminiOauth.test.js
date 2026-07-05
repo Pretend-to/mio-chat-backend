@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { MockEvent } from './mock-env.js';
 import GeminiOauthAdapter from '../../lib/chat/llm/adapters/implementations/geminiOauth.js';
-import { ClientID, sessionStore } from '../../lib/chat/llm/adapters/lib/geminiOauthHelper.js';
+import { ClientID, sessionStore, encryptState, decryptState } from '../../lib/chat/llm/adapters/lib/geminiOauthHelper.js';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -503,6 +503,57 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
     
     // 应该将 state2 从 store 中删掉
     assert.strictEqual(sessionStore.get(state2), undefined);
+  });
+
+  await t.test('stateless decryption of code verifier from encrypted state', async () => {
+    const verifier = 'my_secret_verifier_value_for_this_flow_12345';
+    const encryptedState = encryptState(verifier, Date.now());
+    assert.ok(encryptedState);
+    
+    // Test decryption directly
+    const decrypted = decryptState(encryptedState);
+    assert.strictEqual(decrypted, verifier);
+
+    // Test decryption within _ensureInitialized flow (even when sessionStore is completely empty)
+    sessionStore.store.clear();
+    const adapter = new GeminiOauthAdapter({
+      api_key: `http://localhost:8085/callback?code=code_test&state=${encryptedState}`,
+      base_url: 'https://cloudcode-pa.googleapis.com'
+    });
+
+    const requests = [];
+    globalThis.fetch = async (url, options) => {
+      requests.push({ url, body: options.body });
+      if (url.includes('/token')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            access_token: 'ya29.new_token_test',
+            refresh_token: 'refresh_token_test',
+            expires_in: 3600
+          })
+        };
+      }
+      if (url.includes('/v1internal:loadCodeAssist')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ cloudaicompanionProject: 'proj-xyz' })
+        };
+      }
+      if (url.includes('/v1internal:setUserSettings') || url.includes('/v1internal:fetchUserInfo')) {
+        return { ok: true, status: 200, json: async () => ({ userSettings: {} }) };
+      }
+      return { ok: false };
+    };
+
+    await adapter.core._ensureInitialized();
+
+    const tokenReq = requests.find(r => r.url.includes('/token'));
+    assert.ok(tokenReq);
+    // Should correctly decrypt and use the verifier from the encrypted state
+    assert.ok(tokenReq.body.includes(`code_verifier=${verifier}`));
   });
 });
 
