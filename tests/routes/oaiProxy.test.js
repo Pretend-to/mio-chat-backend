@@ -131,6 +131,31 @@ global.middleware.llm = {
         })
         e.complete()
       }
+    },
+    'parallel-tools-stream': {
+      models: [
+        { owner: 'Test', models: ['parallel-tools-stream'] }
+      ],
+      guestModels: [],
+      async handleChatRequest(e) {
+        e.update({
+          type: 'toolCall',
+          content: {
+            id: 'call_aaa',
+            name: 'toolA',
+            parameters: '{"param":"A"}'
+          }
+        })
+        e.update({
+          type: 'toolCall',
+          content: {
+            id: 'call_bbb',
+            name: 'toolB',
+            parameters: '{"param":"B"}'
+          }
+        })
+        e.complete()
+      }
     }
   },
   instanceMetadata: {
@@ -139,7 +164,8 @@ global.middleware.llm = {
     'tool-adapter': { displayName: 'Tools-Instance', adapterType: 'openai' },
     'gemini-stream-tools': { displayName: 'Gemini-Stream-Tools', adapterType: 'gemini' },
     'args-echo': { displayName: 'Args-Echo', adapterType: 'test' },
-    'tools-echo': { displayName: 'Tools-Echo', adapterType: 'openai' }
+    'tools-echo': { displayName: 'Tools-Echo', adapterType: 'openai' },
+    'parallel-tools-stream': { displayName: 'Parallel-Tools-Stream', adapterType: 'openai' }
   }
 }
 
@@ -427,6 +453,40 @@ test('OpenAI Proxy Route - Custom Tools and Tool Choice Passthrough', async (t) 
     assert.strictEqual(data.toolsLength, 1)
     assert.deepStrictEqual(data.toolChoice, { type: 'function', function: { name: 'custom_math_tool' } })
     assert.deepStrictEqual(data.tools, customTools)
+  })
+
+  await t.test('should assign unique indices to parallel tool calls in stream mode', async () => {
+    const { req, res } = createMockReqRes({
+      model: 'Parallel-Tools-Stream/parallel-tools-stream',
+      messages: [{ role: 'user', content: 'hello' }],
+      stream: true
+    })
+
+    await oaiProxyController.chatCompletions(req, res)
+
+    assert.strictEqual(res.headers['Content-Type'], 'text/event-stream')
+    assert.ok(res.writeBuffer.length > 0)
+
+    // Filter writeBuffer to find toolCall chunks
+    const toolCallChunks = res.writeBuffer
+      .filter(chunk => chunk.startsWith('data: ') && !chunk.includes('[DONE]'))
+      .map(chunk => JSON.parse(chunk.substring(6)))
+      .filter(data => data.choices[0].delta.tool_calls)
+
+    // Should have exactly 2 tool calls chunks
+    assert.strictEqual(toolCallChunks.length, 2)
+    
+    // First tool call: index 0
+    const toolCall1 = toolCallChunks[0].choices[0].delta.tool_calls[0]
+    assert.strictEqual(toolCall1.index, 0)
+    assert.strictEqual(toolCall1.id, 'call_aaa')
+    assert.strictEqual(toolCall1.function.name, 'toolA')
+    
+    // Second tool call: index 1
+    const toolCall2 = toolCallChunks[1].choices[0].delta.tool_calls[0]
+    assert.strictEqual(toolCall2.index, 1)
+    assert.strictEqual(toolCall2.id, 'call_bbb')
+    assert.strictEqual(toolCall2.function.name, 'toolB')
   })
 })
 
