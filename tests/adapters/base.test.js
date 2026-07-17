@@ -54,4 +54,20 @@ test('BaseLLMAdapter shielding mechanism', async (t) => {
       { message }
     );
   });
+
+  await t.test('should return tools directly if it is a list of custom tool objects', () => {
+    const adapter = new BaseLLMAdapter({ type: 'test' });
+    const customTools = [
+      {
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          description: 'Get current weather',
+          parameters: {}
+        }
+      }
+    ];
+    const result = adapter._getFormattedTools(customTools, true);
+    assert.deepStrictEqual(result, customTools);
+  });
 });
