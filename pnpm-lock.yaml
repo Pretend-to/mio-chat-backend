@@ -42,6 +42,9 @@ importers:
       '@prisma/client':
         specifier: ^7.9.0
         version: 7.9.0(prisma@7.9.0(@types/react@19.2.14)(better-sqlite3@12.9.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))
+      '@prisma/client-runtime-utils':
+        specifier: ^7.9.0
+        version: 7.9.0
       '@puppeteer/browsers':
         specifier: ^3.0.6
         version: 3.0.6(yauzl@2.10.0)
