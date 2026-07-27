@@ -42,6 +42,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@prisma/adapter-better-sqlite3": "^7.9.0",
     "@prisma/client": "^7.9.0",
+    "@prisma/client-runtime-utils": "^7.9.0",
     "@puppeteer/browsers": "^3.0.6",
     "@xterm/headless": "^6.0.0",
     "ajv": "^8.20.0",
