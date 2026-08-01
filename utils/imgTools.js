@@ -74,7 +74,8 @@ async function base64ToImageUrl(baseUrl, base64String) {
   const type = await fileType.fileTypeFromBuffer(buffer)
   const contentType = type ? type.mime : 'image/png'
   
-  const result = await storageService.upload(buffer, filename, 'image', { contentType })
+  // dedup: true —— 文件名基于 MD5 内容寻址，相同内容幂等返回已有 URL，避免生成序号副本
+  const result = await storageService.upload(buffer, filename, 'image', { contentType, dedup: true })
   
   // 如果 baseUrl 存在且 result.url 是相对路径，进行拼接
   const finalUrl = (baseUrl && result.url.startsWith('/')) ? `${baseUrl}${result.url}` : result.url
