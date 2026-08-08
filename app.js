@@ -112,6 +112,84 @@ async function initializeDatabase(dependencies) {
   }
 }
 
+
+/**
+ * 优雅关闭时：把 streamCache 中仍在执行中的工具调用以 failed 终态广播给对应客户端。
+ * 防止前端 UI 上最后一个 bash tool 永远显示"执行中"。
+ */
+async function notifyInFlightInterrupted(sessions, streamCache) {
+  // userId -> 在线 client 列表（多端复用同一 userId 的池）
+  const clientsByUser = new Map()
+  for (const client of sessions.getAllClients()) {
+    if (!clientsByUser.has(client.id)) clientsByUser.set(client.id, [])
+    clientsByUser.get(client.id).push(client)
+  }
+  if (clientsByUser.size === 0) {
+    logger.debug('无可通知的在线客户端，跳过中断广播')
+    return
+  }
+
+  let broadcastCount = 0
+  for (const [key, messages] of streamCache.cache.entries()) {
+    const separator = key.indexOf(':')
+    if (separator === -1) continue
+    const userId = key.slice(0, separator)
+    const contactorId = key.slice(separator + 1)
+    const clients = clientsByUser.get(userId)
+    if (!clients || clients.length === 0) continue
+
+    for (const item of messages) {
+      if (!item || !item.messageId) continue
+
+      // 找出仍处于"执行中"且没有结果的 toolCall
+      const runningTools = (item.chunks || []).filter(
+        (c) =>
+          c.type === 'toolCall' &&
+          c.content &&
+          ['running', 'pending', 'started'].includes(c.content.action) &&
+          !c.content.result
+      )
+      if (runningTools.length === 0) continue
+
+      const messageId = item.messageId
+      for (const client of clients) {
+        // 1) 每个还在执行中的 toolCall 置为 failed 终态
+        for (const toolChunk of runningTools) {
+          client.sendOpenaiMessage(
+            'update',
+            {
+              type: 'toolCall',
+              content: {
+                ...toolChunk.content,
+                action: 'failed',
+                status: 'failed',
+                result: { error: '服务器重启，工具执行被打断' },
+              },
+              metaData: { contactorId, messageId },
+            },
+            messageId
+          )
+        }
+        // 2) 消息整体标记为 failed（附带 metaData 供前端路由到对应联系人）
+        client.sendOpenaiMessage(
+          'failed',
+          {
+            message: '服务器正在关闭，请求已中断',
+            code: 'SERVER_SHUTDOWN',
+            metaData: { contactorId, messageId },
+          },
+          messageId
+        )
+        broadcastCount++
+      }
+    }
+  }
+
+  if (broadcastCount > 0) {
+    logger.info(`已向客户端广播 ${broadcastCount} 条进行中请求的中断状态`)
+  }
+}
+
 /**
  * 优雅关闭应用程序
  */
@@ -131,6 +209,15 @@ async function gracefulShutdown(signal) {
   }, 10000)
   
   try {
+    // 0. 广播中断：把仍处于执行中的 tool_call 标记为 failed 终态，避免前端 UI 永远显示"执行中"
+    try {
+      const { default: shutdownSessions } = await import('./lib/server/socket.io/services/sessions.js')
+      const { default: shutdownStreamCache } = await import('./lib/server/socket.io/services/streamCache.js')
+      await notifyInFlightInterrupted(shutdownSessions, shutdownStreamCache)
+    } catch (error) {
+      logger.warn('广播进行中请求中断状态时出现警告:', error.message)
+    }
+
     // 1. 关闭 Socket.IO 服务器
     try {
       if (global.middleware && global.middleware.socketServer) {
