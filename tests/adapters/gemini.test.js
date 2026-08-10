@@ -419,5 +419,24 @@ test('Gemini Adapter', async (t) => {
     assert.deepStrictEqual(prepared2.tools, [{ googleSearch: {} }]);
   });
 
+  await t.test('_prepareChatBody auto activates responseModalities for image models', async () => {
+    const adapter = new GeminiAdapter({
+      api_key: 'test_key',
+      base_url: 'https://generativelanguage.googleapis.com'
+    });
+
+    const body = {
+      messages: [{ role: 'user', content: 'draw a cat' }],
+      settings: {
+        base: { model: 'imagen-3.0-generate-002', stream: true },
+        chatParams: {},
+        toolCallSettings: { mode: 'AUTO', tools: [] },
+        extraSettings: {}
+      }
+    };
+    const prepared = await adapter._prepareChatBody(body);
+    assert.deepStrictEqual(prepared.responseModalities, ['Text', 'Image']);
+  });
+
   await runGenericAdapterTests(t, GeminiAdapter, config, mocks);
 });
