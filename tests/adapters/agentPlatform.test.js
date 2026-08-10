@@ -156,4 +156,33 @@ test('Agent Platform - block_express behavior', async (t) => {
       global.fetch = originalFetch
     }
   })
+
+  await t.test('_prepareChatBody prioritizes extraSettings.agentPlatform over default extraSettings.gemini', async () => {
+    const adapter = new AgentPlatformAdapter({
+      api_key: 'test-api-key',
+      project_id: 'test-project',
+      base_url: 'https://us-central1-aiplatform.googleapis.com',
+    })
+
+    const body = {
+      messages: [{ role: 'user', content: 'BTC price' }],
+      settings: {
+        base: { model: 'gemini-2.5-flash', stream: true },
+        chatParams: {},
+        toolCallSettings: { mode: 'AUTO', tools: [] },
+        extraSettings: {
+          gemini: {
+            internalTools: { google_search: false }
+          },
+          agentPlatform: {
+            internalTools: { google_search: true }
+          }
+        }
+      }
+    }
+
+    const prepared = await adapter._prepareChatBody(body)
+    assert.ok(Array.isArray(prepared.tools), 'Should output tools array')
+    assert.deepStrictEqual(prepared.tools, [{ googleSearch: {} }], 'Should enable googleSearch tool from extraSettings.agentPlatform')
+  })
 })
