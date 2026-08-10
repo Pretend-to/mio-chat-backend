@@ -19,6 +19,22 @@ test('Anthropic Adapter - Basic Integration & Metadata', async (t) => {
     base_url: 'https://api.anthropic.com'
   });
   assert.strictEqual(adapter.provider, 'anthropic');
+
+  // Test web_search tool injection when enabled in extraSettings
+  const bodyWithSearch = {
+    messages: [{ role: 'user', content: 'hello' }],
+    settings: {
+      base: { model: 'claude-3-5-sonnet-20241022', stream: true },
+      chatParams: {},
+      toolCallSettings: { mode: 'AUTO', tools: [] },
+      extraSettings: {
+        anthropic: { web_search: { enable: true } }
+      }
+    }
+  };
+  const preparedSearch = await adapter._prepareChatBody(bodyWithSearch);
+  assert.ok(Array.isArray(preparedSearch.tools));
+  assert.ok(preparedSearch.tools.some((t) => t.name === 'web_search'));
 });
 
 test('Anthropic Adapter - Message Conversions & Caching', async (t) => {

@@ -237,10 +237,10 @@ test('Gemini Adapter', async (t) => {
       assert.strictEqual(result.toolCalls.length, 2);
       
       assert.strictEqual(result.toolCalls[0].function.name, 'toolA');
-      assert.strictEqual(result.toolCalls[0].id, 'gemini://sigA|'); // 应该保留 sigA，而不是被 sigB 覆盖
+      assert.strictEqual(result.toolCalls[0].id, 'gsig_' + Buffer.from('sigA|').toString('hex'));
       
       assert.strictEqual(result.toolCalls[1].function.name, 'toolB');
-      assert.strictEqual(result.toolCalls[1].id, 'gemini://sigB|');
+      assert.strictEqual(result.toolCalls[1].id, 'gsig_' + Buffer.from('sigB|').toString('hex'));
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -301,9 +301,9 @@ test('Gemini Adapter', async (t) => {
       thoughtSignature: realSigA
     });
 
-    // toolB has a fake thought signature (too short), so thoughtSignature is omitted
+    // toolB has a fake/short signature, so passed as functionCall.id
     assert.deepStrictEqual(assistantContent.parts[2], {
-      functionCall: { name: 'toolB', args: { cmd: 'echo 2' } }
+      functionCall: { name: 'toolB', args: { cmd: 'echo 2' }, id: fakeSig }
     });
 
     // Second content: tool responses
@@ -319,22 +319,23 @@ test('Gemini Adapter', async (t) => {
       }
     });
 
-    // toolB response has fake/short id, so id is omitted
+    // toolB response has fake/short id
     assert.deepStrictEqual(toolResponsesContent.parts[1], {
       functionResponse: {
         name: 'toolB',
-        response: { name: 'toolB', content: 'resultB' }
+        response: { name: 'toolB', content: 'resultB' },
+        id: fakeSig
       }
     });
   });
 
-  await t.test('_preProcessMessage correctly translates tool calls and tool responses with new gemini:// ID format', async () => {
+  await t.test('_preProcessMessage correctly translates tool calls and tool responses with new gsig_ ID format', async () => {
     const { Gemini } = await import('../../lib/chat/llm/adapters/lib/geminiHttpClient.js');
     const gemini = new Gemini({ base_url: 'https://mock', api_key: 'key' });
 
     const thoughtSig = 'someReasoningStateSig';
     const fcId = 'call_abc123';
-    const combinedId = `gemini://${thoughtSig}|${fcId}`;
+    const combinedId = 'gsig_' + Buffer.from(`${thoughtSig}|${fcId}`).toString('hex');
 
     const messages = [
       {
@@ -375,6 +376,47 @@ test('Gemini Adapter', async (t) => {
         id: fcId
       }
     });
+  });
+
+  await t.test('_prepareChatBody correctly enables googleSearch tool under extraSettings', async () => {
+    const adapter = new GeminiAdapter({
+      api_key: 'test_key',
+      base_url: 'https://generativelanguage.googleapis.com'
+    });
+
+    // Test 1: extraSettings.gemini.internalTools.google_search: true
+    const body1 = {
+      messages: [{ role: 'user', content: 'hello' }],
+      settings: {
+        base: { model: 'gemini-2.5-flash', stream: true },
+        chatParams: {},
+        toolCallSettings: { mode: 'AUTO', tools: [] },
+        extraSettings: {
+          gemini: {
+            internalTools: { google_search: true }
+          }
+        }
+      }
+    };
+    const prepared1 = await adapter._prepareChatBody(body1);
+    assert.ok(Array.isArray(prepared1.tools));
+    assert.deepStrictEqual(prepared1.tools, [{ googleSearch: {} }]);
+
+    // Test 2: extraSettings.internalTools.web_search: { enable: true }
+    const body2 = {
+      messages: [{ role: 'user', content: 'hello' }],
+      settings: {
+        base: { model: 'gemini-2.5-flash', stream: true },
+        chatParams: {},
+        toolCallSettings: { mode: 'AUTO', tools: [] },
+        extraSettings: {
+          internalTools: { web_search: { enable: true } }
+        }
+      }
+    };
+    const prepared2 = await adapter._prepareChatBody(body2);
+    assert.ok(Array.isArray(prepared2.tools));
+    assert.deepStrictEqual(prepared2.tools, [{ googleSearch: {} }]);
   });
 
   await runGenericAdapterTests(t, GeminiAdapter, config, mocks);

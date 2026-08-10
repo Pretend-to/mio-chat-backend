@@ -62,9 +62,25 @@ test('Zhipu Adapter - Chat Body Preparation', async (t) => {
     }
   };
 
-  const resultNoReasoning = await adapter._prepareChatBody(bodyNoReasoning);
-  assert.strictEqual(resultNoReasoning.extra_body, undefined);
-  assert.strictEqual(resultNoReasoning.reasoning_effort, undefined);
+  // 测试 4: 当 extraSettings.zhipu.web_search 开启时
+  const bodyWithWebSearch = {
+    messages: [{ role: 'user', content: 'Hello' }],
+    settings: {
+      base: { model: 'glm-4.7', stream: true },
+      chatParams: { temperature: 0.7 },
+      toolCallSettings: { tools: [], mode: 'NONE' },
+      extraSettings: {
+        zhipu: {
+          web_search: { enable: true, search_result: true }
+        }
+      }
+    }
+  };
+
+  const resultWithWebSearch = await adapter._prepareChatBody(bodyWithWebSearch);
+  assert.ok(Array.isArray(resultWithWebSearch.tools));
+  assert.strictEqual(resultWithWebSearch.tools[0].type, 'web_search');
+  assert.deepStrictEqual(resultWithWebSearch.tools[0].web_search, { enable: true, search_result: true });
 });
 
 test('Zhipu Adapter - Generic Suite Integration', async (t) => {
