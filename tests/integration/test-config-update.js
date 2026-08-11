@@ -24,7 +24,7 @@ async function makeRequest(url, options = {}) {
   })
 
   const data = await response.json()
-  return { response, data }
+  return { data, response }
 }
 
 /**
@@ -58,7 +58,7 @@ async function testUpdateFullConfig() {
       },
       web: {
         ...currentConfig.web,
-        title: 'MioChat 测试更新 - ' + new Date().toISOString()
+        title: `MioChat 测试更新 - ${  new Date().toISOString()}`
       }
     }
     
@@ -70,8 +70,8 @@ async function testUpdateFullConfig() {
     
     // 发送更新请求
     const { response, data } = await makeRequest(`${BASE_URL}/api/config`, {
-      method: 'PUT',
-      body: JSON.stringify(updateData)
+      body: JSON.stringify(updateData),
+      method: 'PUT'
     })
     
     if (response.ok && data.code === 0) {
@@ -119,9 +119,9 @@ async function testUpdateConfigSection() {
   try {
     // 测试更新 web 配置节点
     const webUpdateData = {
-      title: 'MioChat 节点更新测试 - ' + new Date().toISOString(),
+      beian: '测试备案号-' + Date.now(),
       full_screen: true,
-      beian: '测试备案号-' + Date.now()
+      title: 'MioChat 节点更新测试 - ' + new Date().toISOString()
     }
     
     logger.info(`  - 更新 web 配置节点`)
@@ -130,8 +130,8 @@ async function testUpdateConfigSection() {
     logger.info(`  - 备案号: ${webUpdateData.beian}`)
     
     const { response, data } = await makeRequest(`${BASE_URL}/api/config/web`, {
-      method: 'PUT',
-      body: JSON.stringify(webUpdateData)
+      body: JSON.stringify(webUpdateData),
+      method: 'PUT'
     })
     
     if (response.ok && data.code === 0) {
@@ -197,8 +197,8 @@ async function testUpdateServerConfig() {
 
     
     const { response, data } = await makeRequest(`${BASE_URL}/api/config/server`, {
-      method: 'PUT',
-      body: JSON.stringify(serverUpdateData)
+      body: JSON.stringify(serverUpdateData),
+      method: 'PUT'
     })
     
     if (response.ok && data.code === 0) {
@@ -233,13 +233,13 @@ async function testInvalidConfigUpdate() {
   try {
     // 测试无效的端口号
     const invalidServerConfig = {
+      host: '0.0.0.0',
       port: 99999, // 无效端口
-      host: '0.0.0.0'
     }
     
     const { response, data } = await makeRequest(`${BASE_URL}/api/config/server`, {
-      method: 'PUT',
-      body: JSON.stringify(invalidServerConfig)
+      body: JSON.stringify(invalidServerConfig),
+      method: 'PUT'
     })
     
     if (response.status === 400 && data.code === 1) {
@@ -264,11 +264,11 @@ async function testAuthRequired() {
   
   try {
     const { response } = await makeRequest(`${BASE_URL}/api/config`, {
-      method: 'PUT',
+      body: JSON.stringify({ debug: true }),
       headers: {
         'x-admin-code': 'wrong-code'
       },
-      body: JSON.stringify({ debug: true })
+      method: 'PUT'
     })
     
     if (response.status === 401 || response.status === 403) {
@@ -299,7 +299,7 @@ async function main() {
   ]
   
   let passed = 0
-  let total = tests.length
+  const total = tests.length
   
   for (const test of tests) {
     try {

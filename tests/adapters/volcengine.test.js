@@ -4,7 +4,7 @@ import './mock-env.js';
 import VolcengineAdapter from '../../lib/chat/llm/adapters/implementations/volcengine.js';
 import OpenAIResponsesBot from '../../lib/chat/llm/adapters/implementations/openai-responses.js';
 
-test('Volcengine Adapter Registration & Metadata', async (t) => {
+test('Volcengine Adapter Registration & Metadata', async (_t) => {
   const metadata = VolcengineAdapter.getAdapterMetadata();
 
   assert.strictEqual(metadata.type, 'volcengine');
@@ -23,7 +23,7 @@ test('Volcengine Adapter Registration & Metadata', async (t) => {
   assert.ok(metadata.extraSettingsSchema.volcengine.web_search);
 });
 
-test('Volcengine Adapter Inheritance and Dynamic Extra Settings', async (t) => {
+test('Volcengine Adapter Inheritance and Dynamic Extra Settings', async (_t) => {
   const adapter = new VolcengineAdapter({
     api_key: 'mock-key',
     base_url: 'https://ark.cn-beijing.volces.com/api/v3',
@@ -34,11 +34,10 @@ test('Volcengine Adapter Inheritance and Dynamic Extra Settings', async (t) => {
 
   // Test _prepareChatBody retrieves volcengine specific extra settings
   const body = {
-    messages: [{ role: 'user', content: 'hello' }],
+    messages: [{ content: 'hello', role: 'user' }],
     settings: {
       base: { model: 'doubao-1.5-pro', stream: true },
       chatParams: { temperature: 0.7 },
-      toolCallSettings: { mode: 'AUTO', tools: [] },
       extraSettings: {
         volcengine: {
           web_search: {
@@ -47,6 +46,7 @@ test('Volcengine Adapter Inheritance and Dynamic Extra Settings', async (t) => {
           },
         },
       },
+      toolCallSettings: { mode: 'AUTO', tools: [] },
     },
   };
 

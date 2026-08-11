@@ -56,8 +56,8 @@ class OneBotAPITester {
     }
 
     const options = {
-      method,
-      headers
+      headers,
+      method
     }
 
     if (data && (method === 'POST' || method === 'PUT')) {
@@ -69,15 +69,15 @@ class OneBotAPITester {
       const result = await response.json()
       
       return {
+        data: result,
         status: response.status,
-        success: response.ok,
-        data: result
+        success: response.ok
       }
     } catch (error) {
       return {
+        error: error.message,
         status: 0,
-        success: false,
-        error: error.message
+        success: false
       }
     }
   }
@@ -87,9 +87,9 @@ class OneBotAPITester {
    */
   logTest(testName, success, details = null) {
     const result = {
-      test: testName,
-      success,
       details,
+      success,
+      test: testName,
       timestamp: new Date().toISOString()
     }
     
@@ -135,7 +135,7 @@ class OneBotAPITester {
       }
 
       // 检查 onebot 配置结构（只检查必需字段）
-      const onebot = config.onebot
+      const {onebot} = config
       const requiredFields = ['enable'] // 只有 enable 是必需的
       const missingFields = requiredFields.filter(field => !(field in onebot))
       
@@ -205,10 +205,10 @@ class OneBotAPITester {
 
       // 准备测试更新数据（只更新部分字段，不影响实际使用）
       const updateData = {
+        admin_qq: currentConfig.admin_qq || '1099834705',
+        bot_qq: currentConfig.bot_qq || '2698788044',
         enable: currentConfig.enable, // 保持当前状态
         reverse_ws_url: currentConfig.reverse_ws_url || 'ws://test.example.com:8080/onebot/v11/ws',
-        bot_qq: currentConfig.bot_qq || '2698788044',
-        admin_qq: currentConfig.admin_qq || '1099834705',
         token: currentConfig.token || 'test_token_' + Date.now()
       }
 
@@ -258,13 +258,13 @@ class OneBotAPITester {
       const updateData = {
         onebot: {
           ...currentConfig,
-          enable: false, // 临时禁用，不影响实际使用
-          reverse_ws_url: 'ws://batch-test.example.com:8080/onebot/v11/ws',
+          admin_qq: '1099834705',
           bot_qq: '2698788044',
-          admin_qq: '1099834705'
+          enable: false, // 临时禁用，不影响实际使用
+          reverse_ws_url: 'ws://batch-test.example.com:8080/onebot/v11/ws'
         },
         web: {
-          title: 'OneBot API Test - ' + new Date().toISOString()
+          title: `OneBot API Test - ${  new Date().toISOString()}`
         }
       }
 
@@ -338,10 +338,10 @@ class OneBotAPITester {
       // 测试有效配置
       const validConfig = {
         onebot: {
-          enable: true,
-          reverse_ws_url: 'ws://localhost:8080/onebot/v11/ws',
+          admin_qq: '1099834705',
           bot_qq: '2698788044',
-          admin_qq: '1099834705'
+          enable: true,
+          reverse_ws_url: 'ws://localhost:8080/onebot/v11/ws'
         }
       }
 
@@ -475,14 +475,14 @@ class OneBotAPITester {
    */
   async exportResults(filename = 'onebot-api-test-results.json') {
     const results = {
-      timestamp: new Date().toISOString(),
       baseUrl: this.baseUrl,
       summary: {
-        total: this.testResults.length,
+        failed: this.testResults.filter(r => !r.success).length,
         passed: this.testResults.filter(r => r.success).length,
-        failed: this.testResults.filter(r => !r.success).length
+        total: this.testResults.length
       },
-      tests: this.testResults
+      tests: this.testResults,
+      timestamp: new Date().toISOString()
     }
     
     const fs = await import('fs')

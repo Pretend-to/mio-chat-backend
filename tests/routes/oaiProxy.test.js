@@ -1,6 +1,5 @@
 import { test } from 'node:test'
 import assert from 'node:assert'
-import crypto from 'crypto'
 import '../adapters/mock-env.js' // Loads base mocks like global.logger and global.middleware
 
 import SystemSettingsService from '../../lib/database/services/SystemSettingsService.js'
@@ -25,57 +24,42 @@ SystemSettingsService.get = async (key) => {
 
 // Populate mock global middleware adapters
 global.middleware.llm = {
+  instanceMetadata: {
+    'args-echo': { adapterType: 'test', displayName: 'Args-Echo' },
+    'gemini-1': { adapterType: 'gemini', displayName: 'Gemini-主要' },
+    'gemini-stream-tools': { adapterType: 'gemini', displayName: 'Gemini-Stream-Tools' },
+    'openai-1': { adapterType: 'openai', displayName: 'OpenAI-主要' },
+    'parallel-tools-stream': { adapterType: 'openai', displayName: 'Parallel-Tools-Stream' },
+    'tool-adapter': { adapterType: 'openai', displayName: 'Tools-Instance' },
+    'tools-echo': { adapterType: 'openai', displayName: 'Tools-Echo' }
+  },
   llms: {
-    'openai-1': {
+    'args-echo': {
       models: [
-        { owner: 'OpenAI', models: ['gpt-4o', 'gpt-3.5-turbo'] }
+        { owner: 'Test', models: ['args-echo'] }
       ],
       guestModels: [],
+      // Captures the last assistant tool_calls arguments seen in e.body.messages
       async handleChatRequest(e) {
-        // Simulates typical text response
-        e.update({ type: 'content', content: 'Hello ' })
-        e.update({ type: 'content', content: 'world!' })
+        const msgs = e.body.messages
+        const assistantMsg = msgs.toReversed().find(m => m.role === 'assistant' && Array.isArray(m.tool_calls))
+        if (assistantMsg) {
+          e.update({ type: 'content', content: assistantMsg.tool_calls[0].function.arguments })
+        }
         e.complete()
       }
     },
     'gemini-1': {
-      models: [
-        { owner: 'Google', models: ['gemini-1.5-pro'] }
-      ],
       guestModels: [],
       async handleChatRequest(e) {
         e.update({ type: 'content', content: 'Gemini reply' })
         e.complete()
-      }
-    },
-    'tool-adapter': {
+      },
       models: [
-        { owner: 'OpenAI', models: ['gpt-4-tools'] }
-      ],
-      guestModels: [],
-      async handleChatRequest(e) {
-        const toolCalls = [
-          {
-            id: 'call_abc123',
-            function: {
-              name: 'get_weather',
-              arguments: '{"location":"Beijing"}'
-            }
-          }
-        ]
-        
-        if (typeof e.body.settings.toolCallSettings !== 'undefined') {
-          // Trigger _handleToolCalls on the receiver (which will be the ES6 Proxy)
-          await this._handleToolCalls(toolCalls, e)
-        }
-        
-        e.complete()
-      }
+        { owner: 'Google', models: ['gemini-1.5-pro'] }
+      ]
     },
     'gemini-stream-tools': {
-      models: [
-        { owner: 'Google', models: ['gemini-stream-tools'] }
-      ],
       guestModels: [],
       async handleChatRequest(e) {
         // Emit toolCall twice with cumulative arguments (simulating Gemini stream repetition)
@@ -96,46 +80,24 @@ global.middleware.llm = {
           }
         })
         e.complete()
-      }
-    },
-    'args-echo': {
+      },
       models: [
-        { owner: 'Test', models: ['args-echo'] }
-      ],
-      guestModels: [],
-      // Captures the last assistant tool_calls arguments seen in e.body.messages
-      async handleChatRequest(e) {
-        const msgs = e.body.messages
-        const assistantMsg = [...msgs].reverse().find(m => m.role === 'assistant' && Array.isArray(m.tool_calls))
-        if (assistantMsg) {
-          e.update({ type: 'content', content: assistantMsg.tool_calls[0].function.arguments })
-        }
-        e.complete()
-      }
+        { owner: 'Google', models: ['gemini-stream-tools'] }
+      ]
     },
-    'tools-echo': {
-      models: [
-        { owner: 'Test', models: ['tools-echo'] }
-      ],
+    'openai-1': {
       guestModels: [],
       async handleChatRequest(e) {
-        const tools = e.body.settings?.toolCallSettings?.tools || []
-        const toolChoice = e.body.settings?.chatParams?.tool_choice
-        e.update({
-          type: 'content',
-          content: JSON.stringify({
-            toolsLength: tools.length,
-            toolChoice,
-            tools
-          })
-        })
+        // Simulates typical text response
+        e.update({ type: 'content', content: 'Hello ' })
+        e.update({ type: 'content', content: 'world!' })
         e.complete()
-      }
+      },
+      models: [
+        { owner: 'OpenAI', models: ['gpt-4o', 'gpt-3.5-turbo'] }
+      ]
     },
     'parallel-tools-stream': {
-      models: [
-        { owner: 'Test', models: ['parallel-tools-stream'] }
-      ],
       guestModels: [],
       async handleChatRequest(e) {
         e.update({
@@ -155,22 +117,59 @@ global.middleware.llm = {
           }
         })
         e.complete()
-      }
+      },
+      models: [
+        { owner: 'Test', models: ['parallel-tools-stream'] }
+      ]
+    },
+    'tool-adapter': {
+      guestModels: [],
+      async handleChatRequest(e) {
+        const toolCalls = [
+          {
+            id: 'call_abc123',
+            function: {
+              name: 'get_weather',
+              arguments: '{"location":"Beijing"}'
+            }
+          }
+        ]
+        
+        if (typeof e.body.settings.toolCallSettings !== 'undefined') {
+          // Trigger _handleToolCalls on the receiver (which will be the ES6 Proxy)
+          await this._handleToolCalls(toolCalls, e)
+        }
+        
+        e.complete()
+      },
+      models: [
+        { owner: 'OpenAI', models: ['gpt-4-tools'] }
+      ]
+    },
+    'tools-echo': {
+      guestModels: [],
+      async handleChatRequest(e) {
+        const tools = e.body.settings?.toolCallSettings?.tools || []
+        const toolChoice = e.body.settings?.chatParams?.tool_choice
+        e.update({
+          type: 'content',
+          content: JSON.stringify({
+            toolsLength: tools.length,
+            toolChoice,
+            tools
+          })
+        })
+        e.complete()
+      },
+      models: [
+        { owner: 'Test', models: ['tools-echo'] }
+      ]
     }
-  },
-  instanceMetadata: {
-    'openai-1': { displayName: 'OpenAI-主要', adapterType: 'openai' },
-    'gemini-1': { displayName: 'Gemini-主要', adapterType: 'gemini' },
-    'tool-adapter': { displayName: 'Tools-Instance', adapterType: 'openai' },
-    'gemini-stream-tools': { displayName: 'Gemini-Stream-Tools', adapterType: 'gemini' },
-    'args-echo': { displayName: 'Args-Echo', adapterType: 'test' },
-    'tools-echo': { displayName: 'Tools-Echo', adapterType: 'openai' },
-    'parallel-tools-stream': { displayName: 'Parallel-Tools-Stream', adapterType: 'openai' }
   }
 }
 
 // Add fallback _handleToolCalls method to mock adapters
-for (const [id, adapter] of Object.entries(global.middleware.llm.llms)) {
+for (const [, adapter] of Object.entries(global.middleware.llm.llms)) {
   adapter._handleToolCalls = async (toolCalls, e) => {
     e.capturedToolCalls = toolCalls
   }
@@ -184,25 +183,25 @@ function createMockReqRes(body = {}, headers = {}) {
       authorization: 'Bearer mock-admin-code-123',
       ...headers
     },
-    query: {},
     on: (event, callback) => {
       if (event === 'close') {
         req.closeCallback = callback
       }
-    }
+    },
+    query: {}
   }
 
   const res = {
-    statusCode: 200,
-    headers: {},
     body: null,
-    headersSent: false,
-    writeBuffer: [],
-    ended: false,
-    status(code) {
-      this.statusCode = code
-      return this
+    end() {
+      this.ended = true
     },
+    ended: false,
+    flushHeaders() {
+      this.headersSent = true
+    },
+    headers: {},
+    headersSent: false,
     json(data) {
       this.body = data
       return this
@@ -210,15 +209,15 @@ function createMockReqRes(body = {}, headers = {}) {
     setHeader(name, value) {
       this.headers[name] = value
     },
+    status(code) {
+      this.statusCode = code
+      return this
+    },
+    statusCode: 200,
     write(data) {
       this.writeBuffer.push(data)
     },
-    end() {
-      this.ended = true
-    },
-    flushHeaders() {
-      this.headersSent = true
-    }
+    writeBuffer: []
   }
 
   return { req, res }
@@ -270,8 +269,8 @@ test('OpenAI Proxy Route - Models Aggregation', async (t) => {
 test('OpenAI Proxy Route - Chat Completions (Non-Stream)', async (t) => {
   await t.test('should resolve adapter and return complete OpenAI JSON response', async () => {
     const { req, res } = createMockReqRes({
-      model: 'gpt-4o',
       messages: [{ role: 'user', content: 'hello' }],
+      model: 'gpt-4o',
       stream: false
     })
 
@@ -287,8 +286,8 @@ test('OpenAI Proxy Route - Chat Completions (Non-Stream)', async (t) => {
 test('OpenAI Proxy Route - Chat Completions (Stream)', async (t) => {
   await t.test('should output stream chunk by chunk and end with [DONE]', async () => {
     const { req, res } = createMockReqRes({
-      model: 'gpt-4o',
       messages: [{ role: 'user', content: 'hello' }],
+      model: 'gpt-4o',
       stream: true
     })
 
@@ -309,8 +308,8 @@ test('OpenAI Proxy Route - Chat Completions (Stream)', async (t) => {
 test('OpenAI Proxy Route - Specific Instance Routing', async (t) => {
   await t.test('should route specifically to prefixed instance', async () => {
     const { req, res } = createMockReqRes({
-      model: 'Gemini-主要/gemini-1.5-pro',
       messages: [{ role: 'user', content: 'hello' }],
+      model: 'Gemini-主要/gemini-1.5-pro',
       stream: false
     })
 
@@ -324,8 +323,8 @@ test('OpenAI Proxy Route - Specific Instance Routing', async (t) => {
 test('OpenAI Proxy Route - Tool Call Interception', async (t) => {
   await t.test('should return tool call to client and NOT run on server', async () => {
     const { req, res } = createMockReqRes({
-      model: 'gpt-4-tools',
       messages: [{ role: 'user', content: 'get weather' }],
+      model: 'gpt-4-tools',
       stream: false,
       tools: [{ type: 'function', function: { name: 'get_weather' } }]
     })
@@ -342,8 +341,8 @@ test('OpenAI Proxy Route - Tool Call Interception', async (t) => {
 test('OpenAI Proxy Route - Chat Completions (Stream) De-duplication', async (t) => {
   await t.test('should only output the first instance of cumulative tool call arguments and ignore duplicates', async () => {
     const { req, res } = createMockReqRes({
-      model: 'Gemini-Stream-Tools/gemini-stream-tools',
       messages: [{ role: 'user', content: 'run tool' }],
+      model: 'Gemini-Stream-Tools/gemini-stream-tools',
       stream: true
     })
 
@@ -372,7 +371,6 @@ test('OpenAI Proxy Route - Message Sanitization (duplicated tool_calls.arguments
     const duplicatedArgs = validArgs + validArgs  // Simulate stream-repetition bug
 
     const { req, res } = createMockReqRes({
-      model: 'Args-Echo/args-echo',
       messages: [
         { role: 'user', content: 'run script' },
         {
@@ -386,6 +384,7 @@ test('OpenAI Proxy Route - Message Sanitization (duplicated tool_calls.arguments
         },
         { role: 'tool', tool_call_id: 'call_dup1', content: 'done' }
       ],
+      model: 'Args-Echo/args-echo',
       stream: false
     })
 
@@ -398,10 +397,9 @@ test('OpenAI Proxy Route - Message Sanitization (duplicated tool_calls.arguments
   })
 
   await t.test('should leave already-valid arguments unchanged', async () => {
-    const validArgs = JSON.stringify({ user_prompt: 'hello', code: 'print(1)' })
+    const validArgs = JSON.stringify({ code: 'print(1)', user_prompt: 'hello' })
 
     const { req, res } = createMockReqRes({
-      model: 'Args-Echo/args-echo',
       messages: [
         { role: 'user', content: 'go' },
         {
@@ -415,6 +413,7 @@ test('OpenAI Proxy Route - Message Sanitization (duplicated tool_calls.arguments
         },
         { role: 'tool', tool_call_id: 'call_ok1', content: 'ok' }
       ],
+      model: 'Args-Echo/args-echo',
       stream: false
     })
 
@@ -430,20 +429,20 @@ test('OpenAI Proxy Route - Custom Tools and Tool Choice Passthrough', async (t) 
   await t.test('should pass custom tools schemas and tool_choice directly to adapter settings', async () => {
     const customTools = [
       {
-        type: 'function',
         function: {
-          name: 'custom_math_tool',
           description: 'performs math operations',
+          name: 'custom_math_tool',
           parameters: { type: 'object' }
-        }
+        },
+        type: 'function'
       }
     ]
     const { req, res } = createMockReqRes({
-      model: 'Tools-Echo/tools-echo',
       messages: [{ role: 'user', content: 'hello' }],
+      model: 'Tools-Echo/tools-echo',
       stream: false,
-      tools: customTools,
-      tool_choice: { type: 'function', function: { name: 'custom_math_tool' } }
+      tool_choice: { function: { name: 'custom_math_tool' }, type: 'function' },
+      tools: customTools
     })
 
     await oaiProxyController.chatCompletions(req, res)
@@ -451,14 +450,14 @@ test('OpenAI Proxy Route - Custom Tools and Tool Choice Passthrough', async (t) 
     assert.strictEqual(res.statusCode, 200)
     const data = JSON.parse(res.body.choices[0].message.content)
     assert.strictEqual(data.toolsLength, 1)
-    assert.deepStrictEqual(data.toolChoice, { type: 'function', function: { name: 'custom_math_tool' } })
+    assert.deepStrictEqual(data.toolChoice, { function: { name: 'custom_math_tool' }, type: 'function' })
     assert.deepStrictEqual(data.tools, customTools)
   })
 
   await t.test('should assign unique indices to parallel tool calls in stream mode', async () => {
     const { req, res } = createMockReqRes({
-      model: 'Parallel-Tools-Stream/parallel-tools-stream',
       messages: [{ role: 'user', content: 'hello' }],
+      model: 'Parallel-Tools-Stream/parallel-tools-stream',
       stream: true
     })
 

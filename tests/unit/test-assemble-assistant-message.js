@@ -39,8 +39,8 @@ async function main() {
   // ---------- Case 2: content 类型 ----------
   logger.info('\n[Case 2] content chunks')
   const result2 = TaskRunnerService._assembleAssistantMessage([
-    { type: 'content', content: '你好，' },
-    { type: 'content', content: '世界！' },
+    { content: '你好，', type: 'content' },
+    { content: '世界！', type: 'content' },
   ], 'msg-2')
   assert(result2.content.length === 2, 'content 应有 2 个元素')
   assert(result2.content[0].type === 'text', '第 1 个类型为 text')
@@ -50,8 +50,8 @@ async function main() {
   // ---------- Case 3: reason 类型 ----------
   logger.info('\n[Case 3] reason chunks')
   const result3 = TaskRunnerService._assembleAssistantMessage([
-    { type: 'reason', data: { text: '让我思考一下...', startTime: 1000, duration: 0 } },
-    { type: 'reason', data: { text: '继续推理...', startTime: 1000, duration: 500 } },
+    { data: { duration: 0, startTime: 1000, text: '让我思考一下...' }, type: 'reason' },
+    { data: { duration: 500, startTime: 1000, text: '继续推理...' }, type: 'reason' },
   ], 'msg-3')
   assert(result3.content.length === 2, 'content 应有 2 个元素')
   assert(result3.content[0].type === 'reason', '第 1 个类型为 reason')
@@ -64,25 +64,25 @@ async function main() {
   logger.info('\n[Case 4] toolCall chunks')
   const result4 = TaskRunnerService._assembleAssistantMessage([
     {
-      type: 'toolCall',
       content: {
-        id: 'call_abc123',
-        name: 'web_search',
-        index: 0,
         action: 'running',
         arguments: '{"query":"test"}',
+        id: 'call_abc123',
+        index: 0,
+        name: 'web_search',
       },
+      type: 'toolCall',
     },
     {
-      type: 'toolCall',
       content: {
-        id: 'call_def456',
-        name: 'read_file',
-        index: 1,
         action: 'pending',
         arguments: '{"path":"/tmp/x"}',
+        id: 'call_def456',
+        index: 1,
+        name: 'read_file',
         result: 'file content',
       },
+      type: 'toolCall',
     },
   ], 'msg-4')
   assert(result4.content.length === 2, 'content 应有 2 个元素')
@@ -97,14 +97,14 @@ async function main() {
   logger.info('\n[Case 5] toolCall 使用 parameters')
   const result5 = TaskRunnerService._assembleAssistantMessage([
     {
-      type: 'toolCall',
       content: {
-        id: 'call_xyz',
-        name: 'calculator',
-        index: 0,
         action: 'pending',
+        id: 'call_xyz',
+        index: 0,
+        name: 'calculator',
         parameters: '{"a":1,"b":2}',
       },
+      type: 'toolCall',
     },
   ], 'msg-5')
   assert(result5.content[0].data.arguments === '{"a":1,"b":2}', 'arguments 回退到 parameters')
@@ -113,12 +113,12 @@ async function main() {
   logger.info('\n[Case 6] crystallize chunks')
   const result6 = TaskRunnerService._assembleAssistantMessage([
     {
-      type: 'crystallize',
       content: { status: 'running', summary: '开始压缩记忆...' },
+      type: 'crystallize',
     },
     {
-      type: 'crystallize',
       content: { status: 'finished', summary: '已完成记忆压缩' },
+      type: 'crystallize',
     },
   ], 'msg-6')
   assert(result6.content.length === 2, 'content 应有 2 个元素')
@@ -130,10 +130,10 @@ async function main() {
   // ---------- Case 7: 混合所有类型 ----------
   logger.info('\n[Case 7] 混合所有类型')
   const result7 = TaskRunnerService._assembleAssistantMessage([
-    { type: 'reason', data: { text: '推理中...', startTime: 100, duration: 0 } },
-    { type: 'content', content: '答案是 42。' },
-    { type: 'toolCall', content: { id: 'call_1', name: 'search', index: 0, arguments: '{}' } },
-    { type: 'crystallize', content: { status: 'finished', summary: 'done' } },
+    { data: { duration: 0, startTime: 100, text: '推理中...' }, type: 'reason' },
+    { content: '答案是 42。', type: 'content' },
+    { content: { arguments: '{}', id: 'call_1', index: 0, name: 'search' }, type: 'toolCall' },
+    { content: { status: 'finished', summary: 'done' }, type: 'crystallize' },
   ], 'msg-7')
   assert(result7.content.length === 4, '4 个元素全保留')
   assert(result7.content[0].type === 'reason', 'reason 保留')
@@ -153,7 +153,7 @@ async function main() {
   // ---------- Case 9: 未知 chunk 类型静默忽略 ----------
   logger.info('\n[Case 9] 未知 chunk 类型')
   const result9 = TaskRunnerService._assembleAssistantMessage([
-    { type: 'unknown_type', content: 'ignored' },
+    { content: 'ignored', type: 'unknown_type' },
   ], 'msg-9')
   assert(result9.content.length === 1 && result9.content[0].data.text === 'Success',
     '未知类型被忽略，兜底 Success')
@@ -165,7 +165,7 @@ async function main() {
   process.exit(failed > 0 ? 1 : 0)
 }
 
-main().catch(err => {
-  logger.error('测试执行异常:', err)
+main().catch(error => {
+  logger.error('测试执行异常:', error)
   process.exit(1)
 })

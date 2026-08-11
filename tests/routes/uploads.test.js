@@ -32,14 +32,14 @@ test('Uploads and Image Controllers - URL Absolute Path Conversion', async (t) =
     const req = {
       file: {
         buffer: Buffer.from('fake-image-data'),
-        originalname: 'test.jpg',
-        mimetype: 'image/jpeg'
+        mimetype: 'image/jpeg',
+        originalname: 'test.jpg'
       },
-      protocol: 'http',
       get: (header) => {
         if (header === 'host') return 'localhost:3080'
         return null
-      }
+      },
+      protocol: 'http'
     }
 
     let jsonResponse = null
@@ -48,7 +48,7 @@ test('Uploads and Image Controllers - URL Absolute Path Conversion', async (t) =
         jsonResponse = data
         return this
       },
-      status(code) {
+      status(_code) {
         return this
       }
     }
@@ -67,14 +67,14 @@ test('Uploads and Image Controllers - URL Absolute Path Conversion', async (t) =
     const req = {
       file: {
         buffer: Buffer.from('fake-image-data-2'),
-        originalname: 'new.jpg',
-        mimetype: 'image/jpeg'
+        mimetype: 'image/jpeg',
+        originalname: 'new.jpg'
       },
-      protocol: 'https',
       get: (header) => {
         if (header === 'host') return 'miochat.com'
         return null
-      }
+      },
+      protocol: 'https'
     }
 
     let jsonResponse = null
@@ -83,7 +83,7 @@ test('Uploads and Image Controllers - URL Absolute Path Conversion', async (t) =
         jsonResponse = data
         return this
       },
-      status(code) {
+      status(_code) {
         return this
       }
     }
@@ -101,15 +101,15 @@ test('Uploads and Image Controllers - URL Absolute Path Conversion', async (t) =
 
     const req = {
       body: {
-        md5: 'existingmd5hash',
         filename: 'existing.txt',
+        md5: '0123456789abcdef0123456789abcdef',
         totalChunks: '1'
       },
-      protocol: 'http',
       get: (header) => {
         if (header === 'host') return 'localhost:3080'
         return null
-      }
+      },
+      protocol: 'http'
     }
 
     let jsonResponse = null
@@ -118,7 +118,7 @@ test('Uploads and Image Controllers - URL Absolute Path Conversion', async (t) =
         jsonResponse = data
         return this
       },
-      status(code) {
+      status(_code) {
         return this
       }
     }
@@ -144,15 +144,15 @@ test('Uploads and Image Controllers - URL Absolute Path Conversion', async (t) =
 
     const req = {
       body: {
-        md5,
         filename: 'merged.txt',
+        md5,
         totalChunks: '1'
       },
-      protocol: 'https',
       get: (header) => {
         if (header === 'host') return 'miochat.com'
         return null
-      }
+      },
+      protocol: 'https'
     }
 
     let jsonResponse = null
@@ -161,7 +161,7 @@ test('Uploads and Image Controllers - URL Absolute Path Conversion', async (t) =
         jsonResponse = data
         return this
       },
-      status(code) {
+      status(_code) {
         return this
       }
     }
@@ -171,7 +171,7 @@ test('Uploads and Image Controllers - URL Absolute Path Conversion', async (t) =
     } finally {
       // Clean up in case of failure or success
       if (fs.existsSync(chunkDir)) {
-        fs.rmSync(chunkDir, { recursive: true, force: true })
+        fs.rmSync(chunkDir, { force: true, recursive: true })
       }
       const outputFilePath = path.join('output', 'uploaded', 'file', `${md5.substring(0, 8)}.txt`)
       if (fs.existsSync(outputFilePath)) {

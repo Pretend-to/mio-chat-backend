@@ -68,14 +68,14 @@ async function testLLMInitialization() {
     const mockMessageEvent = {
       body: {
         settings: {
-          provider: 'test-provider',
-          base: { model: 'test-model' }
+          base: { model: 'test-model' },
+          provider: 'test-provider'
         }
       },
-      user: { isAdmin: true },
       error: (err) => {
         logger.info(`   📨 消息处理返回错误（符合预期）: ${err.message}`)
-      }
+      },
+      user: { isAdmin: true }
     }
     
     // 测试消息处理

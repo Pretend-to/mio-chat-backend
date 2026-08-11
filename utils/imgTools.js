@@ -7,13 +7,13 @@ import * as fileType from 'file-type'
 import storageService from '../lib/storage/StorageService.js'
 
 const getBufferName = async (buffer) => {
-  const getBufferExt = async (buffer) => {
-    const type = await fileType.fileTypeFromBuffer(buffer)
+  const getBufferExt = async (buf) => {
+    const type = await fileType.fileTypeFromBuffer(buf)
     return type?.ext
   }
-  const getBufferMd5 = (buffer) => {
+  const getBufferMd5 = (buf) => {
     const hash = crypto.createHash('md5')
-    hash.update(buffer)
+    hash.update(buf)
     return hash.digest('hex').slice(0, 8)
   }
   const md5 = getBufferMd5(buffer)
@@ -22,12 +22,12 @@ const getBufferName = async (buffer) => {
 }
 
 async function imgUrlToBase64(url, id = 'default') {
-  let final_url = url
+  const final_url = url
   return new Promise((resolve) => {
     const startTime = Date.now()
     const httpOrHttps = final_url.startsWith('https://') ? https : http
 
-    let req = httpOrHttps.get(final_url, (res) => {
+    const req = httpOrHttps.get(final_url, (res) => {
       const contentType = res.headers['content-type']
 
       // 检查支持的图像格式
@@ -74,7 +74,7 @@ async function base64ToImageUrl(baseUrl, base64String) {
   const type = await fileType.fileTypeFromBuffer(buffer)
   const contentType = type ? type.mime : 'image/png'
   
-  // dedup: true —— 文件名基于 MD5 内容寻址，相同内容幂等返回已有 URL，避免生成序号副本
+  // Dedup: true —— 文件名基于 MD5 内容寻址，相同内容幂等返回已有 URL，避免生成序号副本
   const result = await storageService.upload(buffer, filename, 'image', { contentType, dedup: true })
   
   // 如果 baseUrl 存在且 result.url 是相对路径，进行拼接
@@ -116,20 +116,20 @@ async function getLocalFileAsBase64(url) {
       const buffer = fs.readFileSync(filePath)
       const ext = path.extname(filePath).toLowerCase()
       const mimeMap = {
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
         '.gif': 'image/gif',
+        '.jpeg': 'image/jpeg',
+        '.jpg': 'image/jpeg',
+        '.png': 'image/png',
         '.webp': 'image/webp'
       }
       const mimeType = mimeMap[ext] || 'image/png'
       return `data:${mimeType};base64,${buffer.toString('base64')}`
     }
-  } catch (err) {
+  } catch (error) {
     if (typeof logger !== 'undefined') {
-      logger.error('Failed to read local file to base64:', err)
+      logger.error('Failed to read local file to base64:', error)
     } else {
-      console.error('Failed to read local file to base64:', err)
+      console.error('Failed to read local file to base64:', error)
     }
   }
   return null

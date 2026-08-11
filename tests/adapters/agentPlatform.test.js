@@ -7,17 +7,17 @@ import AgentPlatformAdapter from '../../lib/chat/llm/adapters/implementations/ag
 test('Agent Platform Adapter - standard tests', async (t) => {
   const config = {
     api_key: 'vertex-mock-key',
-    project_id: 'mock-project',
     base_url: 'https://aiplatform.googleapis.com',
+    project_id: 'mock-project',
   }
 
   const mocks = {
-    models: async () => [{ owner: 'Vertex', models: ['gemini-2.5-flash'] }],
     createCore: (_event) => ({
       chat: async function* () {
         yield { candidates: [{ content: { parts: [{ text: 'Hello from Vertex AI' }] } }] }
       },
     }),
+    models: async () => [{ owner: 'Vertex', models: ['gemini-2.5-flash'] }],
   }
 
   await runGenericAdapterTests(t, AgentPlatformAdapter, config, mocks)
@@ -27,12 +27,12 @@ test('Agent Platform - block_express behavior', async (t) => {
   await t.test('with block_express: false (default)', async () => {
     const adapter = new AgentPlatformAdapter({
       api_key: 'test-api-key',
-      project_id: 'test-project',
       base_url: 'https://us-central1-aiplatform.googleapis.com',
       block_express: false,
+      project_id: 'test-project',
     })
 
-    const core = adapter.core
+    const {core} = adapter
     assert.strictEqual(core.block_express, false)
 
     // Check URL generation
@@ -46,12 +46,12 @@ test('Agent Platform - block_express behavior', async (t) => {
 
   await t.test('with block_express: true — GoogleAuth 失败时应该抛出错误', async () => {
     const adapter = new AgentPlatformAdapter({
-      project_id: 'test-project',
       base_url: 'https://us-central1-aiplatform.googleapis.com',
       block_express: true,
+      project_id: 'test-project',
     })
 
-    const core = adapter.core
+    const {core} = adapter
     assert.strictEqual(core.block_express, true)
 
     // URL 中不应有 key=
@@ -68,12 +68,12 @@ test('Agent Platform - block_express behavior', async (t) => {
 
   await t.test('models() should try Vertex AI publisher models list and parse correctly', async () => {
     const adapter = new AgentPlatformAdapter({
-      project_id: 'test-project',
       base_url: 'https://us-central1-aiplatform.googleapis.com',
       block_express: true,
+      project_id: 'test-project',
     })
 
-    const core = adapter.core
+    const {core} = adapter
 
     // Mock _getAuthHeaders 以绕过 GoogleAuth
     core._getAuthHeaders = async () => ({ 'Authorization': 'Bearer test-token' })
@@ -87,7 +87,6 @@ test('Agent Platform - block_express behavior', async (t) => {
       fetchedUrl = url
       fetchedHeaders = options?.headers
       return {
-        ok: true,
         json: async () => ({
           publisherModels: [
             { name: 'publishers/google/models/gemini-1.5-pro', supportedActions: ['predict'] },
@@ -95,6 +94,7 @@ test('Agent Platform - block_express behavior', async (t) => {
             { name: 'publishers/google/models/unrelated-model', supportedActions: ['predict'] },
           ],
         }),
+        ok: true,
       }
     }
 
@@ -119,15 +119,15 @@ test('Agent Platform - block_express behavior', async (t) => {
   await t.test('models() should fallback to generative language API if Vertex fails', async () => {
     const adapter = new AgentPlatformAdapter({
       api_key: 'test-api-key',
-      project_id: 'test-project',
       base_url: 'https://us-central1-aiplatform.googleapis.com',
       block_express: false,
+      project_id: 'test-project',
     })
 
-    const core = adapter.core
+    const {core} = adapter
 
     const originalFetch = global.fetch
-    let fetchedUrls = []
+    const fetchedUrls = []
 
     global.fetch = async (url, _options) => {
       fetchedUrls.push(url)
@@ -135,12 +135,12 @@ test('Agent Platform - block_express behavior', async (t) => {
         return { ok: false, status: 403, text: async () => 'Forbidden' }
       }
       return {
-        ok: true,
         json: async () => ({
           models: [
             { name: 'models/gemini-2.0-flash', supportedGenerationMethods: ['generateContent'] },
           ],
         }),
+        ok: true,
       }
     }
 
@@ -160,24 +160,24 @@ test('Agent Platform - block_express behavior', async (t) => {
   await t.test('_prepareChatBody prioritizes extraSettings.agentPlatform over default extraSettings.gemini', async () => {
     const adapter = new AgentPlatformAdapter({
       api_key: 'test-api-key',
-      project_id: 'test-project',
       base_url: 'https://us-central1-aiplatform.googleapis.com',
+      project_id: 'test-project',
     })
 
     const body = {
-      messages: [{ role: 'user', content: 'BTC price' }],
+      messages: [{ content: 'BTC price', role: 'user' }],
       settings: {
         base: { model: 'gemini-2.5-flash', stream: true },
         chatParams: {},
-        toolCallSettings: { mode: 'AUTO', tools: [] },
         extraSettings: {
-          gemini: {
-            internalTools: { google_search: false }
-          },
           agentPlatform: {
             internalTools: { google_search: true }
+          },
+          gemini: {
+            internalTools: { google_search: false }
           }
-        }
+        },
+        toolCallSettings: { mode: 'AUTO', tools: [] }
       }
     }
 

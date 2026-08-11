@@ -2,8 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { MockEvent } from './mock-env.js';
 import GeminiOauthAdapter from '../../lib/chat/llm/adapters/implementations/geminiOauth.js';
-import { ClientID, sessionStore, encryptState, decryptState } from '../../lib/chat/llm/adapters/lib/geminiOauthHelper.js';
-import crypto from 'crypto';
+import { ClientID, decryptState, encryptState, sessionStore } from '../../lib/chat/llm/adapters/lib/geminiOauthHelper.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -20,7 +19,7 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
       if (fs.existsSync(sessionsFile)) {
         fs.writeFileSync(sessionsFile, '{}', 'utf8');
       }
-    } catch (e) {}
+    } catch {}
   });
   
   t.afterEach(() => {
@@ -34,7 +33,7 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
     assert.strictEqual(meta.isShielded, false);
     assert.strictEqual(meta.requiresSpecialAuth, true);
     
-    const description = meta.description;
+    const {description} = meta;
     assert.ok(description.includes('accounts.google.com/o/oauth2/v2/auth'));
     assert.ok(description.includes(ClientID));
     assert.ok(description.includes('http%3A%2F%2Flocalhost%3A8085%2Fcallback'));
@@ -89,57 +88,57 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
           parsedBody = options.body.toString();
         }
       }
-      requests.push({ url, options: { ...options, body: parsedBody } });
+      requests.push({ options: { ...options, body: parsedBody }, url });
       
       if (url.includes('/token')) {
         return {
-          ok: true,
-          status: 200,
           json: async () => ({
             access_token: 'ya29.new_access_token',
             refresh_token: 'refresh_token_123',
             expires_in: 3600
-          })
+          }),
+          ok: true,
+          status: 200
         };
       }
       if (url.includes('/v1internal:loadCodeAssist')) {
         return {
-          ok: true,
-          status: 200,
           json: async () => ({
             cloudaicompanionProject: 'project-id-xyz',
             allowedTiers: [{ id: 'free-tier', isDefault: true }],
             currentTier: 'free-tier'
-          })
+          }),
+          ok: true,
+          status: 200
         };
       }
       if (url.includes('/v1internal:setUserSettings')) {
         return {
-          ok: true,
-          status: 200,
           json: async () => ({
             userSettings: {}
-          })
+          }),
+          ok: true,
+          status: 200
         };
       }
       if (url.includes('/v1internal:fetchUserInfo')) {
         return {
-          ok: true,
-          status: 200,
           json: async () => ({
             userSettings: {} // telemetryEnabled is absent, indicating privacy set
-          })
+          }),
+          ok: true,
+          status: 200
         };
       }
       if (url.includes('/v1internal:fetchAvailableModels')) {
         return {
-          ok: true,
-          status: 200,
           json: async () => ({
             models: {
               'gemini-3.1-pro-preview': { displayName: 'Gemini 3.1 Pro (Preview)' }
             }
-          })
+          }),
+          ok: true,
+          status: 200
         };
       }
       return { ok: false, status: 404, text: async () => 'Not Found' };
@@ -168,11 +167,11 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
   await t.test('chat request and payload wrapping with stable session ID', async () => {
     const adapter = new GeminiOauthAdapter({
       api_key: 'ya29.initialized_token',
-      project_id: 'project-xyz',
-      base_url: 'https://cloudcode-pa.googleapis.com'
+      base_url: 'https://cloudcode-pa.googleapis.com',
+      project_id: 'project-xyz'
     });
     
-    // pre-mark initialized to skip exchange
+    // Pre-mark initialized to skip exchange
     adapter.core._initialized = true;
 
     const chatRequests = [];
@@ -185,27 +184,27 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
           parsedBody = options.body.toString();
         }
       }
-      chatRequests.push({ url, options: { ...options, body: parsedBody } });
+      chatRequests.push({ options: { ...options, body: parsedBody }, url });
       return {
-        ok: true,
-        status: 200,
         json: async () => ({
           response: {
             candidates: [{ content: { role: 'model', parts: [{ text: 'Hello, I am Antigravity!' }] } }],
             usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 10 }
           }
-        })
+        }),
+        ok: true,
+        status: 200
       };
     };
 
     const messages = [
-      { role: 'user', content: 'hello' }
+      { content: 'hello', role: 'user' }
     ];
 
     const event = new MockEvent();
     const generator = adapter.core.chat({
-      model: 'models/gemini-2.5-pro',
       messages,
+      model: 'models/gemini-2.5-pro',
       temperature: 0.2
     }, event);
 
@@ -240,7 +239,7 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
     });
 
     let fetchCount = 0;
-    globalThis.fetch = async (url, options) => {
+    globalThis.fetch = async (_url, _options) => {
       fetchCount++;
       return {
         ok: false,
@@ -271,20 +270,20 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
       /OAuth Code Exchange failed/
     );
 
-    // fetchCount 依然为 1，说明成功短路阻断
+    // FetchCount 依然为 1，说明成功短路阻断
     assert.strictEqual(fetchCount, 1);
   });
 
   await t.test('token refresh fatal error should block subsequent requests', async () => {
     const adapter = new GeminiOauthAdapter({
       api_key: 'ya29.old_token',
-      refresh_token: 'refresh_token_xyz',
+      base_url: 'https://cloudcode-pa.googleapis.com',
       expires_at: Date.now() - 10000, // 已过期
-      base_url: 'https://cloudcode-pa.googleapis.com'
+      refresh_token: 'refresh_token_xyz'
     });
 
     let fetchCount = 0;
-    globalThis.fetch = async (url, options) => {
+    globalThis.fetch = async (_url, _options) => {
       fetchCount++;
       return {
         ok: false,
@@ -321,22 +320,22 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
   await t.test('loadModels success and error', async () => {
     const adapter = new GeminiOauthAdapter({
       api_key: 'ya29.mock_token',
-      project_id: 'project-123',
-      base_url: 'https://cloudcode-pa.googleapis.com'
+      base_url: 'https://cloudcode-pa.googleapis.com',
+      project_id: 'project-123'
     });
 
     adapter.core._initialized = true;
 
-    globalThis.fetch = async (url, options) => {
+    globalThis.fetch = async (url, _options) => {
       if (url.includes('/v1internal:fetchAvailableModels')) {
         return {
-          ok: true,
-          status: 200,
           json: async () => ({
             models: {
               'models/gemini-2.5-pro': { displayName: 'Gemini 2.5 Pro' }
             }
-          })
+          }),
+          ok: true,
+          status: 200
         };
       }
       return { ok: false, status: 404 };
@@ -347,7 +346,6 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
     assert.strictEqual(res.modelsCount, 12);
     assert.deepStrictEqual(adapter.models, [
       {
-        owner: 'Custom',
         models: [
           'gemini-2.5-flash',
           'gemini-2.5-flash-image',
@@ -361,7 +359,8 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
           'gemini-3.1-pro-high',
           'gemini-3.1-pro-low',
           'gemini-3.1-flash-image'
-        ]
+        ],
+        owner: 'Custom'
       }
     ]);
 
@@ -382,35 +381,35 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
     const apiKey = `http://localhost:8085/callback?code=${code}&state=${state}`;
 
     let fetchCount = 0;
-    globalThis.fetch = async (url, options) => {
+    globalThis.fetch = async (url, _options) => {
       fetchCount++;
       if (url.includes('/token')) {
         return {
-          ok: true,
-          status: 200,
           json: async () => ({
             access_token: 'ya29.cached_access_token',
             refresh_token: 'refresh_token_cached',
             expires_in: 3600
-          })
+          }),
+          ok: true,
+          status: 200
         };
       }
       if (url.includes('/v1internal:loadCodeAssist')) {
         return {
-          ok: true,
-          status: 200,
           json: async () => ({
             cloudaicompanionProject: 'project-cached',
             allowedTiers: [{ id: 'free-tier', isDefault: true }],
             currentTier: 'free-tier'
-          })
+          }),
+          ok: true,
+          status: 200
         };
       }
       if (url.includes('/v1internal:setUserSettings')) {
-        return { ok: true, status: 200, json: async () => ({ userSettings: {} }) };
+        return { json: async () => ({ userSettings: {} }), ok: true, status: 200 };
       }
       if (url.includes('/v1internal:fetchUserInfo')) {
-        return { ok: true, status: 200, json: async () => ({ userSettings: {} }) };
+        return { json: async () => ({ userSettings: {} }), ok: true, status: 200 };
       }
       return { ok: false, status: 404 };
     };
@@ -422,7 +421,7 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
     });
 
     await adapter1.core._ensureInitialized();
-    assert.strictEqual(fetchCount, 4); // token, loadCodeAssist, setUserSettings, fetchUserInfo
+    assert.strictEqual(fetchCount, 4); // Token, loadCodeAssist, setUserSettings, fetchUserInfo
     assert.strictEqual(adapter1.core.project_id, 'project-cached');
     assert.strictEqual(adapter1.core.privacy_mode, 'privacy_set');
 
@@ -458,8 +457,8 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
     const state1 = 'state_old';
     const state2 = 'state_new';
     
-    sessionStore.set(state1, { verifier: 'verifier_old', createdAt: Date.now() - 10000 });
-    sessionStore.set(state2, { verifier: 'verifier_new', createdAt: Date.now() });
+    sessionStore.set(state1, { createdAt: Date.now() - 10000, verifier: 'verifier_old' });
+    sessionStore.set(state2, { createdAt: Date.now(), verifier: 'verifier_new' });
 
     // 创建一个只含有 raw code 或者是错误 state 的 api_key
     const adapter = new GeminiOauthAdapter({
@@ -469,27 +468,27 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
 
     const requests = [];
     globalThis.fetch = async (url, options) => {
-      requests.push({ url, body: options.body });
+      requests.push({ body: options.body, url });
       if (url.includes('/token')) {
         return {
-          ok: true,
-          status: 200,
           json: async () => ({
             access_token: 'ya29.new_token_test',
             refresh_token: 'refresh_token_test',
             expires_in: 3600
-          })
+          }),
+          ok: true,
+          status: 200
         };
       }
       if (url.includes('/v1internal:loadCodeAssist')) {
         return {
+          json: async () => ({ cloudaicompanionProject: 'proj-xyz' }),
           ok: true,
-          status: 200,
-          json: async () => ({ cloudaicompanionProject: 'proj-xyz' })
+          status: 200
         };
       }
       if (url.includes('/v1internal:setUserSettings') || url.includes('/v1internal:fetchUserInfo')) {
-        return { ok: true, status: 200, json: async () => ({ userSettings: {} }) };
+        return { json: async () => ({ userSettings: {} }), ok: true, status: 200 };
       }
       return { ok: false };
     };
@@ -523,27 +522,27 @@ test('Antigravity OAuth Adapter Flow', async (t) => {
 
     const requests = [];
     globalThis.fetch = async (url, options) => {
-      requests.push({ url, body: options.body });
+      requests.push({ body: options.body, url });
       if (url.includes('/token')) {
         return {
-          ok: true,
-          status: 200,
           json: async () => ({
             access_token: 'ya29.new_token_test',
             refresh_token: 'refresh_token_test',
             expires_in: 3600
-          })
+          }),
+          ok: true,
+          status: 200
         };
       }
       if (url.includes('/v1internal:loadCodeAssist')) {
         return {
+          json: async () => ({ cloudaicompanionProject: 'proj-xyz' }),
           ok: true,
-          status: 200,
-          json: async () => ({ cloudaicompanionProject: 'proj-xyz' })
+          status: 200
         };
       }
       if (url.includes('/v1internal:setUserSettings') || url.includes('/v1internal:fetchUserInfo')) {
-        return { ok: true, status: 200, json: async () => ({ userSettings: {} }) };
+        return { json: async () => ({ userSettings: {} }), ok: true, status: 200 };
       }
       return { ok: false };
     };

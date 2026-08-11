@@ -98,11 +98,11 @@ export class IPDetector {
     const validIP = this.selectBestIP(candidates)
     
     return {
-      ip: validIP.ip || '未知',
-      source: validIP.source || '未知',
       allCandidates: candidates,
+      ip: validIP.ip || '未知',
       isPrivate: this.isPrivateIP(validIP.ip),
-      isValid: this.isValidIP(validIP.ip)
+      isValid: this.isValidIP(validIP.ip),
+      source: validIP.source || '未知'
     }
   }
 
@@ -131,7 +131,7 @@ export class IPDetector {
    * 验证 IP 地址格式
    */
   isValidIP(ip) {
-    if (!ip || typeof ip !== 'string') return false
+    if (!ip || typeof ip !== 'string') {return false}
     
     // 清理 IP（移除端口号，但保留 IPv6 格式）
     let cleanIP = ip.trim()
@@ -153,7 +153,7 @@ export class IPDetector {
    * 检查是否为私网 IP
    */
   isPrivateIP(ip) {
-    if (!this.isValidIP(ip)) return true
+    if (!this.isValidIP(ip)) {return true}
     
     // 使用相同的清理逻辑
     let cleanIP = ip.trim()
@@ -200,8 +200,8 @@ export class IPDetector {
       // 这里可以集成第三方地理位置服务
       // 例如：ipapi.co, ipinfo.io 等
       return {
-        country: '未知',
         city: '未知',
+        country: '未知',
         isp: '未知'
       }
     } catch (error) {
@@ -217,15 +217,15 @@ export class IPDetector {
     const ipInfo = req.ipInfo || this.detectIP(req)
     
     return {
-      timestamp: new Date().toISOString(),
+      allCandidates: ipInfo.allCandidates,
       clientIP: ipInfo.ip,
-      source: ipInfo.source,
+      headers: this.config.debug ? req.headers : undefined,
       isPrivate: ipInfo.isPrivate,
       isValid: ipInfo.isValid,
-      userAgent: req.headers['user-agent'],
       referer: req.headers.referer,
-      allCandidates: ipInfo.allCandidates,
-      headers: this.config.debug ? req.headers : undefined
+      source: ipInfo.source,
+      timestamp: new Date().toISOString(),
+      userAgent: req.headers['user-agent']
     }
   }
 }

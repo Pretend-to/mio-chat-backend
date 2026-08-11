@@ -11,8 +11,7 @@ test('xAI Adapter', async (t) => {
   };
 
   const mocks = {
-    models: async () => [{ owner: 'xAI', models: ['grok-beta'] }],
-    createCore: (event) => {
+    createCore: (_event) => {
       const createStream = async function* () {
         yield { type: 'response.output_text.delta', delta: 'Hello from xAI' };
       };
@@ -20,7 +19,8 @@ test('xAI Adapter', async (t) => {
         responses: { create: async () => ({ [Symbol.asyncIterator]: createStream }) },
         models: { list: async () => ({ data: [] }) }
       };
-    }
+    },
+    models: async () => [{ owner: 'xAI', models: ['grok-beta'] }]
   };
 
   await t.test('_prepareChatBody correctly configures xAI web_search and x_search tools', async () => {
@@ -31,21 +31,21 @@ test('xAI Adapter', async (t) => {
 
     // Test 1: web_search enabled via extraSettings.xai.web_search
     const body1 = {
-      messages: [{ role: 'user', content: 'latest news' }],
+      messages: [{ content: 'latest news', role: 'user' }],
       settings: {
         base: { model: 'grok-beta', stream: true },
         chatParams: { reasoning_effort: 2 },
-        toolCallSettings: { mode: 'AUTO', tools: [] },
         extraSettings: {
           xai: {
             web_search: {
-              enable: true,
               allowed_domains: ['x.ai'],
-              excluded_domains: ['bad.com'],
-              enable_image_understanding: true
+              enable: true,
+              enable_image_understanding: true,
+              excluded_domains: ['bad.com']
             }
           }
-        }
+        },
+        toolCallSettings: { mode: 'AUTO', tools: [] }
       }
     };
     const prepared1 = await adapter._prepareChatBody(body1);
@@ -56,24 +56,24 @@ test('xAI Adapter', async (t) => {
       type: 'web_search',
       web_search: {
         allowed_domains: ['x.ai'],
-        excluded_domains: ['bad.com'],
-        enable_image_understanding: true
+        enable_image_understanding: true,
+        excluded_domains: ['bad.com']
       }
     });
 
     // Test 2: x_search enabled via extraSettings.x_search
     const body2 = {
-      messages: [{ role: 'user', content: 'trending posts' }],
+      messages: [{ content: 'trending posts', role: 'user' }],
       settings: {
         base: { model: 'grok-beta', stream: true },
         chatParams: {},
-        toolCallSettings: { mode: 'AUTO', tools: [] },
         extraSettings: {
           x_search: {
-            enable: true,
-            allowed_x_handles: ['elonmusk']
+            allowed_x_handles: ['elonmusk'],
+            enable: true
           }
-        }
+        },
+        toolCallSettings: { mode: 'AUTO', tools: [] }
       }
     };
     const prepared2 = await adapter._prepareChatBody(body2);
@@ -83,25 +83,25 @@ test('xAI Adapter', async (t) => {
       type: 'x_search',
       x_search: {
         allowed_x_handles: ['elonmusk'],
-        excluded_x_handles: undefined,
         enable_image_understanding: undefined,
-        enable_video_understanding: undefined
+        enable_video_understanding: undefined,
+        excluded_x_handles: undefined
       }
     });
 
     // Test 3: Both web_search and x_search enabled simultaneously
     const body3 = {
-      messages: [{ role: 'user', content: 'search all' }],
+      messages: [{ content: 'search all', role: 'user' }],
       settings: {
         base: { model: 'grok-beta', stream: true },
         chatParams: {},
-        toolCallSettings: { mode: 'AUTO', tools: [] },
         extraSettings: {
           xai: {
             web_search: { enable: true },
             x_search: { enable: true }
           }
-        }
+        },
+        toolCallSettings: { mode: 'AUTO', tools: [] }
       }
     };
     const prepared3 = await adapter._prepareChatBody(body3);

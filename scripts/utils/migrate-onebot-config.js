@@ -12,9 +12,9 @@ import SystemSettingsService from '../../lib/database/services/SystemSettingsSer
 class OneBotConfigMigrator {
   constructor(options = {}) {
     this.stats = {
+      error: null,
       found: false,
-      migrated: false,
-      error: null
+      migrated: false
     }
     this.silent = options.silent || false
   }
@@ -54,7 +54,7 @@ class OneBotConfigMigrator {
       }
       
       // 迁移配置
-      const configData = oldConfig.configData
+      const {configData} = oldConfig
       await SystemSettingsService.set('onebot', configData, 'onebot', 'OneBot 协议配置')
       
       this.stats.migrated = true
@@ -64,8 +64,8 @@ class OneBotConfigMigrator {
       }
       
       // 可选：删除旧配置（注释掉以保持安全）
-      // await PluginConfigService.delete('onebotConfig')
-      // if (!this.silent) logger.info('已删除旧的 OneBot 配置')
+      // Await PluginConfigService.delete('onebotConfig')
+      // If (!this.silent) logger.info('已删除旧的 OneBot 配置')
       
     } catch (error) {
       this.stats.error = error.message

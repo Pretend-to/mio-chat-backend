@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import './mock-env.js';
-import { scanFrontendTurns, compress } from '../../lib/chat/llm/services/CrystallizationService.js';
+import { compress, scanFrontendTurns } from '../../lib/chat/llm/services/CrystallizationService.js';
 
 test('Crystallization - scanFrontendTurns', async (t) => {
   await t.test('should return 0 for empty or null messages', () => {
@@ -11,18 +11,18 @@ test('Crystallization - scanFrontendTurns', async (t) => {
 
   await t.test('should return 0 when there are fewer turns than requested', () => {
     const messages = [
-      { role: 'user', content: 'hello' },
-      { role: 'assistant', content: 'hi' },
+      { content: 'hello', role: 'user' },
+      { content: 'hi', role: 'assistant' },
     ];
     assert.strictEqual(scanFrontendTurns(messages, 2), 0);
   });
 
   await t.test('should correctly identify turn boundary for simple conversation', () => {
     const messages = [
-      { role: 'user', content: 'hello 1' },
-      { role: 'assistant', content: 'hi 1' },
-      { role: 'user', content: 'hello 2' },
-      { role: 'assistant', content: 'hi 2' },
+      { content: 'hello 1', role: 'user' },
+      { content: 'hi 1', role: 'assistant' },
+      { content: 'hello 2', role: 'user' },
+      { content: 'hi 2', role: 'assistant' },
     ];
     // Keep 1 turn (should protect the last user turn)
     assert.strictEqual(scanFrontendTurns(messages, 1), 2); // 'hello 2' is index 2
@@ -33,14 +33,14 @@ test('Crystallization - scanFrontendTurns', async (t) => {
 
   await t.test('should preserve tool_call and tool response chains', () => {
     const messages = [
-      { role: 'user', content: 'run tool' }, // index 0 (turn 3)
-      { role: 'assistant', content: 'ok' }, // index 1
-      { role: 'user', content: 'run tool again' }, // index 2 (turn 2)
-      { role: 'assistant', tool_calls: [{ id: 'call_1', name: 'tool' }] }, // index 3
-      { role: 'tool', tool_call_id: 'call_1', content: 'result' }, // index 4
-      { role: 'assistant', content: 'done' }, // index 5
-      { role: 'user', content: 'final' }, // index 6 (turn 1)
-      { role: 'assistant', content: 'final resp' } // index 7
+      { content: 'run tool', role: 'user' }, // Index 0 (turn 3)
+      { content: 'ok', role: 'assistant' }, // Index 1
+      { content: 'run tool again', role: 'user' }, // Index 2 (turn 2)
+      { role: 'assistant', tool_calls: [{ id: 'call_1', name: 'tool' }] }, // Index 3
+      { content: 'result', role: 'tool', tool_call_id: 'call_1' }, // Index 4
+      { content: 'done', role: 'assistant' }, // Index 5
+      { content: 'final', role: 'user' }, // Index 6 (turn 1)
+      { content: 'final resp', role: 'assistant' } // Index 7
     ];
 
     // Keep 1 turn -> should protect from 'final' (index 6) onwards
@@ -76,11 +76,11 @@ Learn Go.
 
   await t.test('should build XML zones correctly', () => {
     const zones = {
-      long_term_profile: 'Rust is awesome.',
-      short_term_goals: 'Learn Go.',
+      constraints: '',
       current_plan: 'Task 1',
       file_architecture_delta: '',
-      constraints: '',
+      long_term_profile: 'Rust is awesome.',
+      short_term_goals: 'Learn Go.',
     };
     const xml = buildXmlFromZones(zones);
     assert.ok(xml.includes('<long_term_profile>\nRust is awesome.\n</long_term_profile>'));
@@ -92,8 +92,8 @@ Learn Go.
     const initialXml = `<long_term_profile>\nUser likes Python.\n</long_term_profile>`;
     const updated = applyMemoryCrud(initialXml, {
       action: 'add',
-      zone: 'long_term_profile',
       content: 'User likes C++.',
+      zone: 'long_term_profile',
     });
     const parsed = parseXmlZones(updated);
     assert.strictEqual(parsed.long_term_profile, 'User likes Python.\nUser likes C++.');
@@ -103,8 +103,8 @@ Learn Go.
     const initialXml = `<long_term_profile>\nLine 1: User likes Python.\nLine 2: User likes C++.\n</long_term_profile>`;
     const updated = applyMemoryCrud(initialXml, {
       action: 'delete',
-      zone: 'long_term_profile',
       target: 'Python',
+      zone: 'long_term_profile',
     });
     const parsed = parseXmlZones(updated);
     assert.strictEqual(parsed.long_term_profile, 'Line 2: User likes C++.');
@@ -114,9 +114,9 @@ Learn Go.
     const initialXml = `<long_term_profile>\nLine 1: User likes Python.\nLine 2: User likes C++.\n</long_term_profile>`;
     const updated = applyMemoryCrud(initialXml, {
       action: 'update',
-      zone: 'long_term_profile',
-      target: 'Line 2: User likes C++',
       content: 'Line 2: User likes Rust',
+      target: 'Line 2: User likes C++',
+      zone: 'long_term_profile',
     });
     const parsed = parseXmlZones(updated);
     assert.strictEqual(parsed.long_term_profile, 'Line 1: User likes Python.\nLine 2: User likes Rust.');
@@ -126,8 +126,8 @@ Learn Go.
     const initialXml = `<long_term_profile>\nLine 1: User likes Python.\nLine 2: User likes C++.\n</long_term_profile>`;
     const updated = applyMemoryCrud(initialXml, {
       action: 'update',
-      zone: 'long_term_profile',
       content: 'Overwrite completely',
+      zone: 'long_term_profile',
     });
     const parsed = parseXmlZones(updated);
     assert.strictEqual(parsed.long_term_profile, 'Overwrite completely');
@@ -140,12 +140,12 @@ test('Crystallization - Memory Tool integration', async (t) => {
   await t.test('should throw error if crystallization is not enabled', async () => {
     const tool = new Memory();
     const event = {
-      params: { action: 'add', zone: 'long_term_profile', content: 'test fact' },
       body: {
         settings: {
           crystallization_token_watermark: 0, // not enabled
         }
-      }
+      },
+      params: { action: 'add', content: 'test fact', zone: 'long_term_profile' }
     };
     await assert.rejects(
       async () => { await tool.recordMemory(event); },
@@ -156,13 +156,13 @@ test('Crystallization - Memory Tool integration', async (t) => {
   await t.test('should execute successfully when crystallization is enabled', async () => {
     const tool = new Memory();
     const event = {
-      params: { action: 'add', zone: 'long_term_profile', content: 'User is a developer' },
       body: {
         settings: {
           crystallization_token_watermark: 500, // enabled
           previous_summary: '',
         }
-      }
+      },
+      params: { action: 'add', content: 'User is a developer', zone: 'long_term_profile' }
     };
     const result = await tool.recordMemory(event);
     assert.strictEqual(result.success, true);
@@ -179,13 +179,13 @@ test('Crystallization - compress process', async (t) => {
     const mockEvent = {
       body: {
         messages: [
-          { role: 'user', content: 'hello 1' },
-          { role: 'assistant', content: 'hi 1' },
-          { role: 'user', content: 'hello 2' },
-          { role: 'assistant', content: 'hi 2' },
+          { content: 'hello 1', role: 'user' },
+          { content: 'hi 1', role: 'assistant' },
+          { content: 'hello 2', role: 'user' },
+          { content: 'hi 2', role: 'assistant' },
         ],
         settings: {
-          crystallization_keep_turns: 1, // keep 'hello 2' and 'hi 2'
+          crystallization_keep_turns: 1, // Keep 'hello 2' and 'hi 2'
           previous_summary: '<long_term_profile>\nUser likes Rust\n</long_term_profile>',
         }
       },
@@ -195,14 +195,14 @@ test('Crystallization - compress process', async (t) => {
     };
 
     const mockLlm = {
-      models: [{ models: ['mock-model'] }],
       handleChatRequest: async (compressEvent) => {
         compressEvent.update({
           type: 'content',
           content: '<long_term_profile>\nUser likes JavaScript\n</long_term_profile>',
         });
         compressEvent.complete();
-      }
+      },
+      models: [{ models: ['mock-model'] }]
     };
 
     const result = await compress(mockEvent, mockLlm, 2);
@@ -211,7 +211,7 @@ test('Crystallization - compress process', async (t) => {
     assert.strictEqual(result.summary, '<long_term_profile>\nUser likes JavaScript\n</long_term_profile>');
     
     // The reconstructed message chain should be: [crystalSystemMessage, ...recentMessages]
-    // recentMessages: hello 2 (index 2) and hi 2 (index 3)
+    // RecentMessages: hello 2 (index 2) and hi 2 (index 3)
     assert.strictEqual(result.messages.length, 3);
     assert.strictEqual(result.messages[0].role, 'system');
     assert.strictEqual(result.messages[0]._is_crystal, true);

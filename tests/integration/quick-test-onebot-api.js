@@ -10,10 +10,10 @@ import logger from '../../utils/logger.js'
 // 简单的测试用例
 const tests = [
   {
-    name: '获取完整配置',
+    expectedFields: ['onebot', 'web', 'server', 'llm_adapters'],
     method: 'GET',
-    path: '/api/config',
-    expectedFields: ['onebot', 'web', 'server', 'llm_adapters']
+    name: '获取完整配置',
+    path: '/api/config'
   },
   {
     name: '获取 OneBot 配置节点',
@@ -22,10 +22,10 @@ const tests = [
     expectedFields: ['enable'] // 只检查必需字段，其他字段可选
   },
   {
-    name: '获取 OneBot 插件选项',
+    expectedFields: ['options'],
     method: 'GET',
-    path: '/api/onebot/plugins',
-    expectedFields: ['options']
+    name: '获取 OneBot 插件选项',
+    path: '/api/onebot/plugins'
   }
 ]
 
@@ -45,11 +45,11 @@ async function quickTest() {
       logger.info(`\n🧪 测试: ${test.name}`)
       
       const response = await fetch(`${baseUrl}${test.path}`, {
-        method: test.method,
         headers: {
-          'X-Admin-Code': adminCode,
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+          'X-Admin-Code': adminCode
+        },
+        method: test.method
       })
       
       if (!response.ok) {

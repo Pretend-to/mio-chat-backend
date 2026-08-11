@@ -10,8 +10,7 @@ test('OpenAI Adapter', async (t) => {
   };
 
   const mocks = {
-    models: async () => [{ owner: 'OpenAI', models: ['gpt-4o', 'gpt-3.5-turbo'] }],
-    createCore: (event) => {
+    createCore: (_event) => {
       const createStream = async function* () {
         yield { choices: [{ delta: { content: 'Hello from OpenAI' } }] };
         yield { usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } };
@@ -21,7 +20,8 @@ test('OpenAI Adapter', async (t) => {
         models: { list: async () => ({ data: [] }) }
       };
       return mock;
-    }
+    },
+    models: async () => [{ owner: 'OpenAI', models: ['gpt-4o', 'gpt-3.5-turbo'] }]
   };
 
   await runGenericAdapterTests(t, OpenAIBot, config, mocks);

@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { MockEvent, MockFactories } from './mock-env.js';
+import { MockEvent } from './mock-env.js';
 
 /**
  * Generic test suite for LLM adapters
@@ -25,14 +25,14 @@ export async function runGenericAdapterTests(t, AdapterClass, config, mocks) {
 
   const injectMock = (adapter, mockCore) => {
     let coreProperty = null;
-    if ('openai' in adapter) coreProperty = 'openai';
-    else if ('core' in adapter) coreProperty = 'core';
-    else if ('oauthCore' in adapter) coreProperty = 'oauthCore';
+    if ('openai' in adapter) {coreProperty = 'openai';}
+    else if ('core' in adapter) {coreProperty = 'core';}
+    else if ('oauthCore' in adapter) {coreProperty = 'oauthCore';}
     
     if (coreProperty) {
       Object.defineProperty(adapter, coreProperty, {
-        get: () => mockCore,
-        configurable: true
+        configurable: true,
+        get: () => mockCore
       });
     }
     return coreProperty;
@@ -43,8 +43,8 @@ export async function runGenericAdapterTests(t, AdapterClass, config, mocks) {
     const mockCore = {
       chat: createStream,
       completions: { create: async () => ({ [Symbol.asyncIterator]: createStream }) },
-      responses: { create: async () => ({ [Symbol.asyncIterator]: createStream }) },
-      models: { list: async () => ({ data: [] }) }
+      models: { list: async () => ({ data: [] }) },
+      responses: { create: async () => ({ [Symbol.asyncIterator]: createStream }) }
     };
     // For OpenAI: this.openai.chat.completions.create()
     mockCore.chat.completions = mockCore.completions;
@@ -68,11 +68,11 @@ export async function runGenericAdapterTests(t, AdapterClass, config, mocks) {
   await t.test(`${metadata.name}: should handle request interruption (abort)`, async () => {
     const event = new MockEvent();
     
-    const createStream = async function* () {
-      yield { choices: [{ delta: { content: 'Thinking...' } }], type: 'response.output_text.delta', delta: 'Thinking...' };
+    const createStream = async function*  createStream() {
+      yield { choices: [{ delta: { content: 'Thinking...' } }], delta: 'Thinking...', type: 'response.output_text.delta' };
       await new Promise(r => setTimeout(r, 100));
-      if (event.aborted) return;
-      yield { choices: [{ delta: { content: 'Done.' } }], type: 'response.output_text.delta', delta: 'Done.' };
+      if (event.aborted) {return;}
+      yield { choices: [{ delta: { content: 'Done.' } }], delta: 'Done.', type: 'response.output_text.delta' };
     };
 
     const mockCore = createUnifiedMockCore(createStream);
@@ -92,32 +92,32 @@ export async function runGenericAdapterTests(t, AdapterClass, config, mocks) {
       settings: {
         base: { model: 'gpt-4o', stream: true },
         chatParams: { temperature: 0.7 },
-        toolCallSettings: { mode: 'AUTO', tools: ['get_weather'] },
-        extraSettings: {}
+        extraSettings: {},
+        toolCallSettings: { mode: 'AUTO', tools: ['get_weather'] }
       }
     });
 
     let callCount = 0;
-    const createStream = async function* () {
+    const createStream = async function*  createStream() {
       callCount++;
       if (callCount === 1) {
         // Return tool call in multiple formats to satisfy all adapters
         yield {
+          candidates: [{ content: { parts: [{ functionCall: { name: 'get_weather', args: { location: 'London' } } }] } }],
           choices: [{
             delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'get_weather', arguments: '{"location":"London"}' } }] }
           }],
-          candidates: [{ content: { parts: [{ functionCall: { name: 'get_weather', args: { location: 'London' } } }] } }],
-          type: 'response.output_item.added',
-          item: { id: 'call_1', type: 'function_call', name: 'get_weather' }
+          item: { id: 'call_1', name: 'get_weather', type: 'function_call' },
+          type: 'response.output_item.added'
         };
         // For Responses API, we need a "done" chunk
-        yield { type: 'response.function_call_arguments.done', item_id: 'call_1', arguments: '{"location":"London"}' };
+        yield { arguments: '{"location":"London"}', item_id: 'call_1', type: 'response.function_call_arguments.done' };
       } else {
         yield {
-          choices: [{ delta: { content: 'Sunny' } }],
           candidates: [{ content: { parts: [{ text: 'Sunny' }] } }],
-          type: 'response.output_text.delta',
-          delta: 'Sunny'
+          choices: [{ delta: { content: 'Sunny' } }],
+          delta: 'Sunny',
+          type: 'response.output_text.delta'
         };
       }
     };

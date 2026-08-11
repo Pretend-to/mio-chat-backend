@@ -64,10 +64,10 @@ async function testOneBotConfig() {
     logger.info('\n4. 测试配置更新（不会实际修改）')
     const _testConfig = {
       ...memoryConfig,
+      admin_qq: '987654321',
+      bot_qq: '123456789',
       enable: false,
       reverse_ws_url: 'ws://test.example.com',
-      bot_qq: '123456789',
-      admin_qq: '987654321',
       token: 'test_token'
     }
     logger.info('✓ 测试配置准备完成（未实际保存）')

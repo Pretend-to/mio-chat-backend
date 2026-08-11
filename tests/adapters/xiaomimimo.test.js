@@ -11,7 +11,6 @@ test('Xiaomi MiMo Adapter', async (t) => {
   };
 
   const mocks = {
-    models: async () => [{ owner: 'Xiaomi', models: ['mimo-v2.5-pro'] }],
     createCore: (_event) => {
       const createStream = async function* () {
         yield { choices: [{ delta: { reasoning_content: 'Thinking on MiMo...' } }] };
@@ -23,7 +22,8 @@ test('Xiaomi MiMo Adapter', async (t) => {
         models: { list: async () => ({ data: [] }) }
       };
       return mock;
-    }
+    },
+    models: async () => [{ owner: 'Xiaomi', models: ['mimo-v2.5-pro'] }]
   };
 
   // Run the generic adapter test suite
@@ -33,8 +33,8 @@ test('Xiaomi MiMo Adapter', async (t) => {
   await t.test('MiMo: should prepare chat body with thinking disabled when reasoning_effort is 0', async () => {
     const adapter = new XiaomiMiMoAdapter(config);
     const body = {
-      model: 'mimo-v2.5-pro',
       messages: [{ role: 'user', content: 'test' }],
+      model: 'mimo-v2.5-pro',
       settings: {
         base: {
           model: 'mimo-v2.5-pro',
@@ -62,8 +62,8 @@ test('Xiaomi MiMo Adapter', async (t) => {
   await t.test('MiMo: should prepare chat body with thinking enabled when reasoning_effort is not 0', async () => {
     const adapter = new XiaomiMiMoAdapter(config);
     const body = {
-      model: 'mimo-v2.5-pro',
       messages: [{ role: 'user', content: 'test' }],
+      model: 'mimo-v2.5-pro',
       settings: {
         base: {
           model: 'mimo-v2.5-pro',
