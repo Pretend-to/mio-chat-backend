@@ -102,6 +102,7 @@ Mio-Chat V3 采用了面向切面编程的设计理念。通过一系列生命�
 | 挂载点 | 作用 | 典型应用场景 |
 | :--- | :--- | :--- |
 | `LLM_BEFORE_CHAT` | 对话拦截 | 敏感词过滤、余额预扣费、Context 注入 |
+| `LLM_BEFORE_RECURSION` | 递归轮次拦截 | 按工具调用轮次动态调整工具列表、注入轮次上下文 |
 | `TOOL_BEFORE_LOAD` | 加载审计 | 校验工具名称安全性、防止插件冲突 |
 | `TOOL_BEFORE_EXECUTE` | 执行干预 | 权限动态校验 (RBAC)、参数自动修复、挂起拦截 |
 | `LLM_AFTER_CHAT` | 结果审计 | Token 用量落库、响应内容脱敏 |
@@ -116,7 +117,7 @@ Mio-Chat V3 采用了面向切面编程的设计理念。通过一系列生命�
 
 | 分类 | 内容大纲 |
 | :--- | :--- |
-| **🚀 快速开始** | [PM2 部署](./docs/deployment/DEPLOYMENT.md) \| [Docker 部署](./docs/deployment/DOCKER.md) \| [配置指南](./docs/api/config-api.md) |
+| **🚀 快速开始** | [完整部署与玩法](./docs/deployment/RUNNING_GUIDE.md) \| [PM2 部署](./docs/deployment/DEPLOYMENT.md) \| [Docker 部署](./docs/deployment/DOCKER.md) \| [配置指南](./docs/api/config-api.md) |
 | **🧠 核心机制** | [上下文压缩原理](./docs/core/memory-crystallization.md) \| [Hooks 拦截机制](./docs/core/hooks.md) \| [Socket 协议](./docs/api/socket_protocol_zod.ts) |
 | **🛠️ 开发指南** | [插件开发手册](./docs/plugins/PLUGIN_DEVELOPMENT_GUIDE.md) \| [Skill 编写规范](./lib/chat/llm/skills/miochat-plugin-builder/SKILL.md) \| [Adapter 模板](./docs/adapters/ADAPTER_TEMPLATE.js) |
 | **🗄️ 归档资料** | [架构迁移历史](./docs/archive/MIGRATION.md) \| [常见问题 Q&A](./docs/archive/FULL_PROJECT_QA.md) |
