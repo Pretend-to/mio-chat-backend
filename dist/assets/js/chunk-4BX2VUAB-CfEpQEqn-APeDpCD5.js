@@ -1,0 +1,2 @@
+import{c}from"./src-Du2ai1BK-RInA4fTn.js";function t(c,t){c.accDescr&&t.setAccDescription?.(c.accDescr),c.accTitle&&t.setAccTitle?.(c.accTitle),c.title&&t.setDiagramTitle?.(c.title)}c(t,"populateCommonDb");export{t};
+//# sourceMappingURL=chunk-4BX2VUAB-CfEpQEqn-APeDpCD5.js.map
