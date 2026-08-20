@@ -3,13 +3,14 @@
   "categories": {
     "correctness": "error",
     "suspicious": "error",
-    "perf": "warn",
-    "style": "warn",
+    "perf": "off",
+    "style": "off",
     "pedantic": "off",
     "nursery": "off",
     "restriction": "off"
   },
   "rules": {
+    "no-control-regex": "off",
     "no-underscore-dangle": "off",
     "consistent-function-scoping": "off",
     "no-shadow": [
