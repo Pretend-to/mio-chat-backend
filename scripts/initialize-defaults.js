@@ -45,7 +45,8 @@ const DEFAULT_MODEL_OWNERS = [
   { keywords: ['zeroone', '01.ai', 'yi'], owner: '零一万物' },
   { keywords: ['baichuan'], owner: '百川智能' },
   { keywords: ['stepfun', 'step', 'yuewen'], owner: '阶跃星辰' },
-  { keywords: ['perplexity'], owner: 'Perplexity' }
+  { keywords: ['perplexity'], owner: 'Perplexity' },
+  { keywords: ['dots', 'diandian', 'note3', 'xiaohongshu', '点点'], owner: 'xiaohongshu' }
 ]
 
 /**
