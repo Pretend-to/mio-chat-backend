@@ -18,12 +18,18 @@ lib/plugins/example-plugin/
 │   ├── basicTool.js
 │   ├── advancedTool.js
 │   └── asyncTool.js
+├── skills/                 # 可选：插件自带的技能（自动注册到 SkillService）
+│   └── my-skill/
+│       └── SKILL.md
 └── tests/
     ├── plugin.test.js
     └── tools.test.js
 ```
 
 ### package.json 模板
+
+`skills/` 目录可选。每个子目录是一个 skill（需含 `SKILL.md`，frontmatter 提供 `name` + `description`），
+插件初始化时自动注册，禁用插件时自动卸载，支持通过 reload 重载。
 
 ```json
 {
