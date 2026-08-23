@@ -44,7 +44,9 @@ scratch/
 .env
 .env.*
 
-# 忽略 public 静态资源存放目录
-public/
-
 artifacts/
+
+# AnyUI 模板库 - 仅跟踪内置全局模板 (global)，忽略用户自定义运行时模板
+/lib/plugins/anyui-plugin/templates/*
+!/lib/plugins/anyui-plugin/templates/global/
+!/lib/plugins/anyui-plugin/templates/global/**

@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>{{chapterTitle}}</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+.comic {
+  width: 100%;
+  max-width: 480px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #ffffff;
+  border-radius: 16px;
+  overflow: hidden;
+  color: #1e293b;
+  box-shadow: 0 4px 24px rgba(244, 114, 182, 0.12), 0 1px 3px rgba(0,0,0,0.05);
+  border: 1px solid rgba(244, 114, 182, 0.25);
+}
+
+/* 梦幻柔和流体主图框 */
+.ldr-box {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px 16px 0 0;
+  overflow: hidden;
+  background: #fdf4ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  cursor: zoom-in;
+}
+
+/* 柔和流体融色层 */
+.balanced-liquid-container {
+  position: absolute;
+  inset: -30px;
+  filter: blur(48px);
+  opacity: 0.82;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.soft-blob-1 {
+  position: absolute;
+  top: -10%;
+  left: -10%;
+  width: 110%;
+  height: 110%;
+  border-radius: 50% 50% 60% 40% / 40% 60% 50% 50%;
+  background: radial-gradient(circle at 45% 45%, #f472b6 0%, #fbcfe8 55%, rgba(251, 207, 232, 0.2) 80%);
+  animation: flow-smooth-1 4.2s infinite ease-in-out alternate;
+}
+
+.soft-blob-2 {
+  position: absolute;
+  bottom: -15%;
+  right: -15%;
+  width: 115%;
+  height: 115%;
+  border-radius: 60% 40% 50% 50% / 50% 50% 60% 40%;
+  background: radial-gradient(circle at 55% 55%, #38bdf8 0%, #bae6fd 55%, rgba(186, 230, 253, 0.2) 80%);
+  animation: flow-smooth-2 3.8s infinite ease-in-out alternate;
+}
+
+.soft-blob-center {
+  position: absolute;
+  top: 5%;
+  left: 10%;
+  width: 90%;
+  height: 90%;
+  border-radius: 45% 55% 45% 55% / 55% 45% 55% 45%;
+  background: radial-gradient(circle at center, #c084fc 0%, #e9d5ff 50%, rgba(233, 213, 255, 0.2) 80%);
+  animation: flow-smooth-center 4.8s infinite ease-in-out alternate;
+}
+
+.soft-blob-4 {
+  position: absolute;
+  bottom: -10%;
+  left: -10%;
+  width: 105%;
+  height: 105%;
+  border-radius: 40% 60% 55% 45% / 50% 45% 55% 50%;
+  background: radial-gradient(circle at 50% 50%, #fda4af 0%, #fecdd3 55%, rgba(254, 205, 211, 0.2) 80%);
+  animation: flow-smooth-4 3.5s infinite ease-in-out alternate;
+}
+
+@keyframes flow-smooth-1 {
+  0% { transform: translate(0, 0) scale(1) rotate(0deg); }
+  50% { transform: translate(20%, 15%) scale(1.18) rotate(35deg); }
+  100% { transform: translate(-10%, 10%) scale(0.92) rotate(-25deg); }
+}
+
+@keyframes flow-smooth-2 {
+  0% { transform: translate(0, 0) scale(1) rotate(0deg); }
+  50% { transform: translate(-22%, -18%) scale(1.2) rotate(-40deg); }
+  100% { transform: translate(12%, -10%) scale(0.95) rotate(30deg); }
+}
+
+@keyframes flow-smooth-center {
+  0% { transform: scale(0.95) translate(0, 0) rotate(0deg); }
+  50% { transform: scale(1.22) translate(-10%, 12%) rotate(45deg); }
+  100% { transform: scale(0.9) translate(15%, -10%) rotate(-35deg); }
+}
+
+@keyframes flow-smooth-4 {
+  0% { transform: translate(0, 0) scale(1.05) rotate(0deg); }
+  50% { transform: translate(25%, -15%) scale(0.9) rotate(-50deg); }
+  100% { transform: translate(-12%, 18%) scale(1.15) rotate(25deg); }
+}
+
+/* 晶莹折射覆层 */
+.soft-overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.05) 100%);
+  box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.85), inset 0 0 10px rgba(244, 114, 182, 0.1);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* 毛玻璃极简加载动画 */
+.glass-spinner {
+  position: absolute;
+  z-index: 4;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 6px 20px rgba(244, 114, 182, 0.18), 0 2px 6px rgba(0,0,0,0.03);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  pointer-events: none;
+}
+
+.glass-spinner .ring {
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid rgba(244, 114, 182, 0.2);
+  border-top-color: #ec4899;
+  border-right-color: #38bdf8;
+  border-radius: 50%;
+  animation: g-spin 1s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+@keyframes g-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.ldr-box.has-image .glass-spinner {
+  opacity: 0;
+  transform: scale(0.85);
+  pointer-events: none;
+}
+
+/* 真实图片层：初始无图，回填后渐入 */
+.ldr-box img {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  max-height: 480px;
+  display: block;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ldr-box img.loaded {
+  opacity: 1;
+}
+
+/* 章节标签与全屏按钮 */
+.chapter-tag {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  z-index: 5;
+  color: #831843;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  background: rgba(255, 255, 255, 0.85);
+  padding: 4px 10px;
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(244, 114, 182, 0.3);
+  box-shadow: 0 2px 8px rgba(244, 114, 182, 0.12);
+}
+
+.fs-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 12px;
+  z-index: 5;
+  background: rgba(255, 255, 255, 0.85);
+  color: #475569;
+  border: 1px solid rgba(244, 114, 182, 0.3);
+  border-radius: 16px;
+  padding: 5px 11px;
+  font-size: 11.5px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  transition: background 0.2s ease, transform 0.1s ease;
+}
+.fs-btn:active { transform: scale(0.95); background: #ffffff; }
+
+/* 对白区域 */
+.dialog {
+  background: #ffffff;
+  border-top: 1px solid rgba(244, 114, 182, 0.2);
+  padding: 12px 16px 10px;
+}
+
+.caption {
+  color: #db2777;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.dialog-scroll {
+  max-height: 84px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.dialog-scroll::-webkit-scrollbar { width: 3px; }
+.dialog-scroll::-webkit-scrollbar-thumb { background: rgba(244, 114, 182, 0.4); border-radius: 2px; }
+
+.dialog p {
+  font-size: 13.5px;
+  line-height: 1.6;
+  margin-bottom: 4px;
+  color: #334155;
+}
+.dialog p:last-child { margin-bottom: 0; }
+
+/* 剧情选项条 */
+.speech-bar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 14px 14px;
+  background: #ffffff;
+  border-top: 1px solid rgba(244, 114, 182, 0.12);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.speech-btn {
+  flex-shrink: 0;
+  min-height: 38px;
+  background: #fdf2f8;
+  color: #be185d;
+  border: 1px solid rgba(244, 114, 182, 0.35);
+  border-radius: 20px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.speech-btn:active { background: #fce7f3; transform: scale(0.96); }
+</style>
+</head>
+<body>
+<div class="comic">
+  <div class="stage ldr-box" data-task-id="{{taskId}}" onclick="window.__mio.previewImage(this.querySelector('img')?.src || '{{imageUrl}}')">
+    <!-- 梦幻粉蓝流体背景层 -->
+    <div class="balanced-liquid-container">
+      <div class="soft-blob-1"></div>
+      <div class="soft-blob-2"></div>
+      <div class="soft-blob-center"></div>
+      <div class="soft-blob-4"></div>
+    </div>
+    <div class="soft-overlay"></div>
+
+    <!-- 毛玻璃微型动效指示器（生图完成自动缩放淡出） -->
+    <div class="glass-spinner">
+      <div class="ring"></div>
+    </div>
+
+    <!-- 真实图片层：初始无图，回填后平滑淡入 -->
+    <img src="{{imageUrl}}" alt="{{chapterTitle}}" onload="if(this.src && this.src.length > 5){this.classList.add('loaded');this.closest('.ldr-box')?.classList.add('has-image');}">
+
+    <div class="chapter-tag">{{chapterTitle}}</div>
+    <button class="fs-btn" onclick="event.stopPropagation();window.__mio.previewImage(this.parentElement.querySelector('img')?.src || '{{imageUrl}}')">⛶ 全屏</button>
+  </div>
+
+  <div class="dialog">
+    <div class="caption">{{caption}}</div>
+    <div class="dialog-scroll">
+      <p>{{text1}}</p>
+      <p>{{text2}}</p>
+      <p>{{text3}}</p>
+    </div>
+  </div>
+
+  <div class="speech-bar">
+    <button class="speech-btn" onclick="window.__mio.sendText(this.textContent.trim())">{{speech1}}</button>
+    <button class="speech-btn" onclick="window.__mio.sendText(this.textContent.trim())">{{speech2}}</button>
+    <button class="speech-btn" onclick="window.__mio.sendText(this.textContent.trim())">{{speech3}}</button>
+  </div>
+</div>
+</body>
+</html>

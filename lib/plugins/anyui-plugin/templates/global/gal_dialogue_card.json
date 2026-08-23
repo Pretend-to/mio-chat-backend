@@ -1,0 +1,18 @@
+{
+  "name": "gal_dialogue_card",
+  "description": "通用 gal/视觉小说对话卡片：立绘/CG + 章节标题 + 三行对白滚动区 + 三个对话选项按钮，支持异步生图与图片全屏预览",
+  "variables": [
+    "chapterTitle",
+    "imageUrl",
+    "taskId",
+    "imagePrompt",
+    "caption",
+    "text1",
+    "text2",
+    "text3",
+    "speech1",
+    "speech2",
+    "speech3"
+  ],
+  "isGlobal": true
+}
