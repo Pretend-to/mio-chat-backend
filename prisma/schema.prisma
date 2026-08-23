@@ -211,3 +211,40 @@ model LLMCallLog {
   @@index([createdAt])
   @@map("llm_call_logs")
 }
+
+// 生图适配器配置表
+model ImageAdapter {
+  id           Int      @id @default(autoincrement())
+  adapterType  String   @map("adapter_type") // 'openai' | 'gemini' | 'volcengine' | 'sd-webui' | 'ttd'
+  instanceName String   @map("instance_name")
+  configData   String   @map("config_data") // JSON 格式存储配置
+  enabled      Boolean  @default(true)
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([adapterType, instanceName])
+  @@index([adapterType])
+  @@index([enabled])
+  @@map("image_adapters")
+}
+
+// 搜索适配器配置表
+model SearchAdapter {
+  id           Int      @id @default(autoincrement())
+  adapterType  String   @map("adapter_type") // 'tavily' | 'duckduckgo' | 'bing' | 'google' | 'searxng' | 'zhipu'
+  instanceName String   @map("instance_name")
+  configData   String   @map("config_data") // JSON 格式存储配置
+  enabled      Boolean  @default(true)
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([adapterType, instanceName])
+  @@index([adapterType])
+  @@index([enabled])
+  @@map("search_adapters")
+}
+
+
+

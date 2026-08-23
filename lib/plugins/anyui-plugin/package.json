@@ -1,0 +1,13 @@
+{
+  "name": "anyui-plugin",
+  "version": "1.0.0",
+  "description": "anyUI for MioChat - 定义/发送/管理 UI 模板，iframe 渲染可交互界面到消息流",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["ui", "template", "iframe", "rpg", "render", "anyui"],
+  "author": "Leo Wang",
+  "license": "MIT"
+}

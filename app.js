@@ -87,6 +87,19 @@ async function initializeDatabase(dependencies) {
     await SystemSettingsService.initialize()
     await PluginConfigService.initialize()
     await TaskService.initialize()
+
+    // 初始化生图、搜索、识图调度服务
+    try {
+      const { imageService } = await import('./lib/chat/image/ImageService.js')
+      const { searchService } = await import('./lib/chat/search/SearchService.js')
+      const { visionService } = await import('./lib/chat/vision/VisionService.js')
+      await imageService.initialize()
+      await searchService.initialize()
+      await visionService.initialize()
+      logger.debug('生图、搜索与识图服务初始化完成')
+    } catch (err) {
+      logger.warn('调度服务初始化失败:', err.message)
+    }
     
     // 4. 初始化默认配置（如果数据库中没有）
     logger.debug('初始化默认配置...')
