@@ -1,2 +1,0 @@
-import{c as e,r as t}from"./src-Du2ai1BK-RInA4fTn.js";var o=e((e,o)=>{let a;return"sandbox"===o&&(a=t("#i"+e)),t("sandbox"===o?a.nodes()[0].contentDocument.body:"body").select(`[id="${e}"]`)},"getDiagramElement");export{o as t};
-//# sourceMappingURL=chunk-55IACEB6-DycdW87m-Dy906qAM.js.map
