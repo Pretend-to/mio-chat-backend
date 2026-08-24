@@ -29,15 +29,14 @@ AnyUI 原生打通了后端生图服务。在调用 `send_ui` 时：
 - `send_ui(template?, html?, variables?, prompt?, imageUrl?)`：
   - **优先使用**：指定全局或已有模板 `template: "gal_dialogue_card"` + `variables: JSON.stringify({...})` + 可选 `prompt`；
   - 也可传 `html` 直接发送自定义内联 HTML。
-- `define_ui_template(name, html, description?, variables?, variableDocs?)`：保存新模板到模板库；`variableDocs` 为 JSON 对象字符串，用于给每个字段补充说明 `{字段名: {type, required, description}}`，保存后 `manage_ui_templates` 的 list/get 均可查看字段含义。
-- `manage_ui_templates(action: 'list' | 'get' | 'delete', name?)`：管理与查询可用模板列表；list 返回每个模板的 `variableDocs` 逐字段说明，get 返回完整正文与字段说明。
+- `define_ui_template(name, html, description?, schema?)`：保存新模板到模板库；`schema` 接收标准 JSON Schema（如 `{"type":"object","properties":{...},"required":[...]}`），用于为每个字段定义类型、说明和必填约束，保存后 `manage_ui_templates` 的 list/get 均可查看标准 Schema 与字段规范。
+- `manage_ui_templates(action: 'list' | 'get' | 'delete', name?)`：管理与查询可用模板列表；list 返回每个模板的名称、描述与标准 JSON Schema，get 返回完整正文与 Schema 详情。
 
-### 2. 模板语法规范
-- `{{var}}`：变量替换（自动 HTML 转义，防 XSS 注入），支持 `{{user.name}}` 嵌套属性。
-- `{{#each items}}...{{/each}}`：数组循环。循环内部：
-  - `{{this}}`：表示数组项自身（基础类型）。
-  - `{{this.prop}}`：表示数组项的属性（对象类型）。
-- `{{#each}}` 必须严格配对闭合。
+### 2. 模板语法规范（支持 JSX 组件与经典 HTML 双模）
+- **JSX / JS 组件模式（推荐）**：使用 `export default function Card(props, html)` 或 `(props, html) => html\`...\`` 编写。
+  - 支持完整的 JavaScript 动态逻辑（条件渲染 `${hasImage && html\`...\`}`、动态数组循环 `${items.map(it => html\`...\`)}`、默认值兜底等）；
+  - 内部通过 `html` 模板标签构建安全、自动转义的 HTML 结构。
+- **经典 HTML 模式（向后兼容）**：`{{var}}` 变量替换与 `{{#each items}}...{{/each}}` 循环。
 
 ---
 
@@ -55,88 +54,117 @@ AnyUI 原生打通了后端生图服务。在调用 `send_ui` 时：
 
 ## 四、经典范式与现代标准代码
 
-### 范式 1：全局 Galgame / 视觉小说对话卡片（`gal_dialogue_card`）
-```html
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  .comic { width: 100%; max-width: 480px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", sans-serif;
-    background: #ffffff; border-radius: 16px; overflow: hidden; color: #1e293b;
-    box-shadow: 0 4px 24px rgba(244, 114, 182, 0.12); border: 1px solid rgba(244, 114, 182, 0.25); }
-  .ldr-box { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 16px 16px 0 0;
-    overflow: hidden; background: #fdf4ff; display: flex; align-items: center; justify-content: center; cursor: zoom-in; }
-  .balanced-liquid-container { position: absolute; inset: -30px; filter: blur(48px); opacity: 0.82; pointer-events: none; z-index: 1; }
-  .soft-blob-1 { position: absolute; top: -10%; left: -10%; width: 110%; height: 110%; border-radius: 50% 50% 60% 40% / 40% 60% 50% 50%;
-    background: radial-gradient(circle at 45% 45%, #f472b6 0%, #fbcfe8 55%, rgba(251, 207, 232, 0.2) 80%); animation: flow-smooth-1 4.2s infinite ease-in-out alternate; }
-  .soft-blob-2 { position: absolute; bottom: -15%; right: -15%; width: 115%; height: 115%; border-radius: 60% 40% 50% 50% / 50% 50% 60% 40%;
-    background: radial-gradient(circle at 55% 55%, #38bdf8 0%, #bae6fd 55%, rgba(186, 230, 253, 0.2) 80%); animation: flow-smooth-2 3.8s infinite ease-in-out alternate; }
-  .soft-blob-center { position: absolute; top: 5%; left: 10%; width: 90%; height: 90%; border-radius: 45% 55% 45% 55% / 55% 45% 55% 45%;
-    background: radial-gradient(circle at center, #c084fc 0%, #e9d5ff 50%, rgba(233, 213, 255, 0.2) 80%); animation: flow-smooth-center 4.8s infinite ease-in-out alternate; }
-  .soft-blob-4 { position: absolute; bottom: -10%; left: -10%; width: 105%; height: 105%; border-radius: 40% 60% 55% 45% / 50% 45% 55% 50%;
-    background: radial-gradient(circle at 50% 50%, #fda4af 0%, #fecdd3 55%, rgba(254, 205, 211, 0.2) 80%); animation: flow-smooth-4 3.5s infinite ease-in-out alternate; }
-  @keyframes flow-smooth-1 { 0% { transform: translate(0, 0) scale(1) rotate(0deg); } 50% { transform: translate(20%, 15%) scale(1.18) rotate(35deg); } 100% { transform: translate(-10%, 10%) scale(0.92) rotate(-25deg); } }
-  @keyframes flow-smooth-2 { 0% { transform: translate(0, 0) scale(1) rotate(0deg); } 50% { transform: translate(-22%, -18%) scale(1.2) rotate(-40deg); } 100% { transform: translate(12%, -10%) scale(0.95) rotate(30deg); } }
-  @keyframes flow-smooth-center { 0% { transform: scale(0.95) translate(0, 0) rotate(0deg); } 50% { transform: scale(1.22) translate(-10%, 12%) rotate(45deg); } 100% { transform: scale(0.9) translate(15%, -10%) rotate(-35deg); } }
-  @keyframes flow-smooth-4 { 0% { transform: translate(0, 0) scale(1.05) rotate(0deg); } 50% { transform: translate(25%, -15%) scale(0.9) rotate(-50deg); } 100% { transform: translate(-12%, 18%) scale(1.15) rotate(25deg); } }
-  .soft-overlay { position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.05) 100%);
-    box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.85), inset 0 0 10px rgba(244, 114, 182, 0.1); pointer-events: none; z-index: 2; }
-  .glass-spinner { position: absolute; z-index: 4; width: 44px; height: 44px; border-radius: 14px; background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.95); box-shadow: 0 6px 20px rgba(244, 114, 182, 0.18);
-    display: flex; align-items: center; justify-content: center; transition: opacity 0.35s ease, transform 0.35s ease; pointer-events: none; }
-  .glass-spinner .ring { width: 20px; height: 20px; border: 2.5px solid rgba(244, 114, 182, 0.2); border-top-color: #ec4899;
-    border-right-color: #38bdf8; border-radius: 50%; animation: g-spin 1s cubic-bezier(0.5, 0, 0.5, 1) infinite; }
-  @keyframes g-spin { to { transform: rotate(360deg); } }
-  .ldr-box.has-image .glass-spinner { opacity: 0; transform: scale(0.85); pointer-events: none; }
-  .ldr-box img { position: relative; z-index: 3; width: 100%; height: 100%; max-height: 480px; display: block; object-fit: contain; opacity: 0; transition: opacity 0.45s ease; }
-  .ldr-box img.loaded { opacity: 1; }
-  .chapter-tag { position: absolute; top: 10px; left: 12px; z-index: 5; color: #831843; font-size: 12.5px; font-weight: 600;
-    letter-spacing: 0.5px; background: rgba(255, 255, 255, 0.85); padding: 4px 10px; border-radius: 12px; backdrop-filter: blur(8px);
-    border: 1px solid rgba(244, 114, 182, 0.3); box-shadow: 0 2px 8px rgba(244, 114, 182, 0.12); }
-  .fs-btn { position: absolute; bottom: 10px; right: 12px; z-index: 5; background: rgba(255, 255, 255, 0.85); color: #475569;
-    border: 1px solid rgba(244, 114, 182, 0.3); border-radius: 16px; padding: 5px 11px; font-size: 11.5px; cursor: pointer;
-    backdrop-filter: blur(8px); box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: background 0.2s ease, transform 0.1s ease; }
-  .fs-btn:active { transform: scale(0.95); background: #ffffff; }
-  .dialog { background: #ffffff; border-top: 1px solid rgba(244, 114, 182, 0.2); padding: 12px 16px 10px; }
-  .caption { color: #db2777; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
-  .dialog-scroll { max-height: 84px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-  .dialog-scroll::-webkit-scrollbar { width: 3px; }
-  .dialog-scroll::-webkit-scrollbar-thumb { background: rgba(244, 114, 182, 0.4); border-radius: 2px; }
-  .dialog p { font-size: 13.5px; line-height: 1.6; margin-bottom: 4px; color: #334155; }
-  .dialog p:last-child { margin-bottom: 0; }
-  .speech-bar { display: flex; gap: 8px; padding: 8px 14px 14px; background: #ffffff; border-top: 1px solid rgba(244, 114, 182, 0.12); overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .speech-btn { flex-shrink: 0; min-height: 38px; background: #fdf2f8; color: #be185d; border: 1px solid rgba(244, 114, 182, 0.35);
-    border-radius: 20px; padding: 7px 14px; font-size: 12.5px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: background 0.15s ease, transform 0.1s ease; }
-  .speech-btn:active { background: #fce7f3; transform: scale(0.96); }
-</style>
-<div class="comic">
-  <div class="stage ldr-box" data-task-id="{{taskId}}" onclick="window.__mio.previewImage(this.querySelector('img')?.src || '{{imageUrl}}')">
-    <div class="balanced-liquid-container">
-      <div class="soft-blob-1"></div>
-      <div class="soft-blob-2"></div>
-      <div class="soft-blob-center"></div>
-      <div class="soft-blob-4"></div>
+### 范式 1：全局 Galgame / 视觉小说对话卡片（`gal_dialogue_card.jsx`）
+```jsx
+export default function GalDialogueCard(props, html) {
+  const {
+    chapterTitle = '',
+    caption = '',
+    text1, text2, text3, texts: customTexts,
+    option1, option2, option3, options: customOptions,
+    imageUrl, taskId
+  } = props;
+
+  // 动态判断是否需要渲染图片/立绘舞台（只有存在 imageUrl 或异步生图任务 taskId 时才渲染，纯文本对话时自动隐藏，不留白不转圈）
+  const hasImage = Boolean((imageUrl && String(imageUrl).trim()) || (taskId && String(taskId).trim()));
+
+  const texts = Array.isArray(customTexts) && customTexts.length > 0
+    ? customTexts.filter(Boolean)
+    : [text1, text2, text3].filter(Boolean);
+
+  const options = Array.isArray(customOptions) && customOptions.length > 0
+    ? customOptions.filter(Boolean)
+    : [option1, option2, option3].filter(Boolean);
+
+  return html`
+    <div class="comic">
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        .comic { width: 100%; max-width: 480px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", sans-serif;
+          background: #ffffff; border-radius: 16px; overflow: hidden; color: #1e293b;
+          box-shadow: 0 4px 24px rgba(244, 114, 182, 0.12); border: 1px solid rgba(244, 114, 182, 0.25); }
+        .ldr-box { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 16px 16px 0 0;
+          overflow: hidden; background: #fdf4ff; display: flex; align-items: center; justify-content: center; cursor: zoom-in; }
+        .ldr-box.has-image { aspect-ratio: unset; }
+        .balanced-liquid-container { position: absolute; inset: -30px; filter: blur(48px); opacity: 0.82; pointer-events: none; z-index: 1; }
+        .soft-blob-1 { position: absolute; top: -10%; left: -10%; width: 110%; height: 110%; border-radius: 50% 50% 60% 40% / 40% 60% 50% 50%;
+          background: radial-gradient(circle at 45% 45%, #f472b6 0%, #fbcfe8 55%, rgba(251, 207, 232, 0.2) 80%); animation: flow-smooth-1 4.2s infinite ease-in-out alternate; }
+        .soft-blob-2 { position: absolute; bottom: -15%; right: -15%; width: 115%; height: 115%; border-radius: 60% 40% 50% 50% / 50% 50% 60% 40%;
+          background: radial-gradient(circle at 55% 55%, #38bdf8 0%, #bae6fd 55%, rgba(186, 230, 253, 0.2) 80%); animation: flow-smooth-2 3.8s infinite ease-in-out alternate; }
+        .soft-blob-center { position: absolute; top: 5%; left: 10%; width: 90%; height: 90%; border-radius: 45% 55% 45% 55% / 55% 45% 55% 45%;
+          background: radial-gradient(circle at center, #c084fc 0%, #e9d5ff 50%, rgba(233, 213, 255, 0.2) 80%); animation: flow-smooth-center 4.8s infinite ease-in-out alternate; }
+        .soft-blob-4 { position: absolute; bottom: -10%; left: -10%; width: 105%; height: 105%; border-radius: 40% 60% 55% 45% / 50% 45% 55% 50%;
+          background: radial-gradient(circle at 50% 50%, #fda4af 0%, #fecdd3 55%, rgba(254, 205, 211, 0.2) 80%); animation: flow-smooth-4 3.5s infinite ease-in-out alternate; }
+        @keyframes flow-smooth-1 { 0% { transform: translate(0, 0) scale(1) rotate(0deg); } 50% { transform: translate(20%, 15%) scale(1.18) rotate(35deg); } 100% { transform: translate(-10%, 10%) scale(0.92) rotate(-25deg); } }
+        @keyframes flow-smooth-2 { 0% { transform: translate(0, 0) scale(1) rotate(0deg); } 50% { transform: translate(-22%, -18%) scale(1.2) rotate(-40deg); } 100% { transform: translate(12%, -10%) scale(0.95) rotate(30deg); } }
+        @keyframes flow-smooth-center { 0% { transform: scale(0.95) translate(0, 0) rotate(0deg); } 50% { transform: scale(1.22) translate(-10%, 12%) rotate(45deg); } 100% { transform: scale(0.9) translate(15%, -10%) rotate(-35deg); } }
+        @keyframes flow-smooth-4 { 0% { transform: translate(0, 0) scale(1.05) rotate(0deg); } 50% { transform: translate(25%, -15%) scale(0.9) rotate(-50deg); } 100% { transform: translate(-12%, 18%) scale(1.15) rotate(25deg); } }
+        .soft-overlay { position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.05) 100%);
+          box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.85), inset 0 0 10px rgba(244, 114, 182, 0.1); pointer-events: none; z-index: 2; }
+        .glass-spinner { position: absolute; z-index: 4; width: 44px; height: 44px; border-radius: 14px; background: rgba(255, 255, 255, 0.7);
+          backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.95); box-shadow: 0 6px 20px rgba(244, 114, 182, 0.18);
+          display: flex; align-items: center; justify-content: center; transition: opacity 0.35s ease, transform 0.35s ease; pointer-events: none; }
+        .glass-spinner .ring { width: 20px; height: 20px; border: 2.5px solid rgba(244, 114, 182, 0.2); border-top-color: #ec4899;
+          border-right-color: #38bdf8; border-radius: 50%; animation: g-spin 1s cubic-bezier(0.5, 0, 0.5, 1) infinite; }
+        @keyframes g-spin { to { transform: rotate(360deg); } }
+        .ldr-box.has-image .glass-spinner { opacity: 0; transform: scale(0.85); pointer-events: none; }
+        .ldr-box img { position: relative; z-index: 3; width: 100%; height: auto; max-height: 520px; display: block; object-fit: cover; opacity: 0; transition: opacity 0.45s ease; }
+        .ldr-box img.loaded { opacity: 1; }
+        .chapter-tag { position: absolute; top: 10px; left: 12px; z-index: 5; color: #831843; font-size: 12.5px; font-weight: 600;
+          letter-spacing: 0.5px; background: rgba(255, 255, 255, 0.85); padding: 4px 10px; border-radius: 12px; backdrop-filter: blur(8px);
+          border: 1px solid rgba(244, 114, 182, 0.3); box-shadow: 0 2px 8px rgba(244, 114, 182, 0.12); }
+        .fs-btn { position: absolute; bottom: 10px; right: 12px; z-index: 5; background: rgba(255, 255, 255, 0.85); color: #475569;
+          border: 1px solid rgba(244, 114, 182, 0.3); border-radius: 16px; padding: 5px 11px; font-size: 11.5px; cursor: pointer;
+          backdrop-filter: blur(8px); box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: background 0.2s ease, transform 0.1s ease; }
+        .fs-btn:active { transform: scale(0.95); background: #ffffff; }
+        .dialog { background: #ffffff; border-top: 1px solid rgba(244, 114, 182, 0.2); padding: 12px 16px 10px; }
+        .caption { color: #db2777; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+        .dialog-scroll { max-height: 120px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .dialog-scroll::-webkit-scrollbar { width: 3px; }
+        .dialog-scroll::-webkit-scrollbar-thumb { background: rgba(244, 114, 182, 0.4); border-radius: 2px; }
+        .dialog p { font-size: 13.5px; line-height: 1.6; margin-bottom: 4px; color: #334155; }
+        .dialog p:last-child { margin-bottom: 0; }
+        .speech-bar { display: flex; gap: 8px; padding: 8px 14px 14px; background: #ffffff; border-top: 1px solid rgba(244, 114, 182, 0.12); overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .speech-btn { flex-shrink: 0; min-height: 38px; background: #fdf2f8; color: #be185d; border: 1px solid rgba(244, 114, 182, 0.35);
+          border-radius: 20px; padding: 7px 14px; font-size: 12.5px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: background 0.15s ease, transform 0.1s ease; }
+        .speech-btn:active { background: #fce7f3; transform: scale(0.96); }
+      </style>
+
+      ${hasImage && html`
+        <div class="stage ldr-box ${imageUrl ? 'has-image' : ''}" data-task-id="${taskId || ''}" onclick="window.__mio.previewImage(this.querySelector('img')?.src || '${imageUrl || ''}')">
+          <div class="balanced-liquid-container">
+            <div class="soft-blob-1"></div>
+            <div class="soft-blob-2"></div>
+            <div class="soft-blob-center"></div>
+            <div class="soft-blob-4"></div>
+          </div>
+          <div class="soft-overlay"></div>
+          <div class="glass-spinner">
+            <div class="ring"></div>
+          </div>
+          <img src="${imageUrl || ''}" alt="${chapterTitle}" onload="if(this.src && this.src.length > 5){this.classList.add('loaded');this.closest('.ldr-box')?.classList.add('has-image');}" />
+          ${chapterTitle && html`<div class="chapter-tag">${chapterTitle}</div>`}
+          <button class="fs-btn" onclick="event.stopPropagation();window.__mio.previewImage(this.parentElement.querySelector('img')?.src || '${imageUrl || ''}')">⛶ 全屏</button>
+        </div>
+      `}
+
+      <div class="dialog">
+        ${caption && html`<div class="caption">${caption}</div>`}
+        <div class="dialog-scroll">
+          ${texts.length > 0 ? texts.map(t => html`<p>${t}</p>`) : html`<p>...</p>`}
+        </div>
+      </div>
+
+      ${options.length > 0 && html`
+        <div class="speech-bar">
+          ${options.map(opt => html`
+            <button class="speech-btn" onclick="window.__mio.sendText(this.textContent.trim())">${opt}</button>
+          `)}
+        </div>
+      `}
     </div>
-    <div class="soft-overlay"></div>
-    <div class="glass-spinner">
-      <div class="ring"></div>
-    </div>
-    <img src="{{imageUrl}}" alt="{{chapterTitle}}" onload="if(this.src && this.src.length > 5){this.classList.add('loaded');this.closest('.ldr-box')?.classList.add('has-image');}">
-    <div class="chapter-tag">{{chapterTitle}}</div>
-    <button class="fs-btn" onclick="event.stopPropagation();window.__mio.previewImage(this.parentElement.querySelector('img')?.src || '{{imageUrl}}')">⛶ 全屏</button>
-  </div>
-  <div class="dialog">
-    <div class="caption">{{caption}}</div>
-    <div class="dialog-scroll">
-      <p>{{text1}}</p>
-      <p>{{text2}}</p>
-      <p>{{text3}}</p>
-    </div>
-  </div>
-  <div class="speech-bar">
-    <button class="speech-btn" onclick="window.__mio.sendText(this.textContent.trim())">{{option1}}</button>
-    <button class="speech-btn" onclick="window.__mio.sendText(this.textContent.trim())">{{option2}}</button>
-    <button class="speech-btn" onclick="window.__mio.sendText(this.textContent.trim())">{{option3}}</button>
-  </div>
-</div>
+  `;
+}
 ```
 
 #### 调用方式：
