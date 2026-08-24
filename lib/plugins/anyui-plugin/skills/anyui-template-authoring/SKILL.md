@@ -29,8 +29,8 @@ AnyUI 原生打通了后端生图服务。在调用 `send_ui` 时：
 - `send_ui(template?, html?, variables?, prompt?, imageUrl?)`：
   - **优先使用**：指定全局或已有模板 `template: "gal_dialogue_card"` + `variables: JSON.stringify({...})` + 可选 `prompt`；
   - 也可传 `html` 直接发送自定义内联 HTML。
-- `define_ui_template(name, html, description?, variables?)`：保存新模板到模板库。
-- `manage_ui_templates(action: 'list' | 'get' | 'delete', name?)`：管理与查询可用模板列表。
+- `define_ui_template(name, html, description?, variables?, variableDocs?)`：保存新模板到模板库；`variableDocs` 为 JSON 对象字符串，用于给每个字段补充说明 `{字段名: {type, required, description}}`，保存后 `manage_ui_templates` 的 list/get 均可查看字段含义。
+- `manage_ui_templates(action: 'list' | 'get' | 'delete', name?)`：管理与查询可用模板列表；list 返回每个模板的 `variableDocs` 逐字段说明，get 返回完整正文与字段说明。
 
 ### 2. 模板语法规范
 - `{{var}}`：变量替换（自动 HTML 转义，防 XSS 注入），支持 `{{user.name}}` 嵌套属性。
@@ -132,9 +132,9 @@ AnyUI 原生打通了后端生图服务。在调用 `send_ui` 时：
     </div>
   </div>
   <div class="speech-bar">
-    <button class="speech-btn" onclick="window.__mio.sendText(this.textContent.trim())">{{speech1}}</button>
-    <button class="speech-btn" onclick="window.__mio.sendText(this.textContent.trim())">{{speech2}}</button>
-    <button class="speech-btn" onclick="window.__mio.sendText(this.textContent.trim())">{{speech3}}</button>
+    <button class="speech-btn" onclick="window.__mio.sendText(this.textContent.trim())">{{option1}}</button>
+    <button class="speech-btn" onclick="window.__mio.sendText(this.textContent.trim())">{{option2}}</button>
+    <button class="speech-btn" onclick="window.__mio.sendText(this.textContent.trim())">{{option3}}</button>
   </div>
 </div>
 ```
@@ -150,9 +150,9 @@ AnyUI 原生打通了后端生图服务。在调用 `send_ui` 时：
     "text1": "「你终于来了……我在这里等了你很久。」",
     "text2": "夕阳透过窗户洒在她银白色的发丝上，显得格外温柔。",
     "text3": "「准备好开始我们的冒险了吗？」",
-    "speech1": "「久等了，我们出发吧！」",
-    "speech2": "「你刚才说的秘密是什么？」",
-    "speech3": "「稍微等我准备一下装备。」"
+    "option1": "「久等了，我们出发吧！」",
+    "option2": "「你刚才说的秘密是什么？」",
+    "option3": "「稍微等我准备一下装备。」"
   })
 }
 ```

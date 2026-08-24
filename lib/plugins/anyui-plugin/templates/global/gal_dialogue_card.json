@@ -1,6 +1,6 @@
 {
   "name": "gal_dialogue_card",
-  "description": "通用 gal/视觉小说对话卡片：立绘/CG + 章节标题 + 三行对白滚动区 + 三个对话选项按钮，支持异步生图与图片全屏预览",
+  "description": "通用 gal/视觉小说对话卡片：立绘/CG + 章节标题 + 三行对白滚动区 + 三个玩家剧情选项按钮，支持异步生图与图片全屏预览。每个字段的含义见 variableDocs。",
   "variables": [
     "chapterTitle",
     "imageUrl",
@@ -10,9 +10,66 @@
     "text1",
     "text2",
     "text3",
-    "speech1",
-    "speech2",
-    "speech3"
+    "option1",
+    "option2",
+    "option3"
   ],
+  "variableDocs": {
+    "chapterTitle": {
+      "type": "string",
+      "required": true,
+      "description": "章节/场景标题，显示在图片左上角毛玻璃标签上（如「第一幕 · 命运的转折点」）"
+    },
+    "imageUrl": {
+      "type": "string",
+      "required": false,
+      "description": "立绘/CG 图片地址（URL/Base64/本地路径）。与 imagePrompt 联动：只给 imageUrl=直接展示此图；imageUrl + prompt 同时给=以该图作参考图进行图生图重绘"
+    },
+    "taskId": {
+      "type": "string",
+      "required": false,
+      "description": "异步生图任务 ID。内部协议字段，由 send_ui 在提交生图任务时自动注入，前端据此回填成图；一般无需手动填写"
+    },
+    "imagePrompt": {
+      "type": "string",
+      "required": false,
+      "description": "生图提示词（send_ui 的 prompt / imagePrompt 参数别名）。未提供 imageUrl 时触发异步生图，绘制完成后 WebSocket 自动平滑回填到卡片"
+    },
+    "caption": {
+      "type": "string",
+      "required": true,
+      "description": "对白区域上方那行粉色小字标签：当前说话的角色名或场景旁白（如「艾莉西亚」「旁白」）"
+    },
+    "text1": {
+      "type": "string",
+      "required": false,
+      "description": "第 1 行对白正文（展示区可滚动，最多三行），用于角色台词与神态/场景描写"
+    },
+    "text2": {
+      "type": "string",
+      "required": false,
+      "description": "第 2 行对白正文"
+    },
+    "text3": {
+      "type": "string",
+      "required": false,
+      "description": "第 3 行对白正文"
+    },
+    "option1": {
+      "type": "string",
+      "required": true,
+      "description": "底部第 1 个游戏剧情选项按钮：玩家可点击，点击后按钮文字会回发给 AI 作为玩家的分支选择"
+    },
+    "option2": {
+      "type": "string",
+      "required": true,
+      "description": "底部第 2 个游戏剧情选项按钮，点击后按钮文字回发给 AI"
+    },
+    "option3": {
+      "type": "string",
+      "required": true,
+      "description": "底部第 3 个游戏剧情选项按钮，点击后按钮文字回发给 AI"
+    }
+  },
   "isGlobal": true
 }
