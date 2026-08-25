@@ -1,6 +1,17 @@
-# MioChat
+<div align="center">
 
-> **Agent = 模型 + Harness。** 决定一个 agent 靠不靠谱的，往往不是模型本身，而是模型周围那一层 harness——本仓库就是那层 harness，从零亲手写的。
+# 🦞 MioChat
+
+[English](README.md) · **中文**
+
+[![License](https://img.shields.io/badge/License-MIT-green)](#license)
+[![Node](https://img.shields.io/badge/Node.js-%3E%3D20.19-339933)](https://nodejs.org/)
+[![UI](https://img.shields.io/badge/UI-Vue%203%20%2B%20Vite%208-42b883)](https://github.com/Pretend-to/mio-chat-frontend)
+[![Agent](https://img.shields.io/badge/Agent-Model%20%2B%20Harness-blueviolet)](#为什么做它)
+
+**Agent = 模型 + Harness。** 决定一个 agent 靠不靠谱的，往往不是模型本身，而是模型周围那一层 harness——本仓库就是那层 harness，从零亲手写的。
+
+</div>
 
 **MioChat** 是一款自托管、模型无关的 Agent 编排平台。它不是某个 LLM API 的封装壳，而是一套完整的 harness：20+ 厂商适配器 + 动态模型路由、每个环节都可被 hook 拦截的工具生命周期、不会切断 tool_calls 对话的长上下文压缩（"结晶"）、多协议入口（Web / Socket.io / OneBot v11 / ACP / HTTP），以及一个承担了一半上下文工程的前端。
 
@@ -10,10 +21,14 @@
 
 主流 agent 产品的核心循环趋于同构：*调模型 → 执行工具 → 把结果喂回去*。可感知的差异全部发生在循环**之外**：上下文管理、权限、工具契约、流式可靠性、记忆。MioChat 想做的，是把这些层全部握在自己手里——模型无关、自托管、中间没有任何黑盒。
 
+## 演示
+
+<!-- 回填：把演示 GIF 放到 docs/assets/demo/demo.gif → 一句话触发、多模型路由、跑工具、出卡片 UI -->
+<img src="./docs/assets/demo/demo.gif" width="720" alt="MioChat 演示 — 一句话 → 多模型路由 → 工具执行 → 渲染 UI" />
+
 ## 截图
 
-<!-- 图片回填清单：将下列 img src 指向 docs/assets/screenshots/ 下你的实际截图即可。
-     已预留桌面端聊天、移动端聊天、管理后台/数据看板三个槽位。 -->
+<!-- 回填：把截图放到 docs/assets/screenshots/ 下即可（桌面端 / 移动端 / 管理后台）-->
 
 <img src="./docs/assets/screenshots/desktop-chat.png" width="720" alt="桌面端 · 聊天界面（流式输出与工具调用时间线）" />
 
@@ -23,33 +38,47 @@
 
 ## 架构
 
-```
-┌──────────────────────────── SURFACE 入口层 ────────────────────────────┐
-│  Web UI (Vue3)    OneBot v11(QQ)    ACP    HTTP API    cron 定时任务    │
-└───────────────┬────────────────────────────────────────────────────────┘
-                │  Socket.io（流式）/ REST                前后端双仓库构建
-┌───────────────▼────────────────────────────────────────────────────────┐
-│                             AGENT LOOP  循环层                          │
-│   handleMessage → 适配器 → tool_calls → runTool → 工具结果回灌          │
-│         ↑                                        │                      │
-│         └──────────────  递归轮次  ───────────────┘                      │
-│   每一轮开始前 LLM_BEFORE_RECURSION 会动态重排工具列表                    │
-├─────────────────────────────────────────────────────────────────────────┤
-│                          CONTEXT  上下文层                               │
-│   SystemPromptAssembler（人格 + 全局记忆 + memory_crystal 合并为一条     │
-│   system 消息）；CrystallizationService（轮次安全的 XML 压缩）；          │
-│   MemoryManager 前端可视化编辑 5 个记忆分区                              │
-├─────────────────────────────────────────────────────────────────────────┤
-│                           SAFETY  安全层                                 │
-│   16 个 hook 挂载点 × 10 个内置 hook（审计/限流/长度上限/参数校验/       │
-│   权限/工具纠错/模型权限）；MioFunction.run() 被设计为 final——           │
-│   子类无法覆写跳过权限校验                                               │
-├─────────────────────────────────────────────────────────────────────────┤
-│                           BACKEND  能力层                                │
-│   21 个厂商适配器 · ModelRegistry（LiteLLM 同步 + 零网络兜底规则）       │
-│   9 个插件 / 约 38 个工具（PTY 终端、文件、Web、生图、TTS、MCP、AnyUI）  │
-│   SkillService（扫描 9 个技能目录）· SQLite + Prisma · streamCache 回放  │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph SFC["SURFACE 入口层"]
+        UI["Web UI (Vue 3)"]
+        OB["OneBot v11 (QQ)"]
+        ACP["ACP / HTTP API"]
+        CRON["cron 定时任务"]
+    end
+
+    subgraph LOOP["AGENT LOOP 循环层"]
+        direction TB
+        M["handleMessage → 适配器"]
+        T["tool_calls → runTool"]
+        R["工具结果回灌"]
+        M --> T --> R --> M
+        ROT["LLM_BEFORE_RECURSION<br/>每轮开始前动态重排工具列表"]
+    end
+
+    subgraph CTX["CONTEXT 上下文层"]
+        SPA["SystemPromptAssembler<br/>人格 + 全局记忆 + 结晶"]
+        CRY["CrystallizationService<br/>轮次安全的 XML 压缩"]
+        MM["MemoryManager<br/>5 个可视化编辑的记忆分区"]
+    end
+
+    subgraph SAF["SAFETY 安全层"]
+        H["16 个 hook 挂载点 × 10 个内置 hook<br/>审计 / 限流 / 权限 / 校验"]
+        F["MioFunction.run() 被设计为 final<br/>子类无法覆写跳过校验"]
+    end
+
+    subgraph BE["BACKEND 能力层"]
+        AD["21 个厂商适配器<br/>ModelRegistry（LiteLLM 同步 + 零网络兜底）"]
+        PL["9 插件 · 约 38 个工具<br/>PTY / 文件 / Web / 生图 / TTS / MCP / AnyUI"]
+        SK["SkillService<br/>扫描 9 个技能目录 · 开放 Agent Skills"]
+        DB[("SQLite + Prisma · streamCache")]
+    end
+
+    SFC -->|"Socket.io / REST"| LOOP
+    LOOP --> CTX
+    LOOP --> SAF
+    LOOP --> BE
+    BE --> DB
 ```
 
 ## 工程亮点
@@ -70,15 +99,9 @@
 
 流式 chunk 在服务端 `streamCache` 缓冲、断线重连回放；客户端**先落盘（localforage）成功再 ACK**，落盘失败不发 ACK、服务端保留缓存等你下次进来同步；`StreamBuffer` 以 80ms 节流批量写 store，防止 Safari 高频重绘 OOM 崩溃。
 
-## 前端：渲染层（render layer）
+## 前端
 
-前端（仓库 `mio-chat-frontend`）不是聊天皮肤，它参与 harness 本身：
-
-- **崩溃安全的流式链路** —— 落盘后 ACK、断线回放、节流写 store（见上）。
-- **群聊上下文隔离引擎** —— 一条共享消息链、N 个成员各自的视图。成员自己的发言保持原生 `assistant` 格式，其他人的发言打包成 `group_chat_history` XML 的 `user` 消息；数组强制以 user 轮收尾，`@` 路由按 ID 解析，从构造上避免名字互为前缀时的误唤起。
-- **客户端记忆工程** —— `SystemPromptAssembler` 把人格 + 全局长期记忆 + 结晶记忆合并成唯一一条 system 消息；`MemoryManager.vue` 让用户可视化查看/编辑五个记忆分区。
-- **手写 PWA，不用 Workbox** —— 版本化 Service Worker（v4/v5）+ 自研 IndexedDB 响应缓存：7 天 TTL、每日过期清扫、`CACHE_VERSION=17` 迁移、`postMessage` 开发模式握手。
-- **还有** —— Web Worker 分块 MD5 上传、自写 markdown-it @提及插件、Shadow DOM 动态渲染（AnyUI，agent 自己产出的 UI）、8 组手调 Rolldown 分包（把 1MB 的图表库隔离在启动路径之外）。
+harness 的客户端半边——流式可靠性、群聊上下文隔离、客户端记忆工程、手写 PWA——都在独立的 **[mio-chat-frontend](https://github.com/Pretend-to/mio-chat-frontend)** 仓库中。它不是聊天皮肤，它参与 harness 本身。
 
 ## 插件与工具
 
@@ -92,21 +115,30 @@
 | `anyui-plugin` | 3 | agent 生成的 UI 模板，Shadow DOM 渲染 |
 | `edge-tts` / `config` / `skill` | 9 | 语音合成 / 动态配置表单 / 技能管理 |
 
-技能遵循开放 **Agent Skills** 标准，`SkillService` 扫描 9 个目录（含 `.claude/`、`.cursor/`、`.gemini/` 技能目录）——给其他 agent 写好的技能，这里原样能装。
+技能遵循开放 **Agent Skills** 标准，`SkillService` 扫描 `.claude/`、`.cursor/`、`.gemini/` 技能目录——给其他 agent 写好的技能，这里原样能装。
 
 ## 快速开始
 
-```bash
-# 后端
-git clone <backend-repo> mio-chat-backend && cd mio-chat-backend
-pnpm install
-cp .env.example .env      # 填入你的 LLM API Key
-pnpm db:push
-pnpm dev                  # http://127.0.0.1:3080
+**不需要修改 `.env`** —— 所有配置都通过 Web 管理面板管理（结构化存储在 SQLite，由后台/API 下发）。
 
-# 前端（独立仓库）
-cd ../mio-chat-frontend && pnpm install
-pnpm dev                  # http://localhost:1314，代理 /socket.io 与 /api 到 :3080
+```bash
+git clone git@github.com:Pretend-to/mio-chat-backend.git && cd mio-chat-backend
+pnpm install
+pnpm db:push
+pnpm dev                      # http://127.0.0.1:3080
+
+# 1. 打开 Web UI
+# 2. 登录，进入 设置 / 管理后台
+# 3. 在页面上添加你的 LLM 适配器实例（OpenAI / Anthropic / DeepSeek / Gemini…）
+#    —— 无需 .env，无需重启，全部热加载
+```
+
+前端（独立仓库，自动同步后端模型列表）：
+
+```bash
+git clone git@github.com:Pretend-to/mio-chat-frontend.git && cd mio-chat-frontend
+pnpm install
+pnpm dev                      # http://localhost:1314，代理 /socket.io 与 /api 到 :3080
 ```
 
 ## 仓库布局
@@ -124,13 +156,6 @@ mio-chat-backend/
 ├── prisma/               schema
 ├── docs/                 架构、RFC、资源
 └── config/               PM2 运行配置
-
-mio-chat-frontend/
-├── src/lib/              网关、客户端、群聊网关、配置、运行时
-├── src/stores/           Pinia（会话、交互、连接…）
-├── src/components/       聊天时间线、MemoryManager、AnyUI…
-├── src/composables/      20+ 交互逻辑组合式函数
-└── public/               版本化 Service Worker + manifest（PWA）
 ```
 
 ## 项目状态
@@ -142,6 +167,12 @@ mio-chat-frontend/
 - `docs/architecture/` —— RFC（如多模态能力抽象）
 - `docs/adapters/` · `docs/plugins/` · `docs/deployment/`
 
+## 🙏 致谢
+
+本项目使用 JetBrains **开源项目开发许可证**进行开发——感谢 JetBrains 为本开源项目提供的免费专业 IDE 许可证。
+
+[![JetBrains](https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.svg)](https://www.jetbrains.com/)
+
 ## 许可证
 
-**首个公开版本发布前待定稿。** 当前后端 `LICENSE` 文件为 GPL-3.0（版权信息为占位符）而 `package.json` 声明 ISC；前端尚无许可证文件。仓库对外宣传前将统一并更新本段。
+[MIT](LICENSE) —— © 2026 MioChat contributors

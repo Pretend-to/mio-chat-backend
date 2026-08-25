@@ -1,6 +1,17 @@
-# MioChat
+<div align="center">
 
-> **Agent = Model + Harness.** Most of what makes an agent reliable lives outside the model, in the harness wrapped around it — this repository *is* that harness, built from scratch.
+# 🦞 MioChat
+
+**English** · [中文](README.zh-CN.md)
+
+[![License](https://img.shields.io/badge/License-MIT-green)](#license)
+[![Node](https://img.shields.io/badge/Node.js-%3E%3D20.19-339933)](https://nodejs.org/)
+[![UI](https://img.shields.io/badge/UI-Vue%203%20%2B%20Vite%208-42b883)](https://github.com/Pretend-to/mio-chat-frontend)
+[![Agent](https://img.shields.io/badge/Agent-Model%20%2B%20Harness-blueviolet)](#why-it-exists)
+
+**Agent = Model + Harness.** Most of what makes an agent reliable lives outside the model, in the harness wrapped around it — this repository *is* that harness, built from scratch.
+
+</div>
 
 **MioChat** is a self-hosted, model-agnostic agent orchestration platform. Not a wrapper around a single LLM API: a full harness with dynamic routing across 20+ provider adapters, a hook-interceptable tool lifecycle, turn-safe long-context compression ("crystallization"), multi-protocol entry points (Web / Socket.io / OneBot v11 / ACP / HTTP), and a frontend that carries half of the context engineering in the browser.
 
@@ -10,10 +21,14 @@ The core agent loop is five lines of ReAct. Everything else here — ~100k lines
 
 All mainstream agent products converge on the same loop: *call model → execute tool → feed the result back*. The observable differences live entirely **outside** the loop: context management, permissions, tool contracts, streaming reliability, memory. MioChat owns all of those layers directly — model-agnostic, self-hosted, with nothing between the code and your machine.
 
+## Demo
+
+<!-- 回填：把演示 GIF 放到 docs/assets/demo/demo.gif → 一键触发、多模型路由、跑工具、出卡片 UI -->
+<img src="./docs/assets/demo/demo.gif" width="720" alt="MioChat demo — one prompt → multi-model routing → tool execution → rendered UI" />
+
 ## Screenshots
 
-<!-- 筛选回填清单：将下列 img src 指向 docs/assets/screenshots/ 下你的实际截图即可。
-     已预留桌面端聊天、移动端聊天、管理后台/数据看板三个槽位。 -->
+<!-- 回填：把截图放到 docs/assets/screenshots/ 下即可（桌面端 / 移动端 / 管理后台）-->
 
 <img src="./docs/assets/screenshots/desktop-chat.png" width="720" alt="Desktop chat — streaming output with a tool-call timeline" />
 
@@ -23,35 +38,47 @@ All mainstream agent products converge on the same loop: *call model → execute
 
 ## Architecture
 
-```
-┌───────────────────────────── SURFACE ─────────────────────────────┐
-│  Web UI (Vue 3)    OneBot v11 (QQ)    ACP    HTTP API    cron     │
-└───────────────┬───────────────────────────────────────────────────┘
-                │  Socket.io (streaming) / REST         dual-repo build
-┌───────────────▼───────────────────────────────────────────────────┐
-│                          AGENT LOOP                                │
-│   handleMessage → adapter → tool_calls → runTool → tool results   │
-│         ↑                                        │                 │
-│         └───────────── recursion ────────────────┘                 │
-│   LLM_BEFORE_RECURSION re-shapes the tool list on every turn      │
-├────────────────────────────────────────────────────────────────────┤
-│                        CONTEXT ENGINEERING                          │
-│   SystemPromptAssembler (persona + global memory + memory_crystal) │
-│   CrystallizationService (turn-boundary-safe XML compression)      │
-│   MemoryManager — 5 visual, editable memory zones (frontend)       │
-├────────────────────────────────────────────────────────────────────┤
-│                            SAFETY                                   │
-│   16 hook points × 10 built-in hooks (audit / rate-limit /         │
-│   param-validation / permission / tool-resolution / model-perm)     │
-│   MioFunction.run() is final — permission checks can't be          │
-│   bypassed by subclassing                                           │
-├────────────────────────────────────────────────────────────────────┤
-│                            BACKEND                                  │
-│   21 provider adapters · ModelRegistry (LiteLLM sync + zero-network │
-│   fallback rules) · 9 plugins / ~38 tools (PTY, files, web, image, │
-│   TTS, MCP, AnyUI) · SkillService (9 scan roots) · SQLite + Prisma │
-│   in-memory streamCache (lost-chunk replay)                        │
-└────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph SFC["SURFACE — entry points"]
+        UI["Web UI (Vue 3)"]
+        OB["OneBot v11 (QQ)"]
+        ACP["ACP / HTTP API"]
+        CRON["cron scheduler"]
+    end
+
+    subgraph LOOP["AGENT LOOP"]
+        direction TB
+        M["handleMessage → adapter"]
+        T["tool_calls → runTool"]
+        R["results → feed back"]
+        M --> T --> R --> M
+        ROT["LLM_BEFORE_RECURSION<br/>re-shapes the tool list each turn"]
+    end
+
+    subgraph CTX["CONTEXT ENGINEERING"]
+        SPA["SystemPromptAssembler<br/>persona + global memory + crystal"]
+        CRY["CrystallizationService<br/>turn-safe XML compression"]
+        MM["MemoryManager<br/>5 editable memory zones"]
+    end
+
+    subgraph SAF["SAFETY"]
+        H["16 hook points × 10 built-in hooks<br/>audit / rate-limit / permission / validation"]
+        F["MioFunction.run() is final<br/>no bypass via subclassing"]
+    end
+
+    subgraph BE["BACKEND"]
+        AD["21 provider adapters<br/>ModelRegistry (LiteLLM sync + offline rules)"]
+        PL["9 plugins · ~38 tools<br/>PTY / files / web / image / TTS / MCP / AnyUI"]
+        SK["SkillService<br/>9 scan roots · open Agent Skills"]
+        DB[("SQLite + Prisma · streamCache")]
+    end
+
+    SFC -->|"Socket.io / REST"| LOOP
+    LOOP --> CTX
+    LOOP --> SAF
+    LOOP --> BE
+    BE --> DB
 ```
 
 ## Engineering highlights
@@ -72,15 +99,9 @@ Long conversations are compressed by a stateless **crystallization** service: it
 
 Streamed chunks are buffered server-side (`streamCache`) and replayed on reconnect. On the client, a message is only ACKed **after** it survives persistence (`localforage`); failed persistence means no ACK, so the server keeps the buffer and resyncs on next entry. An 80ms `StreamBuffer` throttle batches store writes to avoid Safari OOM on high-frequency repaints.
 
-## Frontend: the render layer
+## Frontend
 
-The frontend (repo: `mio-chat-frontend`) is not a chat skin — it participates in the harness.
-
-- **Crash-safe streaming** — ACK-after-persist protocol, stream replay on reconnect, throttled store writes (see above).
-- **Group-context isolation engine** — one shared message chain, N per-member views. Each member's own turns keep native `assistant` shape; everyone else's turns are packaged into `group_chat_history` XML as `user` messages. Arrays are forced to end on a `user` turn, and `@` routing is ID-based (prefix-clash-safe by construction).
-- **Client-side memory engineering** — `SystemPromptAssembler` merges persona + global long-term memory + memory crystal into a single system message; `MemoryManager.vue` lets users inspect and edit the five memory zones.
-- **Hand-written PWA, no Workbox** — versioned Service Workers (`v4`/`v5`) backed by a custom IndexedDB response cache (7-day TTL, daily expiry sweep, `CACHE_VERSION=17` migrations, dev-mode handshake via `postMessage`).
-- **And a few more** — Web Worker chunked MD5 for uploads, a bespoke `markdown-it` mention plugin, dynamic Shadow-DOM rendering (`AnyUI`) for agent-produced UI, hand-tuned Rolldown code splitting (8 groups) so a 1MB charting lib never leaks into the startup path.
+The client half of the harness — streaming reliability, group-context isolation, client-side memory engineering, hand-written PWA — lives in the **[mio-chat-frontend](https://github.com/Pretend-to/mio-chat-frontend)** repository. It is not a chat skin; it participates in the harness.
 
 ## Plugins & tools
 
@@ -94,21 +115,30 @@ The frontend (repo: `mio-chat-frontend`) is not a chat skin — it participates 
 | `anyui-plugin` | 3 | agent-authored UI templates rendered in Shadow DOM |
 | `edge-tts` / `config` / `skill` | 9 | TTS, dynamic config forms, skill management |
 
-Skills follow the open **Agent Skills** standard; `SkillService` scans 9 locations including your `.claude/`, `.cursor/` and `.gemini/` skill directories — skills written for other agents install here as-is.
+Skills follow the open **Agent Skills** standard; `SkillService` scans your `.claude/`, `.cursor/` and `.gemini/` skill directories — skills written for other agents install here as-is.
 
 ## Quick start
 
-```bash
-# backend
-git clone <backend-repo> mio-chat-backend && cd mio-chat-backend
-pnpm install
-cp .env.example .env      # add your LLM API keys
-pnpm db:push
-pnpm dev                  # http://127.0.0.1:3080
+No `.env` editing required — **all configuration is managed from the web console** (stored in SQLite, surfaced through the admin panel / API).
 
-# frontend (separate repo)
-cd ../mio-chat-frontend && pnpm install
-pnpm dev                  # http://localhost:1314, proxies /socket.io & /api to :3080
+```bash
+git clone git@github.com:Pretend-to/mio-chat-backend.git && cd mio-chat-backend
+pnpm install
+pnpm db:push
+pnpm dev                      # http://127.0.0.1:3080
+
+# 1. open the web UI
+# 2. sign in, open Settings / Admin
+# 3. add your LLM adapter instances (OpenAI / Anthropic / DeepSeek / Gemini …)
+#    — no .env, no restart, everything hot-reloads in the UI
+```
+
+Frontend (separate repo, clones or matches backend models automatically):
+
+```bash
+git clone git@github.com:Pretend-to/mio-chat-frontend.git && cd mio-chat-frontend
+pnpm install
+pnpm dev                      # http://localhost:1314, proxies /socket.io & /api to :3080
 ```
 
 ## Repository layout
@@ -126,13 +156,6 @@ mio-chat-backend/
 ├── prisma/               schema
 ├── docs/                 architecture, RFCs, assets
 └── config/               PM2 runtime config
-
-mio-chat-frontend/
-├── src/lib/              gateway, client, group-gateway, config, runtime
-├── src/stores/           Pinia (contactors, interaction, connection…)
-├── src/components/       chat timeline, MemoryManager, AnyUI, …
-├── src/composables/      20+ interaction composables
-└── public/               versioned Service Workers + manifest (PWA)
 ```
 
 ## Project status
@@ -144,6 +167,12 @@ A personal research/engineering project, developed openly on `master` — **no e
 - `docs/architecture/` — RFCs (e.g., multimodal capability abstraction)
 - `docs/adapters/` · `docs/plugins/` · `docs/deployment/`
 
+## 🙏 Acknowledgements
+
+Developed with JetBrains' **Open Source Development License** — free professional JetBrains IDE licenses provided for this open-source project.
+
+[![JetBrains](https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.svg)](https://www.jetbrains.com/)
+
 ## License
 
-**Pending finalization before the first public release.** The backend currently ships a GPL-3.0 `LICENSE` file (placeholder copyright) while `package.json` declares ISC; the frontend has no license file yet. These will be unified, and this section updated, before the repository is advertised.
+[MIT](LICENSE) — © 2026 MioChat contributors
