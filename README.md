@@ -46,48 +46,8 @@ The core agent loop everyone uses is five lines of ReAct. The observable differe
 
 ## Architecture
 
-```mermaid
-flowchart TD
-    subgraph SFC["SURFACE — entry points"]
-        UI["Web UI (Vue 3)"]
-        OB["OneBot v11 (QQ)"]
-        ACP["ACP / HTTP API"]
-        CRON["cron scheduler"]
-    end
 
-    subgraph LOOP["AGENT LOOP"]
-        direction TB
-        M["handleMessage → adapter"]
-        T["tool_calls → runTool"]
-        R["results → feed back"]
-        M --> T --> R --> M
-        ROT["LLM_BEFORE_RECURSION<br/>re-shapes the tool list each turn"]
-    end
-
-    subgraph CTX["CONTEXT ENGINEERING"]
-        SPA["SystemPromptAssembler<br/>persona + global memory + crystal"]
-        CRY["CrystallizationService<br/>turn-safe XML compression"]
-        MM["MemoryManager<br/>5 editable memory zones"]
-    end
-
-    subgraph SAF["SAFETY"]
-        H["16 hook points × 10 built-in hooks<br/>audit / rate-limit / permission / validation"]
-        F["Deferred-Promise suspension<br/>sensitive tools wait for in-UI confirmation"]
-    end
-
-    subgraph BE["BACKEND"]
-        AD["21 provider adapters<br/>ModelRegistry (LiteLLM sync + offline rules)"]
-        PL["9 plugins · ~38 tools<br/>PTY / files / web / image / TTS / MCP / AnyUI"]
-        SK["SkillService<br/>9 scan roots · open Agent Skills"]
-        DB[("SQLite + Prisma · streamCache")]
-    end
-
-    SFC -->|"Socket.io / REST"| LOOP
-    LOOP --> CTX
-    LOOP --> SAF
-    LOOP --> BE
-    BE --> DB
-```
+<img src="./.github/diagrams/architecture.svg" width="860" alt="MioChat — Agent Ecosystem architecture" />
 
 ## Highlights
 

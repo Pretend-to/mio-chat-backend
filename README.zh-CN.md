@@ -46,48 +46,8 @@ Mio-Chat 是一个由多个模块构成的完整 Agent 生态系统：
 
 ## 架构
 
-```mermaid
-flowchart TD
-    subgraph SFC["SURFACE 入口层"]
-        UI["Web UI (Vue 3)"]
-        OB["OneBot v11 (QQ)"]
-        ACP["ACP / HTTP API"]
-        CRON["cron 定时任务"]
-    end
 
-    subgraph LOOP["AGENT LOOP 循环层"]
-        direction TB
-        M["handleMessage → 适配器"]
-        T["tool_calls → runTool"]
-        R["工具结果回灌"]
-        M --> T --> R --> M
-        ROT["LLM_BEFORE_RECURSION<br/>每轮开始前动态重排工具列表"]
-    end
-
-    subgraph CTX["CONTEXT 上下文层"]
-        SPA["SystemPromptAssembler<br/>人格 + 全局记忆 + 结晶"]
-        CRY["CrystallizationService<br/>轮次安全的 XML 压缩"]
-        MM["MemoryManager<br/>5 个可视化记忆分区"]
-    end
-
-    subgraph SAF["SAFETY 安全层"]
-        H["16 个 hook 挂载点 × 10 个内置 hook<br/>审计 / 限流 / 权限 / 校验"]
-        F["Deferred-Promise 挂起<br/>敏感工具等待界面二次确认后放行"]
-    end
-
-    subgraph BE["BACKEND 能力层"]
-        AD["21 个厂商适配器<br/>ModelRegistry（LiteLLM 同步 + 零网络兜底）"]
-        PL["9 插件 · 约 38 个工具<br/>PTY / 文件 / Web / 生图 / TTS / MCP / AnyUI"]
-        SK["SkillService<br/>扫描 9 个技能目录 · 开放 Agent Skills"]
-        DB[("SQLite + Prisma · streamCache")]
-    end
-
-    SFC -->|"Socket.io / REST"| LOOP
-    LOOP --> CTX
-    LOOP --> SAF
-    LOOP --> BE
-    BE --> DB
-```
+<img src="./.github/diagrams/architecture-zh.svg" width="860" alt="MioChat — Agent Ecosystem architecture" />
 
 ## 特性亮点
 
