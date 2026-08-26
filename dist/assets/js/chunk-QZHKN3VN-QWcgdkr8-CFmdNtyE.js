@@ -1,0 +1,2 @@
+import{c as t}from"./src-Du2ai1BK-Di20razW.js";var i=class{constructor(t){this.init=t,this.records=this.init()}static{t(this,"ImperativeState")}reset(){this.records=this.init()}};export{i as t};
+//# sourceMappingURL=chunk-QZHKN3VN-QWcgdkr8-CFmdNtyE.js.map
