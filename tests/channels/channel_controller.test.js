@@ -24,6 +24,20 @@ function buildIlinkServer() {
   })
   return new Promise((r) => server.listen(0, () => r({ server, state, port: server.address().port })))
 }
+/** mock iLink 服务，返回 qrcode_url（URL 字段）而非 qrcode_img_content */
+function buildIlinkServerUrl() {
+  const server = http.createServer((req, res) => {
+    const json = (o, c = 200) => { res.writeHead(c, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)) }
+    const p = req.url
+    if (p?.includes('/ilink/bot/get_bot_qrcode')) return json({ qrcode: 'qr-1', qrcode_url: 'https://example.com/qr.png' })
+    if (p?.includes('/ilink/bot/get_qrcode_status')) {
+      return json({ status: 'confirmed', bot_token: 'tk', ilink_bot_id: 'bot-9', ilink_user_id: 'master@im.wechat' })
+    }
+    json({ ret: -1 })
+  })
+  return new Promise((r) => server.listen(0, () => r({ server, port: server.address().port })))
+}
+
 // WechatChannel 兼容 mock client（runtime start 用）
 function mockClient() {
   return {
@@ -64,6 +78,25 @@ test('Channel 管理 API（mock iLink）', async () => {
     assert.strictEqual(raw.status, 'bound', 'status=bound')
     const pub = await store.getPublic(c0.id)
     assert.ok(!('token' in pub), 'token 脱敏')
+  })
+
+  await test('qrcode_url 兼容：微信返回 URL 字段时也能取到 img', async () => {
+    // 重新起一个 mock 服务，返回 qrcode_url 而非 qrcode_img_content
+    const svc2 = await buildIlinkServerUrl()
+    const store2 = new ChannelStore({ file: path.join(os.tmpdir(), `chapi2-${Date.now()}.json`) })
+    const base2 = path.join(os.tmpdir(), `chapi2-mem-${Date.now()}`)
+    const runtime2 = new ChannelRuntime({ channelStore: store2, memoryBase: base2, clientFactory: () => mockClient() })
+    cc.initChannelController({ channelStore: store2, runtime: runtime2, baseUrl: `http://127.0.0.1:${svc2.port}` })
+    const c0b = await store2.create({ name: 'URL 格式测试' })
+    const rQr = mkRes()
+    await cc.getChannelQrcode(mkReq({ id: c0b.id }), rQr)
+    assert.strictEqual(rQr.body.data.img, 'https://example.com/qr.png', 'qrcode_url 应被兼容取到')
+    svc2.server.close()
+    await runtime2.stopAll()
+    fs.rmSync(store2.file, { force: true })
+    fs.rmSync(base2, { recursive: true, force: true })
+    // initChannelController 是模块级单例，恢复为原始 store/runtime，避免影响后续测试
+    cc.initChannelController({ channelStore: store, runtime, baseUrl: `http://127.0.0.1:${svc.port}` })
   })
 
   await test('list/update/start/stop/delete', async () => {
