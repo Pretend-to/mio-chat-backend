@@ -257,6 +257,7 @@ model ShellAutoApproveRule {
   match     String
   cwd       String? // 可选工作区目录前缀，null=全局
   deny      Boolean  @default(false) // false=放行, true=高危黑名单(deny)
+  rememberable Boolean @default(false) // deny 高危细分：false=绝对危险(禁记住/强制人工), true=一般高危(可记住/限工作区)
   enabled   Boolean  @default(true)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
