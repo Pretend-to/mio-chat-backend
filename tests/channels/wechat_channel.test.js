@@ -40,6 +40,8 @@ function makeHarness() {
 
 test('WechatChannel 渠道核心', async () => {
   const { llmCalls, mockClient, memory, channel, lastSent, userMsg, baseDir } = makeHarness()
+  // 预置默认灵魂（灵魂引导有独立 M3 test 块覆盖）；此处测正常对话路径
+  await memory.writeSoul('你叫小助手')
 
   await test('单用户边界：非绑定者消息被忽略', async () => {
     await channel._handleMessage(userMsg('你是谁', { from: 'stranger@im.wechat' }))
@@ -113,5 +115,41 @@ test('WechatChannel 渠道核心', async () => {
     assert.ok(lastSent().includes('事实X'))
   })
 
-  fs.rmSync(baseDir, { recursive: true, force: true })
+  await test('M3 灵魂引导：无 soul→guidance；提炼 soulDraft→固化；有 soul→正常对话', async () => {
+    const baseDir3 = path.join(os.tmpdir(), `mio-wc-3-${Date.now()}`)
+    const memory3 = new MemoryStore({ agentId: 'a3', baseDir: baseDir3 })
+    const llm3 = {
+      process: async (ctx) => {
+        if (ctx.guidance) {
+          if (ctx.text.includes('陪伴')) return { text: '记住了！', soulDraft: '你是用户的陪伴型助理，名字叫 小助手，陪伴用户工作' }
+          return { text: '你好呀，我还没有人格设定，你希望我怎样陪伴我？给我取个名字吧？' }
+        }
+        return { text: `RE:${ctx.text}` }
+      },
+    }
+    const client3 = {
+      botId: 'b', sendLog: [], getConfig: async () => ({ typing_ticket: 't' }),
+      sendTyping: async () => {}, sendMessage: async (p) => { client3.sendLog.push(p) },
+      getUpdates: async () => ({ ret: 0, msgs: [], get_updates_buf: '' }), notifyStart: async () => {}, notifyStop: async () => {},
+    }
+    const ch3 = new WechatChannel({ client: client3, memory: memory3, masterId: MASTER, llm: llm3, typing: false })
+    const last3 = () => client3.sendLog[client3.sendLog.length - 1]?.msg?.item_list?.[0]?.text || ''
+    const msg = (text) => ({ from_user_id: MASTER, context_token: 'c', message_type: 1, item_list: [{ type: 1, text }] })
+
+    await ch3._handleMessage(msg('你好'))
+    assert.ok(last3().includes('还没有人格设定'), '首聊进入引导模式')
+    assert.strictEqual(await memory3.readSoul(), '', '引导未定前不写 soul')
+
+    await ch3._handleMessage(msg('我希望你陪伴我工作'))
+    assert.ok((await memory3.readSoul()).includes('小助手'), 'AI 提炼并固化 soul.md')
+    assert.ok(last3().includes('记住了'), '回复确认灵魂已设定')
+
+    await ch3._handleMessage(msg('今天做什么'))
+    assert.strictEqual(last3(), 'RE:今天做什么', '有 soul 后走正常对话')
+    const sid3 = await memory3.getActiveSession()
+    assert.strictEqual((await memory3.getChat(sid3)).length, 2, '正常对话落盘 session chat（引导对话未计入）')
+    fs.rmSync(baseDir3, { recursive: true, force: true })
+  })
+
+fs.rmSync(baseDir, { recursive: true, force: true })
 })

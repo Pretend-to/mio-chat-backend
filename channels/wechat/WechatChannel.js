@@ -192,15 +192,26 @@ export class WechatChannel {
     // 2. typing 开始
     await this._typingStart(ctx)
     try {
-      // 3. 组装 messageChain: soul(system) + global(long-term) + session chat
       const soul = await this.memory.readSoul()
       const globalMem = await this.memory.readAllGlobal()
       const chat = await this.memory.getChat(sid)
-      // 4. 调用注入的 llmProcessor（内部流式；微信侧只取最终完整 text）
+
+      // 3. 灵魂引导（M3）：无 soul 时走引导模式，直到 AI 提炼出 soulDraft 并固化
+      if (!soul) {
+        const reply = await this.llm.process({ sessionId: sid, soul: '', globalMem: '', chat: [], guidance: true, text })
+        const replyText = (reply?.text ?? '').trim()
+        if (reply?.soulDraft) {
+          await this.memory.writeSoul(reply.soulDraft)
+          return { text: replyText || '好呀，我已经记下我的灵魂了～' }
+        }
+        // 未提炼出灵魂：引导对话不进正式会话记录
+        return { text: replyText || '（请告诉我你希望我怎样陪伴你）' }
+      }
+
+      // 4. 正常对话：组装 messageChain(soul + global + chat) → llmProcessor → 聚合 text
       const reply = await this.llm.process({ sessionId: sid, soul, globalMem, chat, text })
       const replyText = (reply?.text ?? '').trim()
       if (replyText) {
-        // 5. 落盘会话 + 结晶
         await this.memory.appendToChat(sid, { from_user_id: ctx.from, role: 'user', text })
         await this.memory.appendToChat(sid, { role: 'assistant', text: replyText })
         if (reply.crystal) await this.memory.setCrystal(sid, reply.crystal)
