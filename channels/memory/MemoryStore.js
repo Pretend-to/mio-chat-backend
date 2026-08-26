@@ -230,6 +230,27 @@ export class MemoryStore {
   }
 
   // ===============================================================
+  // agent 元数据（last_user_activity / keepalive 提醒状态等，持久化 JSON）
+  // ===============================================================
+  async _readMeta() {
+    const raw = await this._readFile(path.join(this._agentDir(), 'meta.json'), null)
+    return raw ? JSON.parse(raw) : {}
+  }
+  async _writeMeta(meta) {
+    await this._writeFile(path.join(this._agentDir(), 'meta.json'), JSON.stringify(meta, null, 2))
+  }
+  async getAgentMeta(key, fallback = null) {
+    const meta = await this._readMeta()
+    return meta[key] ?? fallback
+  }
+  async setAgentMeta(key, value) {
+    const meta = await this._readMeta()
+    meta[key] = value
+    await this._writeMeta(meta)
+    return true
+  }
+
+  // ===============================================================
   // active session（当前激活）
   // ===============================================================
   async getActiveSession() {

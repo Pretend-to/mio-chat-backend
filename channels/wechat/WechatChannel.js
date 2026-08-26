@@ -26,7 +26,7 @@ export class WechatChannel {
    * @param {object} opts.llm        { async process(ctx) -> { text, crystal? } } 处理普通消息
    * @param {boolean} [opts.typing]  是否启用"正在输入"反馈（默认 true）
    */
-  constructor({ client, memory, masterId, llm, typing = true, logger = console }) {
+  constructor({ client, memory, masterId, llm, typing = true, keepAlive = {}, logger = console }) {
     if (!client || !memory || !masterId) throw new Error('WechatChannel requires client/memory/masterId')
     this.client = client
     this.memory = memory
@@ -38,6 +38,16 @@ export class WechatChannel {
     this._buf = ''
     this._abort = null
     this._typingTickets = new Map() // userId -> typing_ticket（可缓存）
+    this._lastContextToken = null // 最近一条 master 消息的 context_token（保活提醒发送需要）
+    this.keepAlive = {
+      enabled: keepAlive.enabled ?? true,
+      userTimeoutMs: keepAlive.userTimeoutMs ?? 24 * 60 * 60 * 1000, // 24h
+      remindBeforeMs: keepAlive.remindBeforeMs ?? 60 * 60 * 1000, // 到期前 1h 提醒
+      checkEveryMs: keepAlive.checkEveryMs ?? 5 * 60 * 1000,
+      remindText: keepAlive.remindText ?? '你有一阵没跟我说话啦～微信通道很快需要保活，回我一句话我们就保持联系！',
+      expireText: keepAlive.expireText ?? '微信通道可能已失效：回复任意消息重新激活，或到管理后台重新绑定。',
+      _timer: null,
+    }
   }
 
   // ===============================================================
@@ -48,10 +58,12 @@ export class WechatChannel {
     this._abort = new AbortController()
     try { await this.client.notifyStart() } catch {}
     this._loop() // 异步循环，不阻塞
+    if (this.keepAlive.enabled) this._startKeepAlive()
     return this
   }
   async stop() {
     this.running = false
+    if (this.keepAlive._timer) { clearInterval(this.keepAlive._timer); this.keepAlive._timer = null }
     try { this._abort?.abort() } catch {}
     try { await this.client.notifyStop() } catch {}
     return this
@@ -83,6 +95,9 @@ export class WechatChannel {
   async _handleMessage(msg) {
     const from = msg.from_user_id
     if (from !== this.masterId) return // 单用户边界：只处理绑定者
+    // 记录活动 + 缓存 context_token（保活提醒发送需要）
+    this._lastContextToken = msg.context_token
+    await this._recordActivity()
     const contextToken = msg.context_token
     const text = extractText(msg)
     if (typeof text !== 'string' || !text.trim()) return
@@ -222,7 +237,56 @@ export class WechatChannel {
     }
   }
 
+// ===============================================================
+  // 保活（M5）：记录活动时间 + 到期前提醒，让用户回来发条消息维持通道
   // ===============================================================
+  /** 用户产生活动时更新（写入 memory agent meta，持久化） */
+  async _recordActivity() {
+    if (!this.keepAlive.enabled) return
+    try { await this.memory.setAgentMeta('last_user_activity', Date.now()) } catch {}
+  }
+  _startKeepAlive() {
+    const { checkEveryMs } = this.keepAlive
+    this.keepAlive._timer = setInterval(() => { this._checkKeepAlive().catch(() => {}) }, checkEveryMs)
+    this.keepAlive._timer.unref?.()
+  }
+  async _checkKeepAlive() {
+    if (!this.keepAlive.enabled) return
+    const { userTimeoutMs, remindBeforeMs, remindText, expireText } = this.keepAlive
+    const last = await this.memory.getAgentMeta('last_user_activity', null)
+    if (last == null) { await this._recordActivity(); return } // 尚无活动，以当前为基准
+    const idle = Date.now() - last
+    const remaining = userTimeoutMs - idle
+    if (idle >= userTimeoutMs) {
+      // 已超时：通道可能失效 → 通知（仅一次）
+      const reminded = await this.memory.getAgentMeta('keepalive_expire_reminded', false)
+      if (!reminded) {
+        await this._safeSend(this.masterId, this._lastContextToken ?? undefined, expireText)
+        await this.memory.setAgentMeta('keepalive_expire_reminded', true)
+      }
+      return
+    }
+    if (remaining < remindBeforeMs) {
+      // 到期前窗口：窗口内只提醒一次
+      const lastRemind = await this.memory.getAgentMeta('keepalive_last_reminder', 0)
+      if (!lastRemind || Date.now() - lastRemind > remindBeforeMs) {
+        await this._safeSend(this.masterId, this._lastContextToken ?? undefined, remindText)
+        await this.memory.setAgentMeta('keepalive_last_reminder', Date.now())
+      }
+    } else {
+      // 健康：清提醒状态，下次窗口可再提醒
+      if (await this.memory.getAgentMeta('keepalive_last_reminder', 0)) {
+        await this.memory.setAgentMeta('keepalive_last_reminder', 0)
+      }
+      if (await this.memory.getAgentMeta('keepalive_expire_reminded', false)) {
+        await this.memory.setAgentMeta('keepalive_expire_reminded', false)
+      }
+    }
+  }
+
+  // ===============================================================
+  // typing 反馈（"对方正在输入"）
+  // ==============================================================="  // ===============================================================
   // typing 反馈（"对方正在输入"）
   // ===============================================================
   async _typingStart(ctx) {
