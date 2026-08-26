@@ -97,7 +97,7 @@ memory/agents/<agentId>/
 ```
 微信里第一条消息 ─► 无 soul.md ─► 引导式开场：
     "你好呀～ 我还没有人格设定。你希望我怎样陪伴你？给我取个名字吧？
-     （工作助理 / 树洞朋友 / 严厉教练 / 自定义）"
+     （开放引导：名字 / 陪伴方式 / 语气完全由用户自由定义，AI 据此生成 soul.md）"
 用户回应 ─► AI 提炼 ─► 写入 soul.md（markdown 固化）
    ├─ 此后请求：soul.md 注入为历史首条 system
    └─ /soul 随时查看 / 重设
@@ -110,7 +110,7 @@ memory/agents/<agentId>/
   ├─ 以 "/" 开头 → slash 命令路由（会话管理）
   └─ 普通消息 → 落入当前激活 session
         → 组装 messageChain = [soul system] + [longterm] + [session chat]
-        → 调用核心（LLM/工具/结晶），结果聚合（微信不支持流式）
+        → 调用核心（LLM/工具/结晶），LLM 侧保持流式；微信侧对 tool-call 类 chunk 不更新/不发送，仅完整 text 生成后聚合一次发送
         → sendMessage 带 context_token 发回
         → 落盘 session chat
         → 超水位 → 结晶 → 更新 session crystal + longterm
@@ -131,8 +131,9 @@ memory/agents/<agentId>/
 | `/context` | 看当前会话结晶摘要 |
 | `/delete <id>` | 删除会话 |
 
-### 4.5 状态反馈（无流式下的体验）
+### 4.5 状态反馈（流式内部 + 聚合推送）
 
+- LLM 侧保持流式；微信侧 **tool-call 类 chunk 不更新/不发送**，只推送最终完整 text 段
 - 发送 `sendTyping`（"正在输入"）缓解长思考等待
 - 消息 `state: GENERATING → FINISH` 反映处理中/完成
 - 出错时回一段错误文案 + `/help` 提示
@@ -160,6 +161,7 @@ getUpdates 长轮询循环
 |--------|------|------|
 | **M0** | `channels/` 骨架 + PROTOCOL.md + **IlinkClient 协议层**（登录/长轮询/收发/typing/notify）+ mock 测试 | ✅ 已完成（本地提交）|
 | **M1** | `memory/` 记忆落盘层（soul/longterm/sessions JSON + CRUD + channel 通用）| ⬜ |
+| **M1.5** | 媒体收发（图/语音/文件）：CDN 上传下载 + AES 加解密 + 转码 | ⬜ |
 | **M2** | **WechatChannel 核心**：长轮询主循环、会话路由、slash 命令、单用户 admin、回复聚合发送 | ⬜ |
 | **M3** | **灵魂引导**：新 agent 无 soul → 引导定制 → 写 soul.md → 注入 | ⬜ |
 | **M4** | **持久化 + 结晶**：session chat 落盘、结晶更新 crystal/longterm、`/soul /memory /context` | ⬜ |
@@ -180,8 +182,9 @@ getUpdates 长轮询循环
 
 ---
 
-## 8. 待确认决策（开放给 review）
+## 8. 已定设计决策（2026-08-26 review）
 
-1. soul 引导：默认提供几个"陪伴类型"选项，还是要更开放的自定义？
-2. 长期记忆 `longterm.md` 是否直接复用后端 `memory 工具 scope:'global'`（避免两套），还是 memory 目录自管？
-3. 微信会话是否需要 media（图/语音）收发（M1.5 还是后置）？
+1. **灵魂引导：开放不预设**——不提供陪伴类型选项，名字/陪伴/语气完全由用户自定义，AI 生成 soul.md。
+2. **记忆兼容 memory**——longterm 复用后端 `memory 工具 scope:'global'` 的统一机制（memory 目录作为其落盘/视图载体），不另起一套。
+3. **媒体入 M1.5**——图/语音/文件收发放在记忆层之后、核心渠道后追加。
+4. **流式策略**——LLM 侧保持流式；微信侧对 tool-call 类 chunk 不更新/不发送，仅完整 text 生成后聚合一次发送，配合 sendTyping/GENERATING-FINISH 状态。
