@@ -248,3 +248,18 @@ model SearchAdapter {
 
 
 
+
+// Shell 自动审批规则表（后端权威名单，替代前端 localStorage 名单）
+// allow=白名单放行 / deny=高危黑名单必须人工介入；cwd 可选：目录前缀绑定（null=全局生效）
+model ShellAutoApproveRule {
+  id        Int      @id @default(autoincrement())
+  matchType String   @map("match_type") // 'command' 全等 | 'prefix' 前缀
+  match     String
+  cwd       String? // 可选工作区目录前缀，null=全局
+  deny      Boolean  @default(false) // false=放行, true=高危黑名单(deny)
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([enabled])
+  @@map("shell_auto_approve_rules")
+}
