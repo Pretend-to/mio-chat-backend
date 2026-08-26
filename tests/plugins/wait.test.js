@@ -230,5 +230,52 @@ test('B: wait 真实 pty 集成（关键：命令完成瞬间返回，远早于 
     assert.strictEqual(r.status, 'finished')
     assert.ok(Date.now() - start >= 190, 'sleep 至少 200ms')
     sessions.destroy?.()
+})
+
+  await t.test('前台命令超时后，wait 能等到命令真正完成并返回 finished（命令级检测，而非等满 timeout）', async () => {
+    const sessions = new TerminalSessionManager(pluginStub)
+    const tool = makeWaitTool(sessions)
+    const { sessionId } = await sessions.createSession({ cwd: process.cwd() })
+    // 模拟 LLM 前台跑长 build：execCommand 800ms 超时，命令仍在 PTY 里继续
+    const rExec = await sessions.execCommand(sessionId, 'sleep 3 && echo BUILD_DONE', 800)
+    assert.strictEqual(rExec.timedOut, true, '前台命令应超时')
+    await sleep(1200) // LLM 稍后才调 wait（此时 build 尚未结束）
+    const start = Date.now()
+    const r = await exec(tool, { sessionId, timeoutMs: 8000 })
+    const elapsed = Date.now() - start
+    assert.strictEqual(r.status, 'finished', `wait 应命令完成后返回 finished（实际 ${r.status}）`)
+    assert.ok(elapsed < 6000, `应在命令剩余时间返回，而非 8s 超时（实际 ${elapsed}ms）`)
+    assert.ok(r.lines.some((l) => l.includes('BUILD_DONE')), `输出应含 BUILD_DONE: ${JSON.stringify(r.lines.slice(-3))}`)
+    sessions.close(sessionId)
+    sessions.destroy?.()
+  })
+
+  await t.test('命令已跑完（shell 空闲）后再 wait → 立即 finished，不等满 timeout', async () => {
+    const sessions = new TerminalSessionManager(pluginStub)
+    const tool = makeWaitTool(sessions)
+    const { sessionId } = await sessions.createSession({ cwd: process.cwd() })
+    const rExec = await sessions.execCommand(sessionId, 'echo quick', 5000)
+    assert.strictEqual(rExec.timedOut, false)
+    // 命令已完成，shell 空闲。wait 应借助空闲探测立即返回 finished
+    const start = Date.now()
+    const r = await exec(tool, { sessionId, timeoutMs: 8000 })
+    const elapsed = Date.now() - start
+    assert.strictEqual(r.status, 'finished')
+    assert.ok(elapsed < 2000, `空闲会话 wait 应立即返回（实际 ${elapsed}ms，而非 8s）`)
+    sessions.close(sessionId)
+    sessions.destroy?.()
+  })
+
+  await t.test('read_screen 工具：可读取超时命令的历史底部输出', async () => {
+    const sessions = new TerminalSessionManager(pluginStub)
+    const readTool = new (await import('../../lib/plugins/terminal-pty/tools/read_screen.js')).default()
+    readTool.parentPlugin = { sessions }
+    const { sessionId } = await sessions.createSession({ cwd: process.cwd() })
+    await sessions.execCommand(sessionId, 'echo SCREEN_TAIL_MARKER', 5000)
+    const r = await readTool.func({ params: { sessionId, tail: 20 } })
+    assert.strictEqual(r.success, true)
+    assert.ok(r.lines.some((l) => l.includes('SCREEN_TAIL_MARKER')), `read_screen 应读到输出: ${JSON.stringify(r.lines?.slice(-3))}`)
+    sessions.close(sessionId)
+    sessions.destroy?.()
   })
 })
