@@ -20,6 +20,7 @@ overrides:
   qs: '>=6.15.2'
   dompurify: '>=3.4.11'
   engine.io: 6.6.7
+  deepmerge-ts: 8.0.0
 
 importers:
 
@@ -150,20 +151,6 @@ importers:
       strip-ansi:
         specifier: ^7.1.0
         version: 7.2.0
-
-  plugins/anyui: {}
-
-  plugins/doudizhu: {}
-
-  plugins/email-plugin:
-    dependencies:
-      nodemailer:
-        specifier: ^8.0.4
-        version: 8.0.11
-
-  plugins/note-plugin: {}
-
-  plugins/python-sandbox: {}
 
 packages:
 
@@ -2485,8 +2472,8 @@ packages:
     resolution: {integrity: sha512-LOHxIOaPYdHlJRtCQfDIVZtfw/ufM8+rVj649RIHzcm/vGwQRXFt6OPqIFWsm2XEMrNIEtWR64sY1LEKD2vAOA==}
     engines: {node: '>=4.0.0'}
 
-  deepmerge-ts@7.1.5:
-    resolution: {integrity: sha512-HOJkrhaYsweh+W+e74Yn7YStZOilkoPb6fycpwNLKzSPtruFs48nYis0zy5yJz1+ktUhHxoRDJ27RQAWLIJVJw==}
+  deepmerge-ts@8.0.0:
+    resolution: {integrity: sha512-ICNjaP0ML+eSdEpJYQC46XiAn/UjAdwbEl0dE8p85ZTeNDinN4Kd4+9jS4OSAuH7st6eC7rQhsqTF5zIDaUm2g==}
     engines: {node: '>=16.0.0'}
 
   defu@6.1.7:
@@ -3842,10 +3829,6 @@ packages:
 
   node-readfiles@0.2.0:
     resolution: {integrity: sha512-SU00ZarexNlE4Rjdm83vglt5Y9yiQ+XI1XpflWlb7q7UTN1JUItm69xMeiQCTxtTfnzt+83T8Cx+vI2ED++VDA==}
-
-  nodemailer@8.0.11:
-    resolution: {integrity: sha512-nrO/pDAUKl+wXX+lx16tDLbnm0fW6sK/x8mgohaCpg+CdCEl482bD4tCuAZk2DyliruiNTIZxRCoWkDqJEnAiA==}
-    engines: {node: '>=6.0.0'}
 
   nodemailer@9.0.3:
     resolution: {integrity: sha512-n+YP+NKwR5zRWa60k3GiQ6Q3B4KXCoAw40dAKeCtYn020iNN74aWK2liXIC3ZEATeGql7we3tE3t8QwhY0eskw==}
@@ -6045,7 +6028,7 @@ snapshots:
   '@prisma/config@7.9.0':
     dependencies:
       c12: 3.3.4
-      deepmerge-ts: 7.1.5
+      deepmerge-ts: 8.0.0
       effect: 3.20.0
       empathic: 2.0.0
     transitivePeerDependencies:
@@ -7943,7 +7926,7 @@ snapshots:
 
   deep-extend@0.6.0: {}
 
-  deepmerge-ts@7.1.5: {}
+  deepmerge-ts@8.0.0: {}
 
   defu@6.1.7: {}
 
@@ -9655,8 +9638,6 @@ snapshots:
   node-readfiles@0.2.0:
     dependencies:
       es6-promise: 3.3.1
-
-  nodemailer@8.0.11: {}
 
   nodemailer@9.0.3: {}
 
