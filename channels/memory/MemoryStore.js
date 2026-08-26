@@ -57,6 +57,10 @@ export class MemoryStore {
     await fs.promises.mkdir(path.join(dir, 'global'), { recursive: true })
     return dir
   }
+  /** 显式确保 agent 目录存在（ChannelRuntime 启动时调用，使记忆落盘目录立即可用） */
+  async ensure() {
+    return await this._ensureAgentDir()
+  }
   async _readFile(fp, fallback = null) {
     try {
       return await fs.promises.readFile(fp, UTF8)
