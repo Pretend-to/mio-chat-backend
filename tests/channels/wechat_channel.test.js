@@ -30,7 +30,7 @@ function makeHarness() {
   const baseDir = path.join(os.tmpdir(), `mio-wc-${Date.now()}_${Math.random().toString(36).slice(2, 8)}`)
   const memory = new MemoryStore({ agentId: 'wechat-master', baseDir })
   const channel = new WechatChannel({ client: mockClient, memory, masterId: MASTER, llm, typing: true })
-  const lastSent = () => mockClient.sendLog[mockClient.sendLog.length - 1]?.msg?.item_list?.[0]?.text || ''
+  const lastSent = () => mockClient.sendLog[mockClient.sendLog.length - 1]?.item_list?.[0]?.text || ''
   const userMsg = (text, { token = 'CTX', from = MASTER } = {}) => ({
     from_user_id: from, message_id: Math.floor(Math.random() * 1e6), message_type: 1,
     context_token: token, item_list: [{ type: 1, text }],
@@ -54,7 +54,7 @@ test('WechatChannel 渠道核心', async () => {
     assert.strictEqual(llmCalls.length, 1)
     assert.strictEqual(mockClient.sendLog.length, 1)
     assert.strictEqual(lastSent(), 'RE: 你好')
-    assert.strictEqual(mockClient.sendLog[0].msg.context_token, 'CTX')
+    assert.strictEqual(mockClient.sendLog[0].context_token, 'CTX')
     const sid = await memory.getActiveSession()
     assert.ok(sid)
     const chat = await memory.getChat(sid)
@@ -133,7 +133,7 @@ test('WechatChannel 渠道核心', async () => {
       getUpdates: async () => ({ ret: 0, msgs: [], get_updates_buf: '' }), notifyStart: async () => {}, notifyStop: async () => {},
     }
     const ch3 = new WechatChannel({ client: client3, memory: memory3, masterId: MASTER, llm: llm3, typing: false })
-    const last3 = () => client3.sendLog[client3.sendLog.length - 1]?.msg?.item_list?.[0]?.text || ''
+    const last3 = () => client3.sendLog[client3.sendLog.length - 1]?.item_list?.[0]?.text || ''
     const msg = (text) => ({ from_user_id: MASTER, context_token: 'c', message_type: 1, item_list: [{ type: 1, text }] })
 
     await ch3._handleMessage(msg('你好'))

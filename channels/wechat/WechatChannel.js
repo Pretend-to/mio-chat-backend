@@ -258,17 +258,17 @@ export function extractText(msg) {
   return ''
 }
 
-/** 构造下行消息（发给用户，带回 context_token，message_type=2 bot） */
+/** 构造下行 WeixinMessage（发给用户，带回 context_token，message_type=2 bot）。
+ *  注意：返回的是 WeixinMessage 本体，传给 client.sendMessage 后由其再包一层 `{msg: ...}`，
+ *  避免双重 msg 嵌套。 */
 export function buildSendMsg({ to, fromBot, contextToken, text }) {
   return {
-    msg: {
-      context_token: contextToken,
-      from_user_id: fromBot,
-      message_state: 2, // FINISH
-      message_type: 2, // BOT
-      item_list: [{ text, type: 1 }],
-      to_user_id: to,
-    },
+    context_token: contextToken,
+    from_user_id: fromBot,
+    message_state: 2, // FINISH
+    message_type: 2, // BOT
+    item_list: [{ text, type: 1 }],
+    to_user_id: to,
   }
 }
 
