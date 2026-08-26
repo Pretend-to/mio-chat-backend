@@ -6,7 +6,7 @@
 
 import config from '../../lib/config.js'
 import logger from '../../utils/logger.js'
-import { updateConfigSection, broadcastModelUpdate } from '../../lib/server/http/services/configService.js'
+import { broadcastModelUpdate, updateConfigSection } from '../../lib/server/http/services/configService.js'
 // 导入check.js来初始化全局中间件
 import '../../lib/check.js'
 
@@ -19,10 +19,10 @@ async function testSocketIOBroadcast() {
     
     // 1. 检查全局中间件是否存在
     logger.info('1. 检查全局中间件状态...')
-    console.log('global.middleware 存在:', !!global.middleware)
-    console.log('global.middleware.socketServer 存在:', !!global.middleware?.socketServer)
-    console.log('global.middleware.socketServer.io 存在:', !!global.middleware?.socketServer?.io)
-    console.log('global.middleware.llm 存在:', !!global.middleware?.llm)
+    console.log('global.middleware 存在:', Boolean(global.middleware))
+    console.log('global.middleware.socketServer 存在:', Boolean(global.middleware?.socketServer))
+    console.log('global.middleware.socketServer.io 存在:', Boolean(global.middleware?.socketServer?.io))
+    console.log('global.middleware.llm 存在:', Boolean(global.middleware?.llm))
     
     if (!global.middleware?.socketServer?.io) {
       logger.warn('Socket.IO服务器未初始化，无法测试广播功能')

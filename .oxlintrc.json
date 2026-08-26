@@ -1,13 +1,47 @@
 {
   "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
-  "rules": {
+  "categories": {
     "correctness": "error",
     "suspicious": "error",
-    "perf": "warn",
-    "style": "warn",
+    "perf": "off",
+    "style": "off",
     "pedantic": "off",
     "nursery": "off",
     "restriction": "off"
+  },
+  "rules": {
+    "no-control-regex": "off",
+    "no-underscore-dangle": "off",
+    "consistent-function-scoping": "off",
+    "no-shadow": [
+      "error",
+      {
+        "allow": [
+          "err",
+          "error",
+          "e",
+          "data",
+          "result",
+          "config",
+          "client",
+          "adapter",
+          "t",
+          "cb",
+          "callback",
+          "url",
+          "options",
+          "code",
+          "msg"
+        ]
+      }
+    ],
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ]
   },
   "env": {
     "node": true,

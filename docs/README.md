@@ -20,6 +20,7 @@
 *   [**系统配置项说明**](./api/config-api.md): 环境变量与 .env 指南。
 
 ## 🚀 部署与运维 (Ops)
+*   [**完整部署与使用指引**](./deployment/RUNNING_GUIDE.md): 从零跑通后端 + 前端 + 首次对话玩法
 *   [**Docker 部署手册**](./deployment/DOCKER.md)
 *   [**生产环境部署 (PM2)**](./deployment/DEPLOYMENT.md)
 *   [**数据库初始化指南**](./deployment/DATABASE_SETUP.md)

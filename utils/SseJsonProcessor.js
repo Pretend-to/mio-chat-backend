@@ -1,6 +1,7 @@
 export class SseJsonProcessor {
-  constructor() {
-    this.cache = ''
+  cache = '';
+constructor() {
+    
     this.arrayStarted = false
   }
 
@@ -17,7 +18,7 @@ export class SseJsonProcessor {
     while (true) {
       // Find the next complete JSON object
       const result = this.findNextCompleteObject()
-      if (!result) break
+      if (!result) {break}
 
       const { objectStr, endIndex } = result
 
@@ -28,8 +29,8 @@ export class SseJsonProcessor {
 
         // Remove the processed object and any preceding characters from cache
         this.cache = this.cache.substring(endIndex)
-      } catch (e) {
-        console.error('[SSE Parser] Failed to parse JSON:', e)
+      } catch (error) {
+        console.error('[SSE Parser] Failed to parse JSON:', error)
         // Skip past this problematic object
         if (endIndex > 0) {
           this.cache = this.cache.substring(endIndex)
@@ -44,7 +45,7 @@ export class SseJsonProcessor {
   findNextCompleteObject() {
     // Find the start of an object
     const startIndex = this.cache.indexOf('{')
-    if (startIndex === -1) return null
+    if (startIndex === -1) {return null}
 
     // Track brace nesting level and string context
     let braceLevel = 0
@@ -81,7 +82,7 @@ export class SseJsonProcessor {
           // If we've found a complete top-level object
           if (braceLevel === 0) {
             const objectStr = this.cache.substring(startIndex, i + 1)
-            return { objectStr, endIndex: i + 1 }
+            return { endIndex: i + 1, objectStr }
           }
         }
       }

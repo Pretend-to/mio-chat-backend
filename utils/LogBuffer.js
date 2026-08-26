@@ -18,14 +18,14 @@ export class LogBuffer {
   addLog(logEntry) {
     // 确保日志条目有唯一ID和时间戳
     const entry = {
-      id: logEntry.id || this.generateId(),
-      timestamp: logEntry.timestamp || new Date(),
-      level: logEntry.level,
-      module: logEntry.module,
-      message: logEntry.message,
       caller: logEntry.caller,
+      extra: logEntry.extra || {},
+      id: logEntry.id || this.generateId(),
       ip: logEntry.ip,
-      extra: logEntry.extra || {}
+      level: logEntry.level,
+      message: logEntry.message,
+      module: logEntry.module,
+      timestamp: logEntry.timestamp || new Date()
     }
 
     // 循环缓冲区逻辑
@@ -89,11 +89,11 @@ export class LogBuffer {
    */
   filterByLevel(level) {
     const levels = {
+      DEBUG: 4,
       ERROR: 0,
-      WARN: 1,
-      MARK: 2,
       INFO: 3,
-      DEBUG: 4
+      MARK: 2,
+      WARN: 1
     }
 
     const targetLevel = levels[level] || 3
@@ -153,12 +153,12 @@ export class LogBuffer {
    */
   getStats() {
     return {
-      maxSize: this.maxSize,
       currentSize: this.isFull ? this.maxSize : this.currentIndex,
-      totalCount: this.totalCount,
       isFull: this.isFull,
+      maxSize: this.maxSize,
+      newestIndex: this.isFull ? (this.currentIndex - 1 + this.maxSize) % this.maxSize : this.currentIndex - 1,
       oldestIndex: this.isFull ? this.currentIndex : 0,
-      newestIndex: this.isFull ? (this.currentIndex - 1 + this.maxSize) % this.maxSize : this.currentIndex - 1
+      totalCount: this.totalCount
     }
   }
 

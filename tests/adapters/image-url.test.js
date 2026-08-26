@@ -1,7 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import fs from 'fs';
-import path from 'path';
 import './mock-env.js';
 import GeminiAdapter from '../../lib/chat/llm/adapters/implementations/gemini.js';
 import OpenAIAdapter from '../../lib/chat/llm/adapters/implementations/openai.js';
@@ -11,11 +9,11 @@ test('Image URL pre-processing and data wrapping', async (t) => {
 
   const messages = [
     {
-      role: 'user',
       content: [
         { type: 'text', text: 'Analyze this image:' },
         { type: 'image_url', image_url: { url: base64Data } }
-      ]
+      ],
+      role: 'user'
     }
   ];
 
@@ -25,7 +23,7 @@ test('Image URL pre-processing and data wrapping', async (t) => {
     
     // Check structure after _processMessages
     assert.strictEqual(processed.length, 1);
-    const content = processed[0].content;
+    const {content} = processed[0];
     assert.strictEqual(content[1].type, 'image_url');
     assert.strictEqual(content[1].image_url.url, base64Data);
 
@@ -39,16 +37,16 @@ test('Image URL pre-processing and data wrapping', async (t) => {
   await t.test('GeminiAdapter: should handle imageGeneration object/boolean correctly and not set responseModalities when disabled', async () => {
     const adapter = new GeminiAdapter({ api_key: 'test', base_url: 'http://localhost' });
     const body = {
-      messages: messages,
+      messages,
       settings: {
         base: { model: 'gemini-2.5-flash', stream: true },
         chatParams: { temperature: 0.7 },
-        toolCallSettings: { mode: 'NONE', tools: [] },
         extraSettings: {
           gemini: {
             imageGeneration: { enabled: false }
           }
-        }
+        },
+        toolCallSettings: { mode: 'NONE', tools: [] }
       }
     };
     const prepared = await adapter._prepareChatBody(body);
@@ -61,7 +59,7 @@ test('Image URL pre-processing and data wrapping', async (t) => {
 
     // Check structure after _processMessages
     assert.strictEqual(processed.length, 1);
-    const content = processed[0].content;
+    const {content} = processed[0];
     assert.strictEqual(content[1].type, 'image_url');
     assert.strictEqual(content[1].image_url.url, base64Data);
   });
@@ -70,10 +68,10 @@ test('Image URL pre-processing and data wrapping', async (t) => {
     const rawBase64 = 'iVBORw0KGgoAAAANS';
     const rawMessages = [
       {
-        role: 'user',
         content: [
           { type: 'image_url', image_url: rawBase64 }
-        ]
+        ],
+        role: 'user'
       }
     ];
     const adapter = new GeminiAdapter({ api_key: 'test', base_url: 'http://localhost' });

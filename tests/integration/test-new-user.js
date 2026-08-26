@@ -75,7 +75,7 @@ async function testNewUserExperience() {
           logger.warn('测试超时，强制关闭')
           child.kill('SIGKILL')
         }
-      }, 10000)
+      }, 10_000)
     })
     
   } catch (error) {

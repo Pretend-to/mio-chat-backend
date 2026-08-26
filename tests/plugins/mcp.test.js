@@ -7,23 +7,23 @@ test('MCP Loader - Disabled attribute', async (t) => {
   await t.test('should skip disabled MCP servers and preserve others', () => {
     const config = {
       mcpServers: {
-        'disabled-http-server': {
-          url: 'https://mcp.tavily.com/mcp/',
-          disabled: true,
-        },
-        'disabled-stdio-server': {
-          command: 'node',
-          args: ['server.js'],
-          disabled: 'true', // string 'true' also counts
-        },
         'active-http-server': {
           url: 'https://mcp.active.com/mcp/',
           // disabled is undefined, should load by default
         },
         'active-stdio-server': {
-          command: 'node',
           args: ['active.js'],
+          command: 'node',
           disabled: false, // explicitly false should load
+        },
+        'disabled-http-server': {
+          disabled: true,
+          url: 'https://mcp.tavily.com/mcp/',
+        },
+        'disabled-stdio-server': {
+          args: ['server.js'],
+          command: 'node',
+          disabled: 'true', // string 'true' also counts
         }
       }
     };

@@ -22,30 +22,31 @@ function generateSecureCode() {
  * 默认模型所有者/分组配置
  */
 const DEFAULT_MODEL_OWNERS = [
-  { owner: 'OpenAI', keywords: ['gpt', 'o1', 'o3', 'o4'] },
-  { owner: 'Cohere', keywords: ['command'] },
-  { owner: 'Anthropic', keywords: ['claude'] },
-  { owner: 'Google', keywords: ['gemini', 'PaLM', 'gemma'] },
-  { owner: 'X.AI', keywords: ['grok'] },
-  { owner: 'DeepSeek', keywords: ['deepseek'] },
-  { owner: '智谱清言', keywords: ['glm'] },
-  { owner: '豆包', keywords: ['doubao'] },
-  { owner: '月之暗面 (kimi)', keywords: ['moonshot', 'kimi'] },
-  { owner: '科大讯飞', keywords: ['sparkdesk'] },
-  { owner: '通义千问', keywords: ['qwen', 'qwq', 'qvq'] },
-  { owner: '腾讯混元', keywords: ['hunyuan'] },
-  { owner: '小米', keywords: ['mimo'] },
-  { owner: 'Minimax', keywords: ['minimax'] },
-  { owner: '火山引擎', keywords: ['volcengine', 'volc', 'ark'] },
-  { owner: '快手', keywords: ['kuaishou', 'kling', 'kwaiyii', 'kwai'] },
-  { owner: '美团', keywords: ['meituan', 'longcat'] },
-  { owner: 'OpenRouter', keywords: ['openrouter'] },
-  { owner: 'Groq', keywords: ['groq'] },
-  { owner: 'GitHub', keywords: ['github', 'copilot'] },
-  { owner: '零一万物', keywords: ['zeroone', '01.ai', 'yi'] },
-  { owner: '百川智能', keywords: ['baichuan'] },
-  { owner: '阶跃星辰', keywords: ['stepfun', 'step', 'yuewen'] },
-  { owner: 'Perplexity', keywords: ['perplexity'] }
+  { keywords: ['gpt', 'o1', 'o3', 'o4'], owner: 'OpenAI' },
+  { keywords: ['command'], owner: 'Cohere' },
+  { keywords: ['claude'], owner: 'Anthropic' },
+  { keywords: ['gemini', 'PaLM', 'gemma'], owner: 'Google' },
+  { keywords: ['grok'], owner: 'X.AI' },
+  { keywords: ['deepseek'], owner: 'DeepSeek' },
+  { keywords: ['glm'], owner: '智谱清言' },
+  { keywords: ['doubao'], owner: '豆包' },
+  { keywords: ['moonshot', 'kimi'], owner: '月之暗面 (kimi)' },
+  { keywords: ['sparkdesk'], owner: '科大讯飞' },
+  { keywords: ['qwen', 'qwq', 'qvq'], owner: '通义千问' },
+  { keywords: ['hunyuan'], owner: '腾讯混元' },
+  { keywords: ['mimo'], owner: '小米' },
+  { keywords: ['minimax'], owner: 'Minimax' },
+  { keywords: ['volcengine', 'volc', 'ark'], owner: '火山引擎' },
+  { keywords: ['kuaishou', 'kling', 'kwaiyii', 'kwai'], owner: '快手' },
+  { keywords: ['meituan', 'longcat'], owner: '美团' },
+  { keywords: ['openrouter'], owner: 'OpenRouter' },
+  { keywords: ['groq'], owner: 'Groq' },
+  { keywords: ['github', 'copilot'], owner: 'GitHub' },
+  { keywords: ['zeroone', '01.ai', 'yi'], owner: '零一万物' },
+  { keywords: ['baichuan'], owner: '百川智能' },
+  { keywords: ['stepfun', 'step', 'yuewen'], owner: '阶跃星辰' },
+  { keywords: ['perplexity'], owner: 'Perplexity' },
+  { keywords: ['dots', 'diandian', 'note3', 'xiaohongshu', '点点'], owner: 'xiaohongshu' }
 ]
 
 /**
@@ -58,65 +59,65 @@ async function initializeDefaultSystemSettings() {
 
   const defaultSettings = [
     {
+      category: 'web',
+      description: '管理员访问码',
       key: 'admin_code',
-      value: process.env.ADMIN_CODE || generateSecureCode(),
-      category: 'web',
-      description: '管理员访问码'
+      value: process.env.ADMIN_CODE || generateSecureCode()
     },
     {
+      category: 'web', 
+      description: '普通用户访问码', 
       key: 'user_code', 
-      value: process.env.USER_CODE || generateSecureCode(),
-      category: 'web',
-      description: '普通用户访问码'
+      value: process.env.USER_CODE || generateSecureCode()
     },
     {
-      key: 'server_port',
-      value: parseInt(process.env.PORT) || 3000,
       category: 'server',
-      description: '服务器端口'
+      description: '服务器端口',
+      key: 'server_port',
+      value: parseInt(process.env.PORT) || 3000
     },
     {
+      category: 'general',
+      description: '调试模式',
       key: 'debug_mode',
-      value: process.env.DEBUG === 'true' || false,
-      category: 'general',
-      description: '调试模式'
+      value: process.env.DEBUG === 'true' || false
     },
     {
-      key: 'model_owners',
-      value: DEFAULT_MODEL_OWNERS,
       category: 'general',
-      description: '模型所有者配置'
+      description: '模型所有者配置',
+      key: 'model_owners',
+      value: DEFAULT_MODEL_OWNERS
     },
 
     {
+      category: 'web',
+      description: 'Web 界面全屏模式',
       key: 'web_full_screen',
-      value: process.env.WEB_FULL_SCREEN === 'false' ? false : true,
-      category: 'web',
-      description: 'Web 界面全屏模式'
+      value: process.env.WEB_FULL_SCREEN !== 'false'
     },
     {
+      category: 'web',
+      description: 'Web 界面备案信息',
       key: 'web_beian',
-      value: process.env.WEB_BEIAN || '',
-      category: 'web',
-      description: 'Web 界面备案信息'
+      value: process.env.WEB_BEIAN || ''
     },
     {
+      category: 'web',
+      description: 'Web 界面标题',
       key: 'web_title',
-      value: process.env.WEB_TITLE || 'MioChat',
-      category: 'web',
-      description: 'Web 界面标题'
+      value: process.env.WEB_TITLE || 'MioChat'
     },
     {
+      category: 'system',
+      description: '系统任务专用 LLM 渠道 (留空则默认使用第一个可用渠道)',
       key: 'system_llm_channel',
-      value: '',
-      category: 'system',
-      description: '系统任务专用 LLM 渠道 (留空则默认使用第一个可用渠道)'
+      value: ''
     },
     {
-      key: 'system_llm_title_prompt',
-      value: '请根据这段对话内容，为这个会话起一个极其简短、精准的标题（不超过 6 个字）。注意：你的回答只能包含标题本身，不要包含任何标点符号、解释或引用。',
       category: 'system',
-      description: '对话标题自动生成的提示词'
+      description: '对话标题自动生成的提示词',
+      key: 'system_llm_title_prompt',
+      value: '请根据这段对话内容，为这个会话起一个极其简短、精准的标题（不超过 6 个字）。注意：你的回答只能包含标题本身，不要包含任何标点符号、解释或引用。'
     }
   ]
 
@@ -140,7 +141,7 @@ async function initializeDefaultSystemSettings() {
           logger.info(`✓ 无感更新模型所有者配置 (${setting.key})`)
         }
       } else {
-        // logger.debug(`- 设置已存在: ${setting.key}`)
+        // Logger.debug(`- 设置已存在: ${setting.key}`)
       }
     } catch (error) {
       logger.error(`创建/更新默认设置失败 ${setting.key}:`, error)
@@ -158,11 +159,9 @@ async function initializeDefaultPluginConfig() {
     const existing = await SystemSettingsService.get('onebot')
     if (!existing) {
       const defaultOnebotConfig = {
-        enable: false,
-        reverse_ws_url: '',
-        bot_qq: '2698788044',
         admin_qq: '1099834705',
-        token: '',
+        bot_qq: '2698788044',
+        enable: false,
         plugins: {
           options: {
             textwraper: {
@@ -278,14 +277,16 @@ async function initializeDefaultPluginConfig() {
               ]
             }
           }
-        }
+        },
+        reverse_ws_url: '',
+        token: ''
       }
       
       await SystemSettingsService.set('onebot', defaultOnebotConfig, 'onebot', 'OneBot 协议配置')
       
       logger.info('✓ 创建默认 OneBot 配置')
     } else {
-      // logger.debug('- OneBot 配置已存在')
+      // Logger.debug('- OneBot 配置已存在')
     }
   } catch (error) {
     logger.error('创建默认插件配置失败:', error)

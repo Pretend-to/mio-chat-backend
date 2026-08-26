@@ -11,13 +11,14 @@ import SystemSettingsService from '../../lib/database/services/SystemSettingsSer
  */
 
 class ConfigCRUDTester {
-  constructor() {
-    this.baseURL = 'http://127.0.0.1:3000'
+  baseURL = 'http://127.0.0.1:3000';
+constructor() {
+    
     this.adminCode = 'gb6u1soOivcvg62rz1iuYg==' // 直接使用正确的验证码
     this.testResults = {
-      passed: 0,
+      errors: [],
       failed: 0,
-      errors: []
+      passed: 0
     }
   }
 
@@ -59,7 +60,7 @@ class ConfigCRUDTester {
       logger.info(`✅ 测试通过: ${testName}`)
     } catch (error) {
       this.testResults.failed++
-      this.testResults.errors.push({ testName, error: error.message })
+      this.testResults.errors.push({ error: error.message, testName })
       logger.error(`❌ 测试失败: ${testName}`, error.message)
     }
   }
@@ -76,7 +77,7 @@ class ConfigCRUDTester {
       throw new Error(`状态码错误: ${response.status}`)
     }
 
-    const data = response.data
+    const {data} = response
     if (data.code !== 0 || !data.data) {
       throw new Error('响应格式错误')
     }
@@ -109,7 +110,7 @@ class ConfigCRUDTester {
         throw new Error(`获取 ${section} 节点失败: ${response.status}`)
       }
 
-      const data = response.data
+      const {data} = response
       if (data.code !== 0 || data.data === undefined) {
         throw new Error(`${section} 节点响应格式错误`)
       }
@@ -135,7 +136,7 @@ class ConfigCRUDTester {
       throw new Error(`更新 server 配置失败: ${response.status}`)
     }
 
-    const data = response.data
+    const {data} = response
     if (data.code !== 0) {
       throw new Error('更新 server 配置响应失败')
     }
@@ -161,7 +162,7 @@ class ConfigCRUDTester {
       throw new Error(`更新完整配置失败: ${response.status}`)
     }
 
-    const data = response.data
+    const {data} = response
     if (data.code !== 0) {
       throw new Error('更新完整配置响应失败')
     }
@@ -188,7 +189,7 @@ class ConfigCRUDTester {
       throw new Error(`验证有效配置失败: ${response.status}`)
     }
 
-    let data = response.data
+    let {data} = response
     if (data.code !== 0 || !data.data.valid) {
       throw new Error('有效配置验证失败')
     }
@@ -226,10 +227,10 @@ class ConfigCRUDTester {
     
     // 测试添加 LLM 实例
     const instanceConfig = {
-      name: `测试实例_${Date.now()}`,
       api_key: 'test-api-key-12345',
       base_url: 'https://api.openai.com/v1',
-      enable: true
+      enable: true,
+      name: `测试实例_${Date.now()}`
     }
 
     let response = await axios.post(`${this.baseURL}/api/config/llm/${adapterType}`, instanceConfig, {
@@ -240,18 +241,18 @@ class ConfigCRUDTester {
       throw new Error(`添加 LLM 实例失败: ${response.status}`)
     }
 
-    let data = response.data
+    let {data} = response
     if (data.code !== 0) {
       throw new Error('添加 LLM 实例响应失败')
     }
 
-    const instanceIndex = data.data.instanceIndex
+    const {instanceIndex} = data.data
     logger.info(`✓ LLM 实例添加成功，索引: ${instanceIndex}`)
 
     // 测试更新 LLM 实例
     const updateConfig = {
-      name: `更新测试实例_${Date.now()}`,
-      enable: false
+      enable: false,
+      name: `更新测试实例_${Date.now()}`
     }
 
     response = await axios.put(`${this.baseURL}/api/config/llm/${adapterType}/${instanceIndex}`, updateConfig, {
@@ -292,14 +293,14 @@ class ConfigCRUDTester {
   async testPresetManagement() {
     // 测试创建预设
     const presetData = {
-      name: `测试预设_${Date.now()}`,
+      category: 'common',
       history: [
         { role: 'system', content: '你是一个测试助手' },
         { role: 'user', content: '你好' },
         { role: 'assistant', content: '你好！我是测试助手。' }
       ],
-      opening: '这是一个测试预设',
-      category: 'common'
+      name: `测试预设_${Date.now()}`,
+      opening: '这是一个测试预设'
     }
 
     let response = await axios.post(`${this.baseURL}/api/config/presets`, presetData, {
@@ -310,7 +311,7 @@ class ConfigCRUDTester {
       throw new Error(`创建预设失败: ${response.status}`)
     }
 
-    let data = response.data
+    let {data} = response
     if (data.code !== 0) {
       throw new Error('创建预设响应失败')
     }
@@ -416,7 +417,7 @@ class ConfigCRUDTester {
       throw new Error('应该返回 404 错误')
     } catch (error) {
       if (error.response?.status !== 404) {
-        throw new Error(`期望 404 错误，实际: ${error.response?.status}`)
+        throw new Error(`期望 404 错误，实际: ${error.response?.status}`, { cause: error })
       }
       logger.info('✓ 无效配置节点正确返回 404')
     }
@@ -429,7 +430,7 @@ class ConfigCRUDTester {
       throw new Error('应该返回 404 错误')
     } catch (error) {
       if (error.response?.status !== 404) {
-        throw new Error(`期望 404 错误，实际: ${error.response?.status}`)
+        throw new Error(`期望 404 错误，实际: ${error.response?.status}`, { cause: error })
       }
       logger.info('✓ 不存在的预设正确返回 404')
     }
@@ -442,7 +443,7 @@ class ConfigCRUDTester {
       throw new Error('应该返回 400 错误')
     } catch (error) {
       if (error.response?.status !== 400) {
-        throw new Error(`期望 400 错误，实际: ${error.response?.status}`)
+        throw new Error(`期望 400 错误，实际: ${error.response?.status}`, { cause: error })
       }
       logger.info('✓ 无效适配器类型正确返回 400')
     }
@@ -458,7 +459,7 @@ class ConfigCRUDTester {
       throw new Error('应该返回 403 错误')
     } catch (error) {
       if (error.response?.status !== 403) {
-        throw new Error(`期望 403 错误，实际: ${error.response?.status}`)
+        throw new Error(`期望 403 错误，实际: ${error.response?.status}`, { cause: error })
       }
       logger.info('✓ 无认证访问正确返回 403')
     }
@@ -473,7 +474,7 @@ class ConfigCRUDTester {
       throw new Error('应该返回 403 错误')
     } catch (error) {
       if (error.response?.status !== 403) {
-        throw new Error(`期望 403 错误，实际: ${error.response?.status}`)
+        throw new Error(`期望 403 错误，实际: ${error.response?.status}`, { cause: error })
       }
       logger.info('✓ 错误认证信息正确返回 403')
     }
@@ -511,7 +512,7 @@ class ConfigCRUDTester {
     } catch (error) {
       logger.error('测试执行过程中发生错误:', error)
       this.testResults.failed++
-      this.testResults.errors.push({ testName: '测试执行', error: error.message })
+      this.testResults.errors.push({ error: error.message, testName: '测试执行' })
     }
 
     // 输出测试结果

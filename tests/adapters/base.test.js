@@ -19,22 +19,22 @@ test('BaseLLMAdapter shielding mechanism', async (t) => {
     let completeCalled = false;
 
     const mockEvent = {
+      body: {
+        messages: []
+      },
       client: {
-        pushEvent: () => {},
-        pushConnection: () => {},
-        popEvent: () => {},
         popConnection: () => {},
+        popEvent: () => {},
+        pushConnection: () => {},
+        pushEvent: () => {},
+      },
+      complete: () => {
+        completeCalled = true;
       },
       update: (data) => {
         if (data.type === 'content' && data.content.includes(message)) {
           updateCalled = true;
         }
-      },
-      complete: () => {
-        completeCalled = true;
-      },
-      body: {
-        messages: []
       }
     };
 
@@ -59,12 +59,12 @@ test('BaseLLMAdapter shielding mechanism', async (t) => {
     const adapter = new BaseLLMAdapter({ type: 'test' });
     const customTools = [
       {
-        type: 'function',
         function: {
-          name: 'get_weather',
           description: 'Get current weather',
+          name: 'get_weather',
           parameters: {}
-        }
+        },
+        type: 'function'
       }
     ];
     const result = adapter._getFormattedTools(customTools, true);

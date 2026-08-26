@@ -2,9 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import {
   assembleSystemPrompt,
-  parseXmlZones,
   buildXmlFromZones,
-  CRYSTAL_ZONES,
+  parseXmlZones,
 } from '../../../mio-chat-frontend/src/utils/SystemPromptAssembler.js';
 
 test('SystemPromptAssembler - frontend system prompt assembler tests', async (t) => {
@@ -66,11 +65,11 @@ User likes Javascript.
 
   await t.test('buildXmlFromZones should correctly construct xml from object', () => {
     const zones = {
-      long_term_profile: 'User likes Javascript.',
-      short_term_goals: 'Implement crystallization.',
+      constraints: 'No external dependencies.',
       current_plan: 'Phase 3 testing.',
       file_architecture_delta: 'Add test files.',
-      constraints: 'No external dependencies.',
+      long_term_profile: 'User likes Javascript.',
+      short_term_goals: 'Implement crystallization.',
     };
 
     const xml = buildXmlFromZones(zones);

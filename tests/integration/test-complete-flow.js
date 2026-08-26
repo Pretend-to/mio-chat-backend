@@ -23,7 +23,7 @@ async function cleanupTestEnvironment() {
   // 删除 Prisma 客户端
   const prismaClientPath = path.join('node_modules', '.prisma')
   if (fs.existsSync(prismaClientPath)) {
-    fs.rmSync(prismaClientPath, { recursive: true, force: true })
+    fs.rmSync(prismaClientPath, { force: true, recursive: true })
     logger.info('   删除 Prisma 客户端')
   }
   
@@ -89,8 +89,8 @@ async function testCompleteFlow() {
           logger.info('✅ 新用户可以通过 "pnpm run quick-start" 一键启动')
         } else {
           logger.error('❌ 完整流程测试失败')
-          if (!hasAccessCodes) logger.error('   - 访问码未生成')
-          if (!hasStarted) logger.error('   - 服务未启动')
+          if (!hasAccessCodes) {logger.error('   - 访问码未生成')}
+          if (!hasStarted) {logger.error('   - 服务未启动')}
         }
         resolve()
       })
@@ -101,7 +101,7 @@ async function testCompleteFlow() {
           logger.warn('测试超时，强制关闭')
           child.kill('SIGKILL')
         }
-      }, 15000)
+      }, 15_000)
     })
     
   } catch (error) {

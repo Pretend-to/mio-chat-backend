@@ -15,11 +15,11 @@ export class EnhancedLogger extends EventEmitter {
     this.config = {
       // 日志级别 (数字越小级别越高)
       levels: {
+        DEBUG: 4,
         ERROR: 0,
-        WARN: 1,
-        MARK: 2,
         INFO: 3,
-        DEBUG: 4
+        MARK: 2,
+        WARN: 1
       },
       // 当前日志级别
       level: options.level || process.env.LOG_LEVEL || 'INFO',
@@ -109,14 +109,14 @@ export class EnhancedLogger extends EventEmitter {
     
     // 创建日志条目对象
     const logEntry = {
-      id: this.generateLogId(),
-      timestamp: timestamp,
-      level: level,
-      module: extra.module || 'system',
-      message: message,
       caller: callerInfo,
+      extra: extra,
+      id: this.generateLogId(),
       ip: extra.ip,
-      extra: extra
+      level: level,
+      message: message,
+      module: extra.module || 'system',
+      timestamp: timestamp
     }
 
     // 添加到缓冲区
@@ -172,7 +172,7 @@ export class EnhancedLogger extends EventEmitter {
       // 检查文件大小并轮转
       this.rotateLogIfNeeded(filepath)
       
-      fs.appendFileSync(filepath, message + '\n', 'utf8')
+      fs.appendFileSync(filepath, `${message  }\n`, 'utf8')
     } catch {
       // 静默处理文件错误
     }
@@ -219,11 +219,11 @@ export class EnhancedLogger extends EventEmitter {
       const files = fs.readdirSync(this.config.logDir)
         .filter(file => file.endsWith('.log'))
         .map(file => ({
+          mtime: fs.statSync(path.join(this.config.logDir, file)).mtime,
           name: file,
-          path: path.join(this.config.logDir, file),
-          mtime: fs.statSync(path.join(this.config.logDir, file)).mtime
+          path: path.join(this.config.logDir, file)
         }))
-        .sort((a, b) => b.mtime - a.mtime)
+        .toSorted((a, b) => b.mtime - a.mtime)
 
       // 删除超过保留数量的文件
       if (files.length > this.config.maxFiles) {
@@ -261,7 +261,7 @@ export class EnhancedLogger extends EventEmitter {
     }
 
     try {
-      const stack = new Error().stack
+      const {stack} = new Error()
       const stackLines = stack.split('\n')
 
       // 跳过内部方法
@@ -449,7 +449,7 @@ export class EnhancedLogger extends EventEmitter {
     
     // 处理纯 base64 字符串
     if (this.isBase64String(str)) {
-      const length = str.length
+      const {length} = str
       const preview = str.substring(0, 8)
       const suffix = str.substring(str.length - 8)
       return `[BASE64:${length}chars:${preview}...${suffix}]`
@@ -546,7 +546,7 @@ export class EnhancedLogger extends EventEmitter {
       }, 2)
       
       // 通过日志系统推送（用于实时流和文件输出）
-      this.log('INFO', jsonString, { type: 'json', originalObject: obj })
+      this.log('INFO', jsonString, { originalObject: obj, type: 'json' })
     } catch (error) {
       this.error('JSON序列化失败', error)
     }
@@ -575,11 +575,11 @@ export class EnhancedLogger extends EventEmitter {
       : []
 
     return {
-      level: this.config.level,
-      logDir: this.config.logDir,
-      fileCount: logFiles.length,
       cacheSize: this.callerCache.size,
-      config: this.config
+      config: this.config,
+      fileCount: logFiles.length,
+      level: this.config.level,
+      logDir: this.config.logDir
     }
   }
 
@@ -714,8 +714,8 @@ export class EnhancedLogger extends EventEmitter {
 
 // 创建默认实例（保持原有行为）
 const logger = new EnhancedLogger({
-  level: process.env.LOG_LEVEL || 'INFO',
   file: process.env.LOG_TO_FILE === 'true',
+  level: process.env.LOG_LEVEL || 'INFO',
   logDir: process.env.LOG_DIR || './logs',
   performance: process.env.NODE_ENV === 'production'
 })

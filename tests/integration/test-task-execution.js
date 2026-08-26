@@ -48,17 +48,17 @@ async function main() {
   // ====================================
   logger.info('\n[Part 1] 创建测试 Task')
   await TaskService.upsert({
-    id: 'test-task-1',
-    name: '测试任务',
-    cron: '0 0 * * *',
-    preset: 'test-preset',
-    userId: 'test-user',
     contactorId: 'test-contactor',
-    provider: 'test-provider',
-    model: 'test-model',
-    status: 'active',
+    cron: '0 0 * * *',
     history: JSON.stringify([]),
+    id: 'test-task-1',
+    model: 'test-model',
+    name: '测试任务',
+    preset: 'test-preset',
+    provider: 'test-provider',
+    status: 'active',
     triggerPrompt: '执行测试任务',
+    userId: 'test-user',
   })
   assert(true, '测试 Task 已创建')
 
@@ -77,17 +77,17 @@ async function main() {
   // ====================================
   logger.info('\n[Part 3] create 执行记录')
   const exec1 = await TaskExecutionService.create({
-    taskId: 'test-task-1',
-    round: 1,
-    userId: 'test-user',
     contactorId: 'test-contactor',
-    provider: 'test-provider',
-    model: 'test-model',
-    triggerPrompt: '执行测试任务',
     inputMessages: [
       { role: 'system', content: '你是测试助手' },
       { role: 'user', content: '你好' },
     ],
+    model: 'test-model',
+    provider: 'test-provider',
+    round: 1,
+    taskId: 'test-task-1',
+    triggerPrompt: '执行测试任务',
+    userId: 'test-user',
   })
   assert(exec1.id > 0, `执行记录 ID: ${exec1.id}`)
   assert(exec1.taskId === 'test-task-1', 'taskId 匹配')
@@ -106,14 +106,14 @@ async function main() {
 
   // 再创建第 2 条
   const exec2 = await TaskExecutionService.create({
-    taskId: 'test-task-1',
-    round: 2,
-    userId: 'test-user',
     contactorId: 'test-contactor',
-    provider: 'test-provider',
-    model: 'test-model',
-    triggerPrompt: '第二次执行',
     inputMessages: [],
+    model: 'test-model',
+    provider: 'test-provider',
+    round: 2,
+    taskId: 'test-task-1',
+    triggerPrompt: '第二次执行',
+    userId: 'test-user',
   })
   assert(exec2.id > exec1.id, 'ID 递增')
   assert(exec2.round === 2, 'round 为 2')
@@ -124,28 +124,28 @@ async function main() {
   logger.info('\n[Part 5] complete 标记完成')
 
   const sampleChunks = [
-    { type: 'reason', data: { text: '推理过程', startTime: 100, duration: 50 } },
-    { type: 'content', content: '这是结果。' },
-    { type: 'toolCall', content: { id: 'call_1', name: 'search', index: 0, arguments: '{}', result: 'found' } },
-    { type: 'crystallize', content: { status: 'finished', summary: '记忆压缩完毕' } },
+    { data: { duration: 50, startTime: 100, text: '推理过程' }, type: 'reason' },
+    { content: '这是结果。', type: 'content' },
+    { content: { arguments: '{}', id: 'call_1', index: 0, name: 'search', result: 'found' }, type: 'toolCall' },
+    { content: { status: 'finished', summary: '记忆压缩完毕' }, type: 'crystallize' },
   ]
 
   const sampleAssistantMsg = {
-    id: 'ast-123456',
-    role: 'assistant',
-    time: Date.now(),
-    status: 'completed',
     content: [
       { type: 'reason', data: { text: '推理过程', startTime: 100, duration: 50 } },
       { type: 'text', data: { text: '这是结果。' } },
       { type: 'tool_call', data: { id: 'call_1', name: 'search', arguments: '{}', status: 'done' } },
       { type: 'crystallize_event', data: { status: 'finished', summary: '记忆压缩完毕' } },
     ],
+    id: 'ast-123456',
+    role: 'assistant',
+    status: 'completed',
+    time: Date.now(),
   }
 
   await TaskExecutionService.complete(exec1.id, {
-    outputChunks: sampleChunks,
     finalAssistantMsg: sampleAssistantMsg,
+    outputChunks: sampleChunks,
   })
 
   const p = prismaManager.getClient()
@@ -171,7 +171,7 @@ async function main() {
   logger.info('\n[Part 6] fail 标记失败')
   await TaskExecutionService.fail(exec2.id, {
     errorMessage: 'LLM 返回超时',
-    outputChunks: [{ type: 'content', content: '部分结果' }],
+    outputChunks: [{ content: '部分结果', type: 'content' }],
   })
 
   const failedExec = await p.taskExecution.findUnique({ where: { id: exec2.id } })
@@ -215,7 +215,7 @@ async function main() {
   process.exit(failed > 0 ? 1 : 0)
 }
 
-main().catch(err => {
-  logger.error('测试执行异常:', err)
+main().catch(error => {
+  logger.error('测试执行异常:', error)
   process.exit(1)
 })

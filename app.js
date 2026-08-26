@@ -1,5 +1,5 @@
 import logger from './utils/logger.js'
-// import taskScheduler from './lib/corn.js'
+// Import taskScheduler from './lib/corn.js'
 
 // 全局变量存储服务器实例
 let httpServer = null
@@ -45,15 +45,15 @@ async function importDependencies() {
   const TaskService = (await import('./lib/database/services/TaskService.js')).default
   
   return {
-    statusCheck,
-    startServer,
-    prismaManager,
+    AutoMigrationDetector,
+    PluginConfigService,
     PresetService,
     SystemSettingsService,
-    PluginConfigService,
+    TaskService,
     initializeDefaults,
-    AutoMigrationDetector,
-    TaskService
+    prismaManager,
+    startServer,
+    statusCheck
   }
 }
 
@@ -87,6 +87,19 @@ async function initializeDatabase(dependencies) {
     await SystemSettingsService.initialize()
     await PluginConfigService.initialize()
     await TaskService.initialize()
+
+    // 初始化生图、搜索、识图调度服务
+    try {
+      const { imageService } = await import('./lib/chat/image/ImageService.js')
+      const { searchService } = await import('./lib/chat/search/SearchService.js')
+      const { visionService } = await import('./lib/chat/vision/VisionService.js')
+      await imageService.initialize()
+      await searchService.initialize()
+      await visionService.initialize()
+      logger.debug('生图、搜索与识图服务初始化完成')
+    } catch (err) {
+      logger.warn('调度服务初始化失败:', err.message)
+    }
     
     // 4. 初始化默认配置（如果数据库中没有）
     logger.debug('初始化默认配置...')
@@ -101,14 +114,92 @@ async function initializeDatabase(dependencies) {
       const config = (await import('./lib/config.js')).default
       await config.reload()
       logger.debug('配置已从数据库重新加载以应用默认值')
-    } catch (err) {
-      logger.warn('重新加载配置时发生问题，可能导致配置不同步:', err.message)
+    } catch (error) {
+      logger.warn('重新加载配置时发生问题，可能导致配置不同步:', error.message)
     }
     
     logger.debug('数据库和服务初始化完成')
   } catch (error) {
     logger.error('数据库初始化失败:', error)
     process.exit(1)
+  }
+}
+
+
+/**
+ * 优雅关闭时：把 streamCache 中仍在执行中的工具调用以 failed 终态广播给对应客户端。
+ * 防止前端 UI 上最后一个 bash tool 永远显示"执行中"。
+ */
+async function notifyInFlightInterrupted(sessions, streamCache) {
+  // UserId -> 在线 client 列表（多端复用同一 userId 的池）
+  const clientsByUser = new Map()
+  for (const client of sessions.getAllClients()) {
+    if (!clientsByUser.has(client.id)) {clientsByUser.set(client.id, [])}
+    clientsByUser.get(client.id).push(client)
+  }
+  if (clientsByUser.size === 0) {
+    logger.debug('无可通知的在线客户端，跳过中断广播')
+    return
+  }
+
+  let broadcastCount = 0
+  for (const [key, messages] of streamCache.cache.entries()) {
+    const separator = key.indexOf(':')
+    if (separator === -1) {continue}
+    const userId = key.slice(0, separator)
+    const contactorId = key.slice(separator + 1)
+    const clients = clientsByUser.get(userId)
+    if (!clients || clients.length === 0) {continue}
+
+    for (const item of messages) {
+      if (!item || !item.messageId) {continue}
+
+      // 找出仍处于"执行中"且没有结果的 toolCall
+      const runningTools = (item.chunks || []).filter(
+        (c) =>
+          c.type === 'toolCall' &&
+          c.content &&
+          ['running', 'pending', 'started'].includes(c.content.action) &&
+          !c.content.result
+      )
+      if (runningTools.length === 0) {continue}
+
+      const {messageId} = item
+      for (const client of clients) {
+        // 1) 每个还在执行中的 toolCall 置为 failed 终态
+        for (const toolChunk of runningTools) {
+          client.sendOpenaiMessage(
+            'update',
+            {
+              content: {
+                ...toolChunk.content,
+                action: 'failed',
+                result: { error: '服务器重启，工具执行被打断' },
+                status: 'failed',
+              },
+              metaData: { contactorId, messageId },
+              type: 'toolCall',
+            },
+            messageId
+          )
+        }
+        // 2) 消息整体标记为 failed（附带 metaData 供前端路由到对应联系人）
+        client.sendOpenaiMessage(
+          'failed',
+          {
+            code: 'SERVER_SHUTDOWN',
+            message: '服务器正在关闭，请求已中断',
+            metaData: { contactorId, messageId },
+          },
+          messageId
+        )
+        broadcastCount++
+      }
+    }
+  }
+
+  if (broadcastCount > 0) {
+    logger.info(`已向客户端广播 ${broadcastCount} 条进行中请求的中断状态`)
   }
 }
 
@@ -128,9 +219,18 @@ async function gracefulShutdown(signal) {
   const forceExitTimer = setTimeout(() => {
     logger.warn('优雅关闭超时，强制退出应用程序')
     process.exit(1)
-  }, 10000)
+  }, 10_000)
   
   try {
+    // 0. 广播中断：把仍处于执行中的 tool_call 标记为 failed 终态，避免前端 UI 永远显示"执行中"
+    try {
+      const { default: shutdownSessions } = await import('./lib/server/socket.io/services/sessions.js')
+      const { default: shutdownStreamCache } = await import('./lib/server/socket.io/services/streamCache.js')
+      await notifyInFlightInterrupted(shutdownSessions, shutdownStreamCache)
+    } catch (error) {
+      logger.warn('广播进行中请求中断状态时出现警告:', error.message)
+    }
+
     // 1. 关闭 Socket.IO 服务器
     try {
       if (global.middleware && global.middleware.socketServer) {
@@ -269,5 +369,5 @@ process.on('unhandledRejection', (reason, promise) => {
 // 启动应用
 startApp()
 
-// const scheduler = new taskScheduler()
-// scheduler.init()
+// Const scheduler = new taskScheduler()
+// Scheduler.init()

@@ -211,3 +211,56 @@ model LLMCallLog {
   @@index([createdAt])
   @@map("llm_call_logs")
 }
+
+// 生图适配器配置表
+model ImageAdapter {
+  id           Int      @id @default(autoincrement())
+  adapterType  String   @map("adapter_type") // 'openai' | 'gemini' | 'volcengine' | 'sd-webui' | 'ttd'
+  instanceName String   @map("instance_name")
+  configData   String   @map("config_data") // JSON 格式存储配置
+  enabled      Boolean  @default(true)
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([adapterType, instanceName])
+  @@index([adapterType])
+  @@index([enabled])
+  @@map("image_adapters")
+}
+
+// 搜索适配器配置表
+model SearchAdapter {
+  id           Int      @id @default(autoincrement())
+  adapterType  String   @map("adapter_type") // 'tavily' | 'duckduckgo' | 'bing' | 'google' | 'searxng' | 'zhipu'
+  instanceName String   @map("instance_name")
+  configData   String   @map("config_data") // JSON 格式存储配置
+  enabled      Boolean  @default(true)
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([adapterType, instanceName])
+  @@index([adapterType])
+  @@index([enabled])
+  @@map("search_adapters")
+}
+
+
+
+
+// Shell 自动审批规则表（后端权威名单，替代前端 localStorage 名单）
+// allow=白名单放行 / deny=高危黑名单必须人工介入；cwd 可选：目录前缀绑定（null=全局生效）
+model ShellAutoApproveRule {
+  id        Int      @id @default(autoincrement())
+  matchType String   @map("match_type") // 'command' 全等 | 'prefix' 前缀
+  match     String
+  cwd       String? // 可选工作区目录前缀，null=全局
+  deny      Boolean  @default(false) // false=放行, true=高危黑名单(deny)
+  rememberable Boolean @default(false) // deny 高危细分：false=绝对危险(禁记住/强制人工), true=一般高危(可记住/限工作区)
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([enabled])
+  @@map("shell_auto_approve_rules")
+}

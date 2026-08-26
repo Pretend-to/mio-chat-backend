@@ -11,7 +11,7 @@ class AsyncQueue {
     // Values that have been queued but not dequeued yet are stored here
     this.values = []
     // When Promises are dequeued before their corresponding values are
-    // queued, the resolve methods for those Promises are stored here.
+    // Queued, the resolve methods for those Promises are stored here.
     this.resolvers = []
     // Once closed, no more values can be enqueued, and no more unfulfilled
     // Promises returned.
@@ -41,7 +41,7 @@ class AsyncQueue {
       return Promise.resolve(AsyncQueue.EOS)
     } else {
       // Otherwise, return an unresolved Promise,
-      // queuing the resolver function for later use
+      // Queuing the resolver function for later use
       return new Promise((resolve) => {
         this.resolvers.push(resolve)
       })
@@ -60,14 +60,14 @@ class AsyncQueue {
     return this
   }
   // Define the method that makes this an asynchronous iterator. The
-  // dequeue() Promise resolves to a value or the EOS sentinel if we're
-  // closed. Here, we need to return a Promise that resolves to an
-  // iterator result object.
+  // Dequeue() Promise resolves to a value or the EOS sentinel if we're
+  // Closed. Here, we need to return a Promise that resolves to an
+  // Iterator result object.
   async next() {
     const value = await this.dequeue()
     return value === AsyncQueue.EOS
-      ? { value: undefined, done: true }
-      : { value: value, done: false }
+      ? { done: true, value: undefined }
+      : { value, done: false }
   }
 }
 // A sentinel value returned by dequeue() to mark "end of stream" when closed

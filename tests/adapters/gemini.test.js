@@ -11,12 +11,12 @@ test('Gemini Adapter', async (t) => {
   };
 
   const mocks = {
-    models: async () => [{ owner: 'Gemini', models: ['gemini-1.5-pro'] }],
-    createCore: (event) => ({
+    createCore: (_event) => ({
       chat: async function* () {
         yield { candidates: [{ content: { parts: [{ text: 'Hello from Gemini' }] } }] };
       }
-    })
+    }),
+    models: async () => [{ owner: 'Gemini', models: ['gemini-1.5-pro'] }]
   };
 
   await t.test('core models() should strip prefix and _getRequestUrl() should prepend if missing', async () => {
@@ -26,7 +26,6 @@ test('Gemini Adapter', async (t) => {
     globalThis.fetch = async (url) => {
       assert.ok(url.includes('/v1beta/models'));
       return {
-        ok: true,
         json: async () => ({
           models: [
             { name: 'models/gemini-1.5-flash', displayName: 'Gemini 1.5 Flash', supportedGenerationMethods: ['generateContent'] },
@@ -34,7 +33,8 @@ test('Gemini Adapter', async (t) => {
             { name: 'models/gemma-2b', displayName: 'Gemma 2B', supportedGenerationMethods: ['generateContent'] },
             { name: 'models/computer-model', displayName: 'Computer Model', supportedGenerationMethods: ['generateContent'] }
           ]
-        })
+        }),
+        ok: true
       };
     };
 
@@ -62,7 +62,7 @@ test('Gemini Adapter', async (t) => {
 
   await t.test('_processStreamResponse handles SSE line split across chunks', async () => {
     const { Gemini } = await import('../../lib/chat/llm/adapters/lib/geminiHttpClient.js');
-    const gemini = new Gemini({ base_url: 'https://mock', api_key: 'key' });
+    const gemini = new Gemini({ api_key: 'key', base_url: 'https://mock' });
 
     // 完整的 SSE 行
     const fullLine1 = 'data: {"candidates":[{"content":{"parts":[{"text":"Hello"}]}}]}\n';
@@ -111,26 +111,26 @@ test('Gemini Adapter', async (t) => {
 
     const updates = [];
     const mockEvent = {
-      requestId: 'test-req',
       body: {
-        model: 'gemini-2.0-flash',
         messages: [{ role: 'user', content: 'test' }],
+        model: 'gemini-2.0-flash',
         settings: {},
         stream: true
       },
-      update(up) {
-        updates.push(up);
+      client: {
+        popConnection() {},
+        popEvent() {},
+        pushConnection() {}
       },
       onAbort() {},
-      client: {
-        popEvent() {},
-        popConnection() {},
-        pushConnection() {}
+      requestId: 'test-req',
+      update(up) {
+        updates.push(up);
       }
     };
 
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async (url) => {
+    globalThis.fetch = async (_url) => {
       const fullLine1 = 'data: {"candidates":[{"content":{"parts":[{"text":"Thinking hard...", "thought": true}]}}]}\n';
       const fullLine2 = 'data: {"candidates":[{"content":{"parts":[{"text":"Final answer"}]}}]}\n';
       const encoder = new TextEncoder();
@@ -138,7 +138,6 @@ test('Gemini Adapter', async (t) => {
       let index = 0;
 
       return {
-        ok: true,
         body: {
           getReader() {
             return {
@@ -151,7 +150,8 @@ test('Gemini Adapter', async (t) => {
               releaseLock() {}
             };
           }
-        }
+        },
+        ok: true
       };
     };
 
@@ -160,8 +160,8 @@ test('Gemini Adapter', async (t) => {
       
       // Verify updates received both reasoningContent and content
       assert.deepStrictEqual(updates, [
-        { type: 'reasoningContent', content: 'Thinking hard...' },
-        { type: 'content', content: 'Final answer' }
+        { content: 'Thinking hard...', type: 'reasoningContent' },
+        { content: 'Final answer', type: 'content' }
       ]);
     } finally {
       globalThis.fetch = originalFetch;
@@ -176,26 +176,26 @@ test('Gemini Adapter', async (t) => {
 
     const updates = [];
     const mockEvent = {
-      requestId: 'test-req',
       body: {
-        model: 'gemini-2.0-flash',
         messages: [{ role: 'user', content: 'test' }],
+        model: 'gemini-2.0-flash',
         settings: {},
         stream: true
       },
-      update(up) {
-        updates.push(up);
+      client: {
+        popConnection() {},
+        popEvent() {},
+        pushConnection() {}
       },
       onAbort() {},
-      client: {
-        popEvent() {},
-        popConnection() {},
-        pushConnection() {}
+      requestId: 'test-req',
+      update(up) {
+        updates.push(up);
       }
     };
 
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async (url) => {
+    globalThis.fetch = async (_url) => {
       // 模拟包含并行工具调用及其各自签名的流式返回
       const chunk1 = 'data: {"candidates":[{"content":{"parts":[' +
         '{"functionCall":{"name":"toolA","args":{}}},' +
@@ -211,7 +211,6 @@ test('Gemini Adapter', async (t) => {
       let index = 0;
 
       return {
-        ok: true,
         body: {
           getReader() {
             return {
@@ -224,7 +223,8 @@ test('Gemini Adapter', async (t) => {
               releaseLock() {}
             };
           }
-        }
+        },
+        ok: true
       };
     };
 
@@ -237,10 +237,10 @@ test('Gemini Adapter', async (t) => {
       assert.strictEqual(result.toolCalls.length, 2);
       
       assert.strictEqual(result.toolCalls[0].function.name, 'toolA');
-      assert.strictEqual(result.toolCalls[0].id, 'gemini://sigA|'); // 应该保留 sigA，而不是被 sigB 覆盖
+      assert.strictEqual(result.toolCalls[0].id, `gsig_${  Buffer.from('sigA|').toString('hex')}`);
       
       assert.strictEqual(result.toolCalls[1].function.name, 'toolB');
-      assert.strictEqual(result.toolCalls[1].id, 'gemini://sigB|');
+      assert.strictEqual(result.toolCalls[1].id, `gsig_${  Buffer.from('sigB|').toString('hex')}`);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -248,18 +248,17 @@ test('Gemini Adapter', async (t) => {
 
   await t.test('_preProcessMessage correctly translates tool calls and tool responses with thought signatures', async () => {
     const { Gemini } = await import('../../lib/chat/llm/adapters/lib/geminiHttpClient.js');
-    const gemini = new Gemini({ base_url: 'https://mock', api_key: 'key' });
+    const gemini = new Gemini({ api_key: 'key', base_url: 'https://mock' });
 
     // A real thought signature is a long base64 string (> 50 chars)
     const realSigA = Buffer.from('this is a very long string that will definitely exceed fifty characters when base64 encoded and decoded').toString('base64');
-    const realSigB = Buffer.from('another extremely long string to serve as the second valid thought signature in our parallel calls').toString('base64');
     // A fake/random signature is short or not valid base64
     const fakeSig = 'shortFakeSignature';
 
     const messages = [
       {
-        role: 'assistant',
         content: 'I will run some commands.',
+        role: 'assistant',
         tool_calls: [
           {
             id: realSigA,
@@ -272,15 +271,15 @@ test('Gemini Adapter', async (t) => {
         ]
       },
       {
-        role: 'tool',
-        name: 'toolA',
         content: 'resultA',
+        name: 'toolA',
+        role: 'tool',
         tool_call_id: realSigA
       },
       {
-        role: 'tool',
-        name: 'toolB',
         content: 'resultB',
+        name: 'toolB',
+        role: 'tool',
         tool_call_id: fakeSig
       }
     ];
@@ -292,18 +291,18 @@ test('Gemini Adapter', async (t) => {
     // First content: assistant message containing text and tool calls
     const assistantContent = contents[0];
     assert.strictEqual(assistantContent.role, 'model');
-    assert.strictEqual(assistantContent.parts.length, 3); // text part + toolA + toolB
+    assert.strictEqual(assistantContent.parts.length, 3); // Text part + toolA + toolB
     assert.deepStrictEqual(assistantContent.parts[0], { text: 'I will run some commands.' });
     
-    // toolA has a valid thoughtSignature
+    // ToolA has a valid thoughtSignature
     assert.deepStrictEqual(assistantContent.parts[1], {
-      functionCall: { name: 'toolA', args: { cmd: 'echo 1' } },
+      functionCall: { args: { cmd: 'echo 1' }, name: 'toolA' },
       thoughtSignature: realSigA
     });
 
-    // toolB has a fake thought signature (too short), so thoughtSignature is omitted
+    // ToolB has a fake/short signature, so passed as functionCall.id
     assert.deepStrictEqual(assistantContent.parts[2], {
-      functionCall: { name: 'toolB', args: { cmd: 'echo 2' } }
+      functionCall: { args: { cmd: 'echo 2' }, id: fakeSig, name: 'toolB' }
     });
 
     // Second content: tool responses
@@ -311,35 +310,36 @@ test('Gemini Adapter', async (t) => {
     assert.strictEqual(toolResponsesContent.role, 'user');
     assert.strictEqual(toolResponsesContent.parts.length, 2);
 
-    // toolA response has no id (since thoughtSignature is not sent as functionResponse.id)
+    // ToolA response has no id (since thoughtSignature is not sent as functionResponse.id)
     assert.deepStrictEqual(toolResponsesContent.parts[0], {
       functionResponse: {
         name: 'toolA',
-        response: { name: 'toolA', content: 'resultA' }
+        response: { content: 'resultA', name: 'toolA' }
       }
     });
 
-    // toolB response has fake/short id, so id is omitted
+    // ToolB response has fake/short id
     assert.deepStrictEqual(toolResponsesContent.parts[1], {
       functionResponse: {
+        id: fakeSig,
         name: 'toolB',
-        response: { name: 'toolB', content: 'resultB' }
+        response: { content: 'resultB', name: 'toolB' }
       }
     });
   });
 
-  await t.test('_preProcessMessage correctly translates tool calls and tool responses with new gemini:// ID format', async () => {
+  await t.test('_preProcessMessage correctly translates tool calls and tool responses with new gsig_ ID format', async () => {
     const { Gemini } = await import('../../lib/chat/llm/adapters/lib/geminiHttpClient.js');
-    const gemini = new Gemini({ base_url: 'https://mock', api_key: 'key' });
+    const gemini = new Gemini({ api_key: 'key', base_url: 'https://mock' });
 
     const thoughtSig = 'someReasoningStateSig';
     const fcId = 'call_abc123';
-    const combinedId = `gemini://${thoughtSig}|${fcId}`;
+    const combinedId = `gsig_${  Buffer.from(`${thoughtSig}|${fcId}`).toString('hex')}`;
 
     const messages = [
       {
-        role: 'assistant',
         content: 'Running tool',
+        role: 'assistant',
         tool_calls: [
           {
             id: combinedId,
@@ -348,9 +348,9 @@ test('Gemini Adapter', async (t) => {
         ]
       },
       {
-        role: 'tool',
-        name: 'myTool',
         content: 'ok',
+        name: 'myTool',
+        role: 'tool',
         tool_call_id: combinedId
       }
     ];
@@ -362,7 +362,7 @@ test('Gemini Adapter', async (t) => {
     // Assistant turn
     const assistantContent = contents[0];
     assert.deepStrictEqual(assistantContent.parts[1], {
-      functionCall: { name: 'myTool', args: {}, id: fcId },
+      functionCall: { args: {}, id: fcId, name: 'myTool' },
       thoughtSignature: thoughtSig
     });
 
@@ -370,11 +370,71 @@ test('Gemini Adapter', async (t) => {
     const toolResponsesContent = contents[1];
     assert.deepStrictEqual(toolResponsesContent.parts[0], {
       functionResponse: {
+        id: fcId,
         name: 'myTool',
-        response: { name: 'myTool', content: 'ok' },
-        id: fcId
+        response: { content: 'ok', name: 'myTool' }
       }
     });
+  });
+
+  await t.test('_prepareChatBody correctly enables googleSearch tool under extraSettings', async () => {
+    const adapter = new GeminiAdapter({
+      api_key: 'test_key',
+      base_url: 'https://generativelanguage.googleapis.com'
+    });
+
+    // Test 1: extraSettings.gemini.internalTools.google_search: true
+    const body1 = {
+      messages: [{ content: 'hello', role: 'user' }],
+      settings: {
+        base: { model: 'gemini-2.5-flash', stream: true },
+        chatParams: {},
+        extraSettings: {
+          gemini: {
+            internalTools: { google_search: true }
+          }
+        },
+        toolCallSettings: { mode: 'AUTO', tools: [] }
+      }
+    };
+    const prepared1 = await adapter._prepareChatBody(body1);
+    assert.ok(Array.isArray(prepared1.tools));
+    assert.deepStrictEqual(prepared1.tools, [{ googleSearch: {} }]);
+
+    // Test 2: extraSettings.internalTools.web_search: { enable: true }
+    const body2 = {
+      messages: [{ content: 'hello', role: 'user' }],
+      settings: {
+        base: { model: 'gemini-2.5-flash', stream: true },
+        chatParams: {},
+        extraSettings: {
+          internalTools: { web_search: { enable: true } }
+        },
+        toolCallSettings: { mode: 'AUTO', tools: [] }
+      }
+    };
+    const prepared2 = await adapter._prepareChatBody(body2);
+    assert.ok(Array.isArray(prepared2.tools));
+    assert.deepStrictEqual(prepared2.tools, [{ googleSearch: {} }]);
+  });
+
+  await t.test('_prepareChatBody auto activates responseModalities for image models', async () => {
+    const adapter = new GeminiAdapter({
+      api_key: 'test_key',
+      base_url: 'https://generativelanguage.googleapis.com'
+    });
+
+    const body = {
+      messages: [{ content: 'draw a cat', role: 'user' }],
+      settings: {
+        base: { model: 'imagen-3.0-generate-002', stream: true },
+        chatParams: {},
+        extraSettings: {},
+        toolCallSettings: { mode: 'AUTO', tools: [] }
+      }
+    };
+    const prepared = await adapter._prepareChatBody(body);
+    assert.deepStrictEqual(prepared.responseModalities, ['Text', 'Image']);
   });
 
   await runGenericAdapterTests(t, GeminiAdapter, config, mocks);

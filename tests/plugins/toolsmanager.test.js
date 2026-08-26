@@ -3,7 +3,6 @@ import assert from 'node:assert'
 import '../adapters/mock-env.js'
 
 import ToolsManager from '../../lib/plugins/ai-plugin/tools/toolsmanager.js'
-import PresetService from '../../lib/database/services/PresetService.js'
 
 test('ToolsManager - list tools', async (t) => {
   const tool = new ToolsManager()
@@ -11,7 +10,6 @@ test('ToolsManager - list tools', async (t) => {
   // Mock global.middleware.plugins
   global.middleware.plugins = [
     {
-      name: 'ai-plugin',
       getTools: () => {
         const map = new Map()
         map.set('ai-plugin', [
@@ -19,17 +17,18 @@ test('ToolsManager - list tools', async (t) => {
           { name: 'toolsmanager', description: 'Manage tools' }
         ])
         return map
-      }
+      },
+      name: 'ai-plugin'
     },
     {
-      name: 'web-plugin',
       getTools: () => {
         const map = new Map()
         map.set('web-plugin', [
           { name: 'crawl', description: 'Crawl web pages' }
         ])
         return map
-      }
+      },
+      name: 'web-plugin'
     }
   ]
 
@@ -44,21 +43,21 @@ test('ToolsManager - list tools', async (t) => {
 
   await t.test('should list all tools with correct enabled status', async () => {
     const e = {
-      params: { action: 'list' },
       body: {
         settings: {
           toolCallSettings: {
             tools: ['cron', 'crawl']
           }
         }
-      }
+      },
+      params: { action: 'list' }
     }
 
     const result = await tool.execute(e)
     assert.strictEqual(result.success, true)
     
     // Check that tools list has correct enabled fields
-    const groups = result.groups
+    const {groups} = result
     assert.ok(groups['ai-plugin'])
     assert.ok(groups['web-plugin'])
     
@@ -78,7 +77,6 @@ test('ToolsManager - toggle tools', async (t) => {
   // Mock global.middleware.plugins
   global.middleware.plugins = [
     {
-      name: 'ai-plugin',
       getTools: () => {
         const map = new Map()
         map.set('ai-plugin', [
@@ -86,24 +84,24 @@ test('ToolsManager - toggle tools', async (t) => {
           { name: 'toolsmanager', description: 'Manage tools' }
         ])
         return map
-      }
+      },
+      name: 'ai-plugin'
     },
     {
-      name: 'web-plugin',
       getTools: () => {
         const map = new Map()
         map.set('web-plugin', [
           { name: 'crawl', description: 'Crawl web pages' }
         ])
         return map
-      }
+      },
+      name: 'web-plugin'
     }
   ]
 
   await t.test('should enable specified tool', async () => {
     let sentSystemMessage = null
     const e = {
-      params: { action: 'toggle', tools: ['toolsmanager'], enabled: true },
       body: {
         contactorId: 'test-contactor',
         settings: {
@@ -116,7 +114,8 @@ test('ToolsManager - toggle tools', async (t) => {
         sendSystemMessage: (type, data) => {
           sentSystemMessage = { type, data }
         }
-      }
+      },
+      params: { action: 'toggle', enabled: true, tools: ['toolsmanager'] }
     }
 
     const result = await tool.execute(e)
@@ -131,7 +130,6 @@ test('ToolsManager - toggle tools', async (t) => {
 
   await t.test('should disable specified tool', async () => {
     const e = {
-      params: { action: 'toggle', tools: ['cron'], enabled: false },
       body: {
         contactorId: 'test-contactor',
         settings: {
@@ -142,7 +140,8 @@ test('ToolsManager - toggle tools', async (t) => {
       },
       client: {
         sendSystemMessage: () => {}
-      }
+      },
+      params: { action: 'toggle', enabled: false, tools: ['cron'] }
     }
 
     const result = await tool.execute(e)
@@ -152,7 +151,6 @@ test('ToolsManager - toggle tools', async (t) => {
 
   await t.test('should toggle entire group of tools', async () => {
     const e = {
-      params: { action: 'toggle', groups: ['ai-plugin'], enabled: false },
       body: {
         contactorId: 'test-contactor',
         settings: {
@@ -163,7 +161,8 @@ test('ToolsManager - toggle tools', async (t) => {
       },
       client: {
         sendSystemMessage: () => {}
-      }
+      },
+      params: { action: 'toggle', enabled: false, groups: ['ai-plugin'] }
     }
 
     const result = await tool.execute(e)

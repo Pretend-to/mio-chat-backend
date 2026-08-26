@@ -4,7 +4,7 @@ import './mock-env.js';
 import { runGenericAdapterTests } from './test-suite.js';
 import DeepSeekAdapter from '../../lib/chat/llm/adapters/implementations/deepseek.js';
 
-test('DeepSeek Adapter - Chat Body Preparation', async (t) => {
+test('DeepSeek Adapter - Chat Body Preparation', async (_t) => {
   const config = {
     api_key: 'sk-deepseek-mock',
     base_url: 'https://api.deepseek.com/v1'
@@ -14,11 +14,11 @@ test('DeepSeek Adapter - Chat Body Preparation', async (t) => {
 
   // 测试 1: 当 reasoning_effort 开启为 2 (映射为 max) 时
   const bodyWithReasoning = {
-    messages: [{ role: 'user', content: 'Hello' }],
+    messages: [{ content: 'Hello', role: 'user' }],
     settings: {
       base: { model: 'deepseek-reasoner', stream: true },
       chatParams: { reasoning_effort: 2, temperature: 0.7 },
-      toolCallSettings: { tools: [], mode: 'NONE' }
+      toolCallSettings: { mode: 'NONE', tools: [] }
     }
   };
 
@@ -30,11 +30,11 @@ test('DeepSeek Adapter - Chat Body Preparation', async (t) => {
 
   // 测试 2: 当 reasoning_effort 关闭（为 0）时
   const bodyWithoutReasoning = {
-    messages: [{ role: 'user', content: 'Hello' }],
+    messages: [{ content: 'Hello', role: 'user' }],
     settings: {
       base: { model: 'deepseek-reasoner', stream: true },
       chatParams: { reasoning_effort: 0, temperature: 0.7 },
-      toolCallSettings: { tools: [], mode: 'NONE' }
+      toolCallSettings: { mode: 'NONE', tools: [] }
     }
   };
 
@@ -46,11 +46,11 @@ test('DeepSeek Adapter - Chat Body Preparation', async (t) => {
 
   // 测试 3: 当 reasoning_effort 未设置时 (默认 high)
   const bodyNoReasoning = {
-    messages: [{ role: 'user', content: 'Hello' }],
+    messages: [{ content: 'Hello', role: 'user' }],
     settings: {
       base: { model: 'deepseek-reasoner', stream: true },
       chatParams: { temperature: 0.7 },
-      toolCallSettings: { tools: [], mode: 'NONE' }
+      toolCallSettings: { mode: 'NONE', tools: [] }
     }
   };
 
@@ -68,8 +68,7 @@ test('DeepSeek Adapter - Generic Suite Integration', async (t) => {
   };
 
   const mocks = {
-    models: async () => [{ owner: 'DeepSeek', models: ['deepseek-chat'] }],
-    createCore: (event) => {
+    createCore: (_event) => {
       const createStream = async function* () {
         yield { choices: [{ delta: { reasoning_content: 'Thinking about DeepSeek...' } }] };
         yield { choices: [{ delta: { content: 'Hello from DeepSeek' } }] };
@@ -77,7 +76,8 @@ test('DeepSeek Adapter - Generic Suite Integration', async (t) => {
       return {
         chat: { completions: { create: async () => ({ [Symbol.asyncIterator]: createStream }) } }
       };
-    }
+    },
+    models: async () => [{ owner: 'DeepSeek', models: ['deepseek-chat'] }]
   };
 
   await runGenericAdapterTests(t, DeepSeekAdapter, config, mocks);

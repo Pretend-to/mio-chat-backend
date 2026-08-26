@@ -22,10 +22,10 @@ async function apiCall(method, endpoint, body = null) {
   const url = `${BASE_URL}${endpoint}${endpoint.includes('?') ? '&' : '?'}admin_code=${ADMIN_CODE}`
   
   const options = {
-    method,
     headers: {
       'Content-Type': 'application/json',
     },
+    method,
   }
   
   if (body) {

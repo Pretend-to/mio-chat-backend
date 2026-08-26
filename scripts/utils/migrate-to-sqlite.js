@@ -19,9 +19,9 @@ const __dirname = path.dirname(__filename)
 class DataMigrator {
   constructor() {
     this.stats = {
-      presets: { success: 0, failed: 0, skipped: 0 },
-      systemSettings: { success: 0, failed: 0, skipped: 0 },
-      pluginConfigs: { success: 0, failed: 0, skipped: 0 }
+      pluginConfigs: { failed: 0, skipped: 0, success: 0 },
+      presets: { failed: 0, skipped: 0, success: 0 },
+      systemSettings: { failed: 0, skipped: 0, success: 0 }
     }
     this.backupDir = path.resolve(__dirname, '../../backup', new Date().toISOString().split('T')[0])
   }
@@ -91,21 +91,21 @@ class DataMigrator {
           // 生成 Prisma 客户端
           logger.info('正在生成 Prisma 客户端...')
           execSync('npx prisma generate', { 
-            stdio: 'inherit',
-            cwd: path.resolve(__dirname, '../..')
+            cwd: path.resolve(__dirname, '../..'),
+            stdio: 'inherit'
           })
           
           // 推送数据库架构
           logger.info('正在推送数据库架构...')
           execSync('npx prisma db push', { 
-            stdio: 'inherit',
-            cwd: path.resolve(__dirname, '../..')
+            cwd: path.resolve(__dirname, '../..'),
+            stdio: 'inherit'
           })
           
           logger.info('✅ Prisma 客户端修复完成')
         } catch (fixError) {
           logger.error('❌ Prisma 客户端修复失败:', fixError.message)
-          throw new Error('Prisma 客户端修复失败，请手动运行: npx prisma generate && npx prisma db push')
+          throw new Error('Prisma 客户端修复失败，请手动运行: npx prisma generate && npx prisma db push', { cause: fixError })
         }
       } else {
         throw error
@@ -248,9 +248,9 @@ class DataMigrator {
     
     // 迁移主配置文件
     let configPath = null
-    for (const path of configPaths) {
-      if (fs.existsSync(path)) {
-        configPath = path
+    for (const configPathItem of configPaths) {
+      if (fs.existsSync(configPathItem)) {
+        configPath = configPathItem
         break
       }
     }
@@ -264,9 +264,9 @@ class DataMigrator {
     
     // 迁移模型所有者配置
     let ownersPath = null
-    for (const path of ownersPaths) {
-      if (fs.existsSync(path)) {
-        ownersPath = path
+    for (const ownersPathItem of ownersPaths) {
+      if (fs.existsSync(ownersPathItem)) {
+        ownersPath = ownersPathItem
         break
       }
     }
@@ -295,26 +295,26 @@ class DataMigrator {
       if (config.server) {
         if (config.server.port) {
           systemConfigs.push({
-            key: 'server_port',
-            value: config.server.port,
             category: 'server',
-            description: '服务器端口'
+            description: '服务器端口',
+            key: 'server_port',
+            value: config.server.port
           })
         }
         if (config.server.host) {
           systemConfigs.push({
-            key: 'server_host',
-            value: config.server.host,
             category: 'server',
-            description: '服务器主机地址'
+            description: '服务器主机地址',
+            key: 'server_host',
+            value: config.server.host
           })
         }
         if (config.server.max_rate_pre_min) {
           systemConfigs.push({
-            key: 'server_max_rate',
-            value: config.server.max_rate_pre_min,
             category: 'server',
-            description: '服务器最大请求频率'
+            description: '服务器最大请求频率',
+            key: 'server_max_rate',
+            value: config.server.max_rate_pre_min
           })
         }
       }
@@ -323,42 +323,42 @@ class DataMigrator {
       if (config.web) {
         if (config.web.admin_code) {
           systemConfigs.push({
-            key: 'admin_code',
-            value: config.web.admin_code,
             category: 'web',
-            description: '管理员访问码'
+            description: '管理员访问码',
+            key: 'admin_code',
+            value: config.web.admin_code
           })
         }
         if (config.web.user_code !== undefined) {
           systemConfigs.push({
-            key: 'user_code',
-            value: config.web.user_code,
             category: 'web',
-            description: '用户访问码'
+            description: '用户访问码',
+            key: 'user_code',
+            value: config.web.user_code
           })
         }
         if (config.web.full_screen !== undefined) {
           systemConfigs.push({
-            key: 'web_full_screen',
-            value: config.web.full_screen,
             category: 'web',
-            description: 'Web全屏模式'
+            description: 'Web全屏模式',
+            key: 'web_full_screen',
+            value: config.web.full_screen
           })
         }
         if (config.web.title) {
           systemConfigs.push({
-            key: 'web_title',
-            value: config.web.title,
             category: 'web',
-            description: 'Web页面标题'
+            description: 'Web页面标题',
+            key: 'web_title',
+            value: config.web.title
           })
         }
         if (config.web.beian !== undefined) {
           systemConfigs.push({
-            key: 'web_beian',
-            value: config.web.beian,
             category: 'web',
-            description: 'Web备案信息'
+            description: 'Web备案信息',
+            key: 'web_beian',
+            value: config.web.beian
           })
         }
       }
@@ -366,20 +366,20 @@ class DataMigrator {
       // LLM适配器配置
       if (config.llm_adapters) {
         systemConfigs.push({
-          key: 'llm_adapters',
-          value: config.llm_adapters,
           category: 'llm',
-          description: 'LLM适配器配置'
+          description: 'LLM适配器配置',
+          key: 'llm_adapters',
+          value: config.llm_adapters
         })
       }
 
       // 调试模式
       if (config.debug !== undefined) {
         systemConfigs.push({
-          key: 'debug_mode',
-          value: config.debug,
           category: 'general',
-          description: '调试模式开关'
+          description: '调试模式开关',
+          key: 'debug_mode',
+          value: config.debug
         })
       }
 
@@ -497,7 +497,7 @@ class DataMigrator {
     const files = fs.readdirSync(pluginsDir)
     
     for (const file of files) {
-      if (file === '.gitignore') continue
+      if (file === '.gitignore') {continue}
       
       const filePath = path.join(pluginsDir, file)
       const pluginName = path.basename(file, path.extname(file))
@@ -531,12 +531,12 @@ class DataMigrator {
           } else {
             // 创建新的 OneBot 配置
             const fullConfig = {
-              enable: false,
-              reverse_ws_url: '',
-              bot_qq: '',
               admin_qq: '',
-              token: '',
-              plugins: config
+              bot_qq: '',
+              enable: false,
+              plugins: config,
+              reverse_ws_url: '',
+              token: ''
             }
             
             await SystemSettingsService.set('onebot', fullConfig, 'onebot', 'OneBot 协议配置')
@@ -630,9 +630,9 @@ class DataMigrator {
       
       logger.info('迁移结果验证完成')
       return {
+        pluginConfigs: pluginConfigs.length,
         presets: presetCount,
-        systemSettings: settingCount,
-        pluginConfigs: pluginConfigs.length
+        systemSettings: settingCount
       }
     } catch (error) {
       logger.error('迁移结果验证失败:', error)

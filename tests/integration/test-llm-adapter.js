@@ -30,10 +30,10 @@ async function testLLMAdapter() {
     // 测试添加 LLM 实例
     logger.info('测试添加 LLM 实例...')
     const instanceConfig = {
-      name: `测试实例_${Date.now()}`,
       api_key: 'test-api-key-12345',
       base_url: 'https://api.openai.com/v1',
-      enable: true
+      enable: true,
+      name: `测试实例_${Date.now()}`
     }
     
     const addResponse = await axios.post('http://localhost:3000/api/config/llm/openai', instanceConfig, { headers })
@@ -44,14 +44,14 @@ async function testLLMAdapter() {
       throw new Error('添加 LLM 实例失败')
     }
     
-    const instanceIndex = addResponse.data.data.instanceIndex
+    const {instanceIndex} = addResponse.data.data
     logger.info(`✓ LLM 实例添加成功，索引: ${instanceIndex}`)
     
     // 测试更新 LLM 实例
     logger.info('\n测试更新 LLM 实例...')
     const updateConfig = {
-      name: `更新测试实例_${Date.now()}`,
-      enable: false
+      enable: false,
+      name: `更新测试实例_${Date.now()}`
     }
     
     const updateResponse = await axios.put(`http://localhost:3000/api/config/llm/openai/${instanceIndex}`, updateConfig, { headers })

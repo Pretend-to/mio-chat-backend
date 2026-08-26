@@ -4,7 +4,7 @@ import path from 'path'
 import os from 'os'
 import { URL, fileURLToPath } from 'url'
 
-const textFileTypes = [
+const textFileTypes = new Set([
   '.txt',
   '.md',
   '.html',
@@ -30,7 +30,7 @@ const textFileTypes = [
   '.swift',
   '.kt',
   '.scala',
-]
+])
 
 const officeFileTypes = [
   '.docx',
@@ -55,7 +55,7 @@ async function ensureDirExists(dirPath) {
 export async function parseFile(filePath) {
   try {
     const ext = path.extname(filePath).toLowerCase()
-    if (textFileTypes.includes(ext)) {
+    if (textFileTypes.has(ext)) {
       const content = await fs.readFile(filePath, 'utf8')
       return { content, error: null }
     } else if (officeFileTypes.includes(ext)) {
@@ -80,7 +80,7 @@ export async function parseFileWithUrl(fileUrl) {
 
     // 提取文件名
     const url = new URL(fileUrl)
-    const pathname = url.pathname
+    const {pathname} = url
     const filename = path.basename(pathname)
 
     // 确保临时目录存在

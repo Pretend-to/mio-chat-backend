@@ -3,9 +3,8 @@ import assert from 'node:assert';
 import './mock-env.js';
 import { runGenericAdapterTests } from './test-suite.js';
 import AnthropicAdapter from '../../lib/chat/llm/adapters/implementations/anthropic.js';
-import { MockEvent } from './mock-env.js';
 
-test('Anthropic Adapter - Basic Integration & Metadata', async (t) => {
+test('Anthropic Adapter - Basic Integration & Metadata', async (_t) => {
   const metadata = AnthropicAdapter.getAdapterMetadata();
   assert.strictEqual(metadata.type, 'anthropic');
   assert.ok(metadata.supportedFeatures.includes('chat'));
@@ -19,9 +18,25 @@ test('Anthropic Adapter - Basic Integration & Metadata', async (t) => {
     base_url: 'https://api.anthropic.com'
   });
   assert.strictEqual(adapter.provider, 'anthropic');
+
+  // Test web_search tool injection when enabled in extraSettings
+  const bodyWithSearch = {
+    messages: [{ content: 'hello', role: 'user' }],
+    settings: {
+      base: { model: 'claude-3-5-sonnet-20241022', stream: true },
+      chatParams: {},
+      extraSettings: {
+        anthropic: { web_search: { enable: true } }
+      },
+      toolCallSettings: { mode: 'AUTO', tools: [] }
+    }
+  };
+  const preparedSearch = await adapter._prepareChatBody(bodyWithSearch);
+  assert.ok(Array.isArray(preparedSearch.tools));
+  assert.ok(preparedSearch.tools.some((t) => t.name === 'web_search'));
 });
 
-test('Anthropic Adapter - Message Conversions & Caching', async (t) => {
+test('Anthropic Adapter - Message Conversions & Caching', async (_t) => {
   const adapter = new AnthropicAdapter({
     api_key: 'sk-mock-key',
     base_url: 'https://api.anthropic.com'
@@ -30,14 +45,14 @@ test('Anthropic Adapter - Message Conversions & Caching', async (t) => {
   // Test 1: Simple message preparation
   const body = {
     messages: [
-      { role: 'system', content: 'You are a helpful assistant.' },
-      { role: 'user', content: 'Hello!' }
+      { content: 'You are a helpful assistant.', role: 'system' },
+      { content: 'Hello!', role: 'user' }
     ],
     settings: {
       base: { model: 'claude-3-5-sonnet-latest', stream: true },
       chatParams: { temperature: 0.7 },
-      toolCallSettings: { mode: 'NONE', tools: [] },
-      extraSettings: {}
+      extraSettings: {},
+      toolCallSettings: { mode: 'NONE', tools: [] }
     }
   };
 
@@ -53,23 +68,23 @@ test('Anthropic Adapter - Message Conversions & Caching', async (t) => {
   // Test 2: Message collapsing for consecutive user/tool roles and tool use conversions
   const advancedBody = {
     messages: [
-      { role: 'user', content: 'Calculate weather' },
+      { content: 'Calculate weather', role: 'user' },
       {
-        role: 'assistant',
         content: 'Sure, calling tool.',
+        role: 'assistant',
         tool_calls: [{
           id: 'call_123',
           type: 'function',
           function: { name: 'get_weather', arguments: '{"location":"Beijing"}' }
         }]
       },
-      { role: 'tool', tool_call_id: 'call_123', name: 'get_weather', content: '{"temp":25}' }
+      { content: '{"temp":25}', name: 'get_weather', role: 'tool', tool_call_id: 'call_123' }
     ],
     settings: {
       base: { model: 'claude-4.7-opus', stream: true },
-      chatParams: { temperature: 0.7, reasoning_effort: 2 },
-      toolCallSettings: { mode: 'AUTO', tools: ['get_weather'] },
-      extraSettings: {}
+      chatParams: { reasoning_effort: 2, temperature: 0.7 },
+      extraSettings: {},
+      toolCallSettings: { mode: 'AUTO', tools: ['get_weather'] }
     }
   };
 
@@ -100,18 +115,18 @@ test('Anthropic Adapter - Message Conversions & Caching', async (t) => {
 
   // Path B: Claude 3.7 Legacy budget-based thinking
   const legacyBody = {
-    messages: [{ role: 'user', content: 'Hi' }],
+    messages: [{ content: 'Hi', role: 'user' }],
     settings: {
       base: { model: 'claude-3-7-sonnet', stream: true },
-      chatParams: { temperature: 0.7, reasoning_effort: 3 },
-      toolCallSettings: { mode: 'NONE', tools: [] },
-      extraSettings: {}
+      chatParams: { reasoning_effort: 3, temperature: 0.7 },
+      extraSettings: {},
+      toolCallSettings: { mode: 'NONE', tools: [] }
     }
   };
   const preparedLegacy = await adapter._prepareChatBody(legacyBody);
   assert.strictEqual(preparedLegacy.thinking.type, 'enabled');
   assert.strictEqual(preparedLegacy.thinking.budget_tokens, 4096);
-  assert.strictEqual(preparedLegacy.temperature, 1.0); // Required parameter override
+  assert.strictEqual(preparedLegacy.temperature, 1); // Required parameter override
 });
 
 test('Anthropic Adapter - Generic Suite Validation', async (t) => {
@@ -121,8 +136,7 @@ test('Anthropic Adapter - Generic Suite Validation', async (t) => {
   };
 
   const mocks = {
-    models: async () => [{ owner: 'Anthropic', models: ['claude-3-5-sonnet-latest'] }],
-    createCore: (event) => {
+    createCore: (_event) => {
       // Mock global fetch to return SSE streaming outputs
       const mockStreamData = [
         'event: message_start\ndata: {"type": "message_start", "message": {"usage": {"input_tokens": 10}}}\n\n',
@@ -162,13 +176,14 @@ test('Anthropic Adapter - Generic Suite Validation', async (t) => {
 
       // Return a dummy object for injectMock to attach to
       return {};
-    }
+    },
+    models: async () => [{ owner: 'Anthropic', models: ['claude-3-5-sonnet-latest'] }]
   };
 
   await runGenericAdapterTests(t, AnthropicAdapter, config, mocks);
 });
 
-test('Anthropic Adapter - Compatibility Mode', async (t) => {
+test('Anthropic Adapter - Compatibility Mode', async (_t) => {
   const adapter = new AnthropicAdapter({
     api_key: 'sk-mock-key',
     base_url: 'https://api.deepseek.com/anthropic',
@@ -177,11 +192,11 @@ test('Anthropic Adapter - Compatibility Mode', async (t) => {
 
   const originalFetch = global.fetch;
   let requestedUrl = '';
-  global.fetch = async (url, options) => {
+  global.fetch = async (url, _options) => {
     requestedUrl = url;
     return {
-      ok: true,
-      json: async () => ({ data: [] })
+      json: async () => ({ data: [] }),
+      ok: true
     };
   };
 

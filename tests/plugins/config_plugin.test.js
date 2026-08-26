@@ -52,7 +52,7 @@ test('Config Plugin - update_config', async (t) => {
   const tool = new UpdateSystemConfig()
   
   assert.ok(tool.name.startsWith('update_config'))
-  assert.strictEqual(tool.getDisplayName({ updates: { web: {}, onebot: {} } }), 'Updating system config: web, onebot')
+  assert.strictEqual(tool.getDisplayName({ updates: { onebot: {}, web: {} } }), 'Updating system config: web, onebot')
 
   await t.test('should reject execution if user rejects approval', async () => {
     tool.requestUserApproval = async () => ({ approved: false })

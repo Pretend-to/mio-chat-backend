@@ -4,7 +4,7 @@ import './mock-env.js';
 import { runGenericAdapterTests } from './test-suite.js';
 import ZhipuAdapter from '../../lib/chat/llm/adapters/implementations/zhipu.js';
 
-test('Zhipu Adapter - Metadata & Core Initialization', async (t) => {
+test('Zhipu Adapter - Metadata & Core Initialization', async (_t) => {
   const metadata = ZhipuAdapter.getAdapterMetadata();
   assert.strictEqual(metadata.type, 'zhipu');
   assert.strictEqual(metadata.avatarId, 'zhipu');
@@ -12,7 +12,7 @@ test('Zhipu Adapter - Metadata & Core Initialization', async (t) => {
   assert.deepStrictEqual(metadata.supportedFeatures, ['chat', 'streaming', 'function_calling', 'vision', 'reasoning']);
 });
 
-test('Zhipu Adapter - Chat Body Preparation', async (t) => {
+test('Zhipu Adapter - Chat Body Preparation', async (_t) => {
   const config = {
     api_key: 'sk-zhipu-mock',
     base_url: 'https://open.bigmodel.cn/api/paas/v4/'
@@ -22,11 +22,11 @@ test('Zhipu Adapter - Chat Body Preparation', async (t) => {
 
   // 测试 1: 当 reasoning_effort 开启时
   const bodyWithReasoning = {
-    messages: [{ role: 'user', content: 'Hello' }],
+    messages: [{ content: 'Hello', role: 'user' }],
     settings: {
       base: { model: 'glm-4.7', stream: true },
       chatParams: { reasoning_effort: 3, temperature: 0.7 },
-      toolCallSettings: { tools: [], mode: 'NONE' }
+      toolCallSettings: { mode: 'NONE', tools: [] }
     }
   };
 
@@ -38,11 +38,11 @@ test('Zhipu Adapter - Chat Body Preparation', async (t) => {
 
   // 测试 2: 当 reasoning_effort 关闭（为 0）时
   const bodyWithoutReasoning = {
-    messages: [{ role: 'user', content: 'Hello' }],
+    messages: [{ content: 'Hello', role: 'user' }],
     settings: {
       base: { model: 'glm-4.7', stream: true },
       chatParams: { reasoning_effort: 0, temperature: 0.7 },
-      toolCallSettings: { tools: [], mode: 'NONE' }
+      toolCallSettings: { mode: 'NONE', tools: [] }
     }
   };
 
@@ -52,19 +52,25 @@ test('Zhipu Adapter - Chat Body Preparation', async (t) => {
   });
   assert.strictEqual(resultWithoutReasoning.reasoning_effort, undefined);
 
-  // 测试 3: 当 reasoning_effort 未设置时
-  const bodyNoReasoning = {
-    messages: [{ role: 'user', content: 'Hello' }],
+  // 测试 4: 当 extraSettings.zhipu.web_search 开启时
+  const bodyWithWebSearch = {
+    messages: [{ content: 'Hello', role: 'user' }],
     settings: {
       base: { model: 'glm-4.7', stream: true },
       chatParams: { temperature: 0.7 },
-      toolCallSettings: { tools: [], mode: 'NONE' }
+      extraSettings: {
+        zhipu: {
+          web_search: { enable: true, search_result: true }
+        }
+      },
+      toolCallSettings: { mode: 'NONE', tools: [] }
     }
   };
 
-  const resultNoReasoning = await adapter._prepareChatBody(bodyNoReasoning);
-  assert.strictEqual(resultNoReasoning.extra_body, undefined);
-  assert.strictEqual(resultNoReasoning.reasoning_effort, undefined);
+  const resultWithWebSearch = await adapter._prepareChatBody(bodyWithWebSearch);
+  assert.ok(Array.isArray(resultWithWebSearch.tools));
+  assert.strictEqual(resultWithWebSearch.tools[0].type, 'web_search');
+  assert.deepStrictEqual(resultWithWebSearch.tools[0].web_search, { enable: true, search_result: true });
 });
 
 test('Zhipu Adapter - Generic Suite Integration', async (t) => {
@@ -74,8 +80,7 @@ test('Zhipu Adapter - Generic Suite Integration', async (t) => {
   };
 
   const mocks = {
-    models: async () => [{ owner: '智谱清言', models: ['glm-4.7'] }],
-    createCore: (event) => {
+    createCore: (_event) => {
       const createStream = async function* () {
         yield { choices: [{ delta: { reasoning_content: 'Thinking...' } }] };
         yield { choices: [{ delta: { content: 'Hello from GLM' } }] };
@@ -84,7 +89,8 @@ test('Zhipu Adapter - Generic Suite Integration', async (t) => {
         chat: { completions: { create: async () => ({ [Symbol.asyncIterator]: createStream }) } },
         models: { list: async () => ({ data: [] }) }
       };
-    }
+    },
+    models: async () => [{ owner: '智谱清言', models: ['glm-4.7'] }]
   };
 
   await runGenericAdapterTests(t, ZhipuAdapter, config, mocks);

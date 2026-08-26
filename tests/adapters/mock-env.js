@@ -4,8 +4,8 @@ import prismaManager from '../../lib/database/prisma.js';
 prismaManager.initialize = async () => {};
 prismaManager.connect = async () => {};
 prismaManager.disconnect = async () => {};
-prismaManager.getClient = () => {
-  return {
+prismaManager.getClient = () => (
+  {
     systemSetting: {
       findMany: async () => [],
       findUnique: async () => null,
@@ -27,29 +27,29 @@ prismaManager.getClient = () => {
       update: async () => ({ id: 1 }),
       updateMany: async () => ({ count: 1 }),
     },
-  };
-};
+  }
+);
 
 // Mock global logger
 global.logger = {
-  info: () => {},
-  warn: () => {},
-  error: () => {},
   debug: () => {},
-  mark: () => {},
+  error: () => {},
+  info: () => {},
   json: () => {},
+  mark: () => {},
+  warn: () => {},
 };
 
 // Mock global middleware
 global.middleware = {
   llm: {
-    getLLMTools: (tools) => tools.map(t => ({ name: t, description: t, parameters: {} })),
-    runTool: async (toolCallData) => {
-      return {
+    getLLMTools: (tools) => tools.map(t => ({ description: t, name: t, parameters: {} })),
+    runTool: async (toolCallData) => (
+      {
         call: toolCallData,
         result: `Mock result for ${toolCallData.name}`
-      };
-    }
+      }
+    )
   }
 };
 
@@ -61,22 +61,22 @@ export class MockEvent {
       settings: {
         base: { model: 'gpt-4o', stream: true },
         chatParams: { temperature: 0.7 },
-        toolCallSettings: { mode: 'AUTO', tools: [] },
-        extraSettings: {}
+        extraSettings: {},
+        toolCallSettings: { mode: 'AUTO', tools: [] }
       },
       ...body
     };
-    this.requestId = 'test-request-' + Math.random();
+    this.requestId = `test-request-${  Math.random()}`;
     this.aborted = false;
     this.updates = [];
     this.isCompleted = false;
     this.abortCallbacks = [];
     
     this.client = {
-      pushEvent: () => {},
+      popConnection: () => {},
       popEvent: () => {},
       pushConnection: () => {},
-      popConnection: () => {},
+      pushEvent: () => {},
     };
   }
 
@@ -112,6 +112,11 @@ export async function* createMockStream(chunks) {
 }
 
 export const MockFactories = {
+  gemini: (chunks = []) => ({
+    chat: async function* () {
+      for (const chunk of chunks) yield chunk;
+    }
+  }),
   openai: (chunks = []) => ({
     chat: {
       completions: {
@@ -121,11 +126,6 @@ export const MockFactories = {
           }
         })
       }
-    }
-  }),
-  gemini: (chunks = []) => ({
-    chat: async function* () {
-      for (const chunk of chunks) yield chunk;
     }
   }),
   responses: (chunks = []) => ({

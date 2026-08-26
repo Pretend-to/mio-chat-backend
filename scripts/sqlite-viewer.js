@@ -36,7 +36,7 @@ function getTableData(tableName, page = 0, pageSize = 50) {
   const columns = getTableInfo(tableName).map(c => c.name)
   const rows = db.prepare(`SELECT * FROM "${tableName}" LIMIT ? OFFSET ?`).all(pageSize, offset)
   const total = db.prepare(`SELECT COUNT(*) as cnt FROM "${tableName}"`).get().cnt
-  return { columns, rows, total, page, pageSize }
+  return { columns, page, pageSize, rows, total }
 }
 
 function renderPage(tables, activeTable, data) {
@@ -162,20 +162,20 @@ function renderPage(tables, activeTable, data) {
             ${rows.map(row => `<tr>${
               columns.map(c => {
                 const val = row[c]
-                if (val === null) return '<td class="null">NULL</td>'
+                if (val === null) {return '<td class="null">NULL</td>'}
                 const str = String(val)
-                if (!str) return '<td class="null">—</td>'
+                if (!str) {return '<td class="null">—</td>'}
                 // Check if it's a JSON object/array
                 if (str.length > 0 && (str[0] === '[' || str[0] === '{')) {
-const preview = str.length > 80 ? str.slice(0, 80).replace(/\\n/g, '↵') + '…' : str.replace(/\\n/g, '↵')
+const preview = str.length > 80 ? `${str.slice(0, 80).replace(/\\n/g, '↵')  }…` : str.replace(/\\n/g, '↵')
                   return `<td class="json" onclick="openModal('${encodeURIComponent(str).replace(/'/g, '%27')}')">${preview}</td>`
                 }
                 // Number detection
-                if (/^-?\d+(\.\d+)?$/.test(str) && str.length < 20) return `<td class="number">${str}</td>`
+                if (/^-?\d+(\.\d+)?$/.test(str) && str.length < 20) {return `<td class="number">${str}</td>`}
                 // Date detection
-                if (/^\d{4}-\d{2}-\d{2}T/.test(str)) return `<td class="date">${str.replace('T', ' ').slice(0, 19)}</td>`
+                if (/^\d{4}-\d{2}-\d{2}T/.test(str)) {return `<td class="date">${str.replace('T', ' ').slice(0, 19)}</td>`}
                 // Truncate long text
-                const display = str.length > 200 ? str.slice(0, 200) + '…' : str
+                const display = str.length > 200 ? `${str.slice(0, 200)  }…` : str
                 return `<td title="${str.replace(/"/g, '&quot;')}">${display}</td>`
               }).join('')
             }</tr>`).join('')}
@@ -254,10 +254,10 @@ const preview = str.length > 80 ? str.slice(0, 80).replace(/\\n/g, '↵') + '…
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/({|}|\[|\]|,)/g, '<span class="jc">$1</span>')
+      .replace(/({|}|[|]|,)/g, '<span class="jc">$1</span>')
       .replace(/"([^"]+)":/g, '<span class="jk">"$1"</span>:')
       .replace(/: "((?:[^"\\\\]|\\\\.)*)"/g, ': <span class="jv">"$1"</span>')
-      .replace(/: (-?\d+\.?\d*(?:e[+-]?\d+)?)/g, ': <span class="jn">$1</span>')
+      .replace(/: (-?d+.?d*(?:e[+-]?d+)?)/g, ': <span class="jn">$1</span>')
       .replace(/: (true|false|null)/g, ': <span class="jb">$1</span>')
   }
 </script>
@@ -267,7 +267,7 @@ const preview = str.length > 80 ? str.slice(0, 80).replace(/\\n/g, '↵') + '…
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`)
-  const pathname = url.pathname
+  const {pathname} = url
 
   if (pathname === '/' || pathname === '/index.html') {
     const table = url.searchParams.get('table') || null
