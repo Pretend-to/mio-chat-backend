@@ -1,6 +1,6 @@
 {
   "name": "mio-chat",
-  "type": "module",
+  "type": "module","packageManager": "pnpm@10.34.5",
   "version": "0.0.1",
   "description": "AI-Powered chat platform,support ONEBOT v11",
   "engines": {

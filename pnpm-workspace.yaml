@@ -1,13 +1,11 @@
 packages:
   - 'lib/plugins/*'
   - 'plugins/*'
-
-ignoredBuiltDependencies:
-  - es5-ext
-  - puppeteer
-
-onlyBuiltDependencies:
-  - '@prisma/client'
-  - '@prisma/engines'
-  - prisma
-  - node-pty
+# pnpm 10.32+/11: allowBuilds 取代 onlyBuiltDependencies / ignoredBuiltDependencies（v11 已移除旧 key）
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  prisma: true
+  node-pty: true
+  es5-ext: false
+  puppeteer: false
