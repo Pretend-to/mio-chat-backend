@@ -1,0 +1,54 @@
+<?xml version="1.0" ?>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="700" viewBox="0 0 960 700" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <rect x="0" y="0" width="960" height="700" rx="0" fill="#f6f7f9" stroke="none" stroke-width="1"/>
+  <text x="480" y="44" font-size="20" fill="#111827" font-weight="700" text-anchor="middle" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">MioChat — Agent Ecosystem</text>
+  <text x="480" y="66" font-size="12" fill="#6b7280" font-weight="500" text-anchor="middle" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">Ecosystem view · core harness + satellite modules</text>
+  <rect x="240" y="120" width="480" height="470" rx="18" fill="#ffffff" stroke="none" stroke-width="1"/>
+  <rect x="240" y="120" width="480" height="52" rx="18" fill="#111827" stroke="none" stroke-width="1"/>
+  <text x="480" y="152" font-size="14" fill="#ffffff" font-weight="700" text-anchor="middle" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">MioChat · Agent OS (Backend Core)</text>
+  <rect x="270" y="190" width="420" height="62" rx="12" fill="#fafafa" stroke="none" stroke-width="1"/>
+  <rect x="270" y="190" width="5" height="62" rx="3" fill="#16a34a" stroke="none" stroke-width="1"/>
+  <text x="292" y="216" font-size="12" fill="#111827" font-weight="700" text-anchor="start" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">AGENT LOOP</text>
+  <text x="292" y="235" font-size="10" fill="#6b7280" font-weight="400" text-anchor="start" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">ReAct · hook-intercepted tool lifecycle</text>
+  <rect x="270" y="268" width="420" height="62" rx="12" fill="#fafafa" stroke="none" stroke-width="1"/>
+  <rect x="270" y="268" width="5" height="62" rx="3" fill="#d97706" stroke="none" stroke-width="1"/>
+  <text x="292" y="294" font-size="12" fill="#111827" font-weight="700" text-anchor="start" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">CONTEXT</text>
+  <text x="292" y="313" font-size="10" fill="#6b7280" font-weight="400" text-anchor="start" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">SystemPromptAssembler · crystallization · 5 memory zones</text>
+  <rect x="270" y="346" width="420" height="62" rx="12" fill="#fafafa" stroke="none" stroke-width="1"/>
+  <rect x="270" y="346" width="5" height="62" rx="3" fill="#dc2626" stroke="none" stroke-width="1"/>
+  <text x="292" y="372" font-size="12" fill="#111827" font-weight="700" text-anchor="start" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">SAFETY</text>
+  <text x="292" y="391" font-size="10" fill="#6b7280" font-weight="400" text-anchor="start" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">16 hooks × 10 builtins · 2nd-confirmation · final run()</text>
+  <rect x="270" y="424" width="420" height="62" rx="12" fill="#fafafa" stroke="none" stroke-width="1"/>
+  <rect x="270" y="424" width="5" height="62" rx="3" fill="#7c3aed" stroke="none" stroke-width="1"/>
+  <text x="292" y="450" font-size="12" fill="#111827" font-weight="700" text-anchor="start" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">CAPABILITIES</text>
+  <text x="292" y="469" font-size="10" fill="#6b7280" font-weight="400" text-anchor="start" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">21 adapters · ~38 tools · Skills · MCP</text>
+  <rect x="270" y="502" width="420" height="62" rx="12" fill="#fafafa" stroke="none" stroke-width="1"/>
+  <rect x="270" y="502" width="5" height="62" rx="3" fill="#0891b2" stroke="none" stroke-width="1"/>
+  <text x="292" y="528" font-size="12" fill="#111827" font-weight="700" text-anchor="start" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">STATE</text>
+  <text x="292" y="547" font-size="10" fill="#6b7280" font-weight="400" text-anchor="start" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">SQLite · Prisma · streamCache · cron tasks</text>
+  <rect x="40" y="150" width="168" height="118" rx="12" fill="#ffffff" stroke="none" stroke-width="1"/>
+  <rect x="40" y="150" width="168" height="6" rx="3" fill="#2563eb" stroke="none" stroke-width="1"/>
+  <text x="124.0" y="184" font-size="12" fill="#111827" font-weight="700" text-anchor="middle" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">FRONTEND</text>
+  <text x="124.0" y="204" font-size="10.5" fill="#374151" font-weight="500" text-anchor="middle" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">Vue 3 render layer</text>
+  <text x="124.0" y="224" font-size="9.5" fill="#6b7280" font-weight="400" text-anchor="middle" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">streaming ACK · PWA</text>
+  <line x1="208" y1="210" x2="240" y2="210" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="6,4"/>
+  <rect x="40" y="360" width="168" height="118" rx="12" fill="#ffffff" stroke="none" stroke-width="1"/>
+  <rect x="40" y="360" width="168" height="6" rx="3" fill="#0ea5e9" stroke="none" stroke-width="1"/>
+  <text x="124.0" y="394" font-size="12" fill="#111827" font-weight="700" text-anchor="middle" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">RENDERER</text>
+  <text x="124.0" y="414" font-size="10.5" fill="#374151" font-weight="500" text-anchor="middle" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">mio-markdown</text>
+  <text x="124.0" y="434" font-size="9.5" fill="#6b7280" font-weight="400" text-anchor="middle" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">AI Markdown · Artifacts</text>
+  <line x1="208" y1="420" x2="240" y2="420" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="6,4"/>
+  <rect x="752" y="150" width="168" height="118" rx="12" fill="#ffffff" stroke="none" stroke-width="1"/>
+  <rect x="752" y="150" width="168" height="6" rx="3" fill="#f97316" stroke="none" stroke-width="1"/>
+  <text x="836.0" y="184" font-size="12" fill="#111827" font-weight="700" text-anchor="middle" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">MARKETPLACE</text>
+  <text x="836.0" y="204" font-size="10.5" fill="#374151" font-weight="500" text-anchor="middle" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">plugins / skills</text>
+  <text x="836.0" y="224" font-size="9.5" fill="#6b7280" font-weight="400" text-anchor="middle" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">community hooks collection</text>
+  <line x1="720" y1="210" x2="752" y2="210" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="6,4"/>
+  <rect x="752" y="360" width="168" height="118" rx="12" fill="#ffffff" stroke="none" stroke-width="1"/>
+  <rect x="752" y="360" width="168" height="6" rx="3" fill="#6b7280" stroke="none" stroke-width="1"/>
+  <text x="836.0" y="394" font-size="12" fill="#111827" font-weight="700" text-anchor="middle" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">CONTROL</text>
+  <text x="836.0" y="414" font-size="10.5" fill="#374151" font-weight="500" text-anchor="middle" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">Admin panel / API</text>
+  <text x="836.0" y="434" font-size="9.5" fill="#6b7280" font-weight="400" text-anchor="middle" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">SQLite structured config</text>
+  <line x1="720" y1="420" x2="752" y2="420" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="480" y="650" font-size="11" fill="#9ca3af" font-weight="500" text-anchor="middle" font-family="-apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">Agent = Model + Harness · dual-repo ~100k lines</text>
+</svg>
