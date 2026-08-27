@@ -74,6 +74,8 @@ export class ChannelStore {
       status: 'unbound',
       token: '',
       type: 'wechat',
+      provider: data.provider || '',
+      model: data.model || '',
       updatedAt: now,
       userId: '',
       lastActive: 0,

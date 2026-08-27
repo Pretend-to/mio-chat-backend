@@ -11,6 +11,19 @@ import crypto from 'node:crypto'
  */
 export const DEFAULT_BASE_URL = 'https://ilinkai.weixin.qq.com'
 export const ILINK_APP_ID = 'bot' // 腾讯插件包用的 app id（build/分发归属）
+export const CDN_BASE_URL = 'https://novac2c.cdn.weixin.qq.com/c2c'
+
+/**
+ * 微信多模态加密与上传实现（对标官方 @tencent-weixin/openclaw-weixin 标准）
+ */
+function encryptAesEcb(plaintext, key) {
+  const cipher = crypto.createCipheriv('aes-128-ecb', key, null)
+  return Buffer.concat([cipher.update(plaintext), cipher.final()])
+}
+
+function aesEcbPaddedSize(plaintextSize) {
+  return Math.ceil((plaintextSize + 1) / 16) * 16
+}
 
 const DEFAULT_LONG_POLL_TIMEOUT_MS = 35_000
 const DEFAULT_API_TIMEOUT_MS = 15_000
@@ -207,6 +220,104 @@ export class IlinkClient {
       { ilink_user_id: ilinkUserId, typing_ticket: typingTicket, status, base_info: this._baseInfo() },
       { label: 'sendTyping', timeoutMs: DEFAULT_CONFIG_TIMEOUT_MS },
     )
+  }
+
+  /**
+   * 获取多模态上传预签名 URL。
+   * @param {object} params
+   * @param {number} params.mediaType  1=IMAGE, 2=VIDEO, 3=FILE, 4=VOICE
+   * @param {string} params.toUserId
+   * @param {number} params.rawSize    原始文件字节大小
+   * @param {string} params.rawFileMd5 原始文件 MD5（大写或小写 hex）
+   * @param {string} params.aesKeyHex  16 字节 AES 密钥的十六进制字符串（32 字符）
+   * @param {number} [params.fileSize] 加密后的文件大小（若未提供则默认等于 rawSize）
+   */
+  async getUploadUrl({ filekey, mediaType = 1, toUserId = this.userId, rawSize, rawFileMd5, aesKeyHex, fileSize } = {}) {
+    if (!toUserId) throw new Error('getUploadUrl requires to_user_id')
+    return await this._post(
+      'ilink/bot/getuploadurl',
+      {
+        aeskey: aesKeyHex,
+        filekey: filekey || crypto.randomBytes(16).toString('hex'),
+        filesize: fileSize || rawSize,
+        media_type: mediaType,
+        no_need_thumb: true,
+        rawfilemd5: rawFileMd5,
+        rawsize: rawSize,
+        to_user_id: toUserId,
+        base_info: this._baseInfo(),
+      },
+      { label: 'getUploadUrl', timeoutMs: DEFAULT_API_TIMEOUT_MS },
+    )
+  }
+
+  /**
+   * 上传多模态媒体文件（图片/语音/文件）到微信 CDN。
+   * 自动生成 AES key、进行 AES-128-ECB 加密、获取预签名并直传 novac2c CDN。
+   * @param {Buffer} buffer
+   * @param {object} opts
+   * @param {number} [opts.mediaType=1] 1=IMAGE
+   * @param {string} [opts.toUserId]
+   * @returns {Promise<{ full_url, encrypt_query_param, aes_key, encrypt_type, file_size_ciphertext, raw_size }>}
+   */
+  async uploadMedia(buffer, { mediaType = 1, toUserId = this.userId } = {}) {
+    const rawSize = buffer.length
+    const rawFileMd5 = crypto.createHash('md5').update(buffer).digest('hex')
+    const fileSizeCiphertext = aesEcbPaddedSize(rawSize)
+    const filekey = crypto.randomBytes(16).toString('hex')
+    const aesKey = crypto.randomBytes(16)
+    const aesKeyHex = aesKey.toString('hex')
+
+    // 微信官方标准：AES-128-ECB 加密
+    const ciphertext = encryptAesEcb(buffer, aesKey)
+
+    const uploadInfo = await this.getUploadUrl({
+      aesKeyHex,
+      filekey,
+      fileSize: fileSizeCiphertext,
+      mediaType,
+      rawFileMd5,
+      rawSize,
+      toUserId,
+    })
+
+    const uploadFullUrl = uploadInfo?.upload_full_url?.trim()
+    const uploadParam = uploadInfo?.upload_param
+
+    let cdnUrl = uploadFullUrl
+    if (!cdnUrl && uploadParam) {
+      cdnUrl = `${CDN_BASE_URL}/upload?encrypted_query_param=${encodeURIComponent(uploadParam)}&filekey=${encodeURIComponent(filekey)}`
+    }
+
+    if (!cdnUrl) {
+      throw new Error(`获取上传 URL 失败: ${JSON.stringify(uploadInfo)}`)
+    }
+
+    // 上传二进制密文到腾讯 novac2c CDN
+    const uploadRes = await fetch(cdnUrl, {
+      body: ciphertext,
+      headers: {
+        'Content-Type': 'application/octet-stream',
+      },
+      method: 'POST',
+    })
+
+    if (!uploadRes.ok) {
+      const errText = await uploadRes.text()
+      throw new Error(`上传媒体到微信 CDN 失败: ${uploadRes.status} ${errText}`)
+    }
+
+    // 微信 CDN 成功后会在 Header 中返回 x-encrypted-param
+    const downloadParam = uploadRes.headers.get('x-encrypted-param') || uploadParam || ''
+
+    return {
+      aes_key: Buffer.from(aesKeyHex).toString('base64'),
+      encrypt_query_param: downloadParam,
+      encrypt_type: 1,
+      file_size_ciphertext: fileSizeCiphertext,
+      full_url: uploadFullUrl || '',
+      raw_size: rawSize,
+    }
   }
 
   /** 通知服务器 channel 正在关闭/启动 */

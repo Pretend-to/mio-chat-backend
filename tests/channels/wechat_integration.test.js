@@ -83,14 +83,18 @@ test('WechatChannel 端到端：登录→收→AI回复→真网络发出→记�
   svc.server.close()
 })
 
-test('WechatChannel 灵魂引导（无 soul）：走引导、不写 soul、不计入会话', async () => {
+test('WechatChannel 灵魂引导（无 soul）：走引导、不写 soul、引导对话正常计入会话', async () => {
   const svc = await buildIlinkServer()
   const { memory, chn, baseDir } = await loginAndChannel(svc, { soul: false })
 
   await chn._handleMessage(line('你好'))
   assert.strictEqual(lastSent(svc.state), '你好', '引导模式 echo 回复')
   assert.strictEqual(await memory.readSoul(), '', '引导期未写 soul')
-  assert.strictEqual((await memory.getChat(await memory.getActiveSession())).length, 0, '引导对话不计入会话')
+  // 引导已不再单独占据流程层：引导对话与正常对话一样落盘 session chat
+  const chat0 = await memory.getChat(await memory.getActiveSession())
+  assert.strictEqual(chat0.length, 2, '引导对话正常计入会话（user+assistant）')
+  assert.strictEqual(chat0[0].text, '你好', '引导 user 句落盘')
+  assert.strictEqual(chat0[1].text, '你好', '引导 assistant 句落盘')
 
   fs.rmSync(baseDir, { recursive: true, force: true })
   svc.server.close()

@@ -35,11 +35,11 @@ function makeHarness() {
     from_user_id: from, message_id: Math.floor(Math.random() * 1e6), message_type: 1,
     context_token: token, item_list: [{ type: 1, text }],
   })
-  return { llmCalls, mockClient, memory, channel, lastSent, userMsg, baseDir }
+  return { llm, llmCalls, mockClient, memory, channel, lastSent, userMsg, baseDir }
 }
 
 test('WechatChannel 渠道核心', async () => {
-  const { llmCalls, mockClient, memory, channel, lastSent, userMsg, baseDir } = makeHarness()
+  const { llm, llmCalls, mockClient, memory, channel, lastSent, userMsg, baseDir } = makeHarness()
   // 预置默认灵魂（灵魂引导有独立 M3 test 块覆盖）；此处测正常对话路径
   await memory.writeSoul('你叫小助手')
 
@@ -113,6 +113,29 @@ test('WechatChannel 渠道核心', async () => {
     mockClient.sendLog.length = 0
     await channel._handleMessage(userMsg('/context'))
     assert.ok(lastSent().includes('事实X'))
+
+    // 测试 /model 命令
+    await channel._handleMessage(userMsg('/model'))
+    assert.ok(lastSent().includes('【当前模型】'))
+
+    // 动态 mock llm.getModels
+    llm.getModels = () => ({
+      defaultProvider: 'AIStdio',
+      models: {
+        AIStdio: [{ owner: 'Google', models: ['gemini-2.5-flash', 'gemini-2.5-pro'] }],
+        MioChat: [{ owner: 'OpenAI', models: ['gpt-4o'] }]
+      }
+    })
+    await channel._handleMessage(userMsg('/model ls'))
+    assert.ok(lastSent().includes('gemini-2.5-flash'))
+    assert.ok(lastSent().includes('gpt-4o'))
+
+    await channel._handleMessage(userMsg('/model gpt-4o'))
+    assert.ok(lastSent().includes('模型已切换为：gpt-4o'))
+    assert.strictEqual(channel.model, 'gpt-4o')
+
+    await channel._handleMessage(userMsg('/model reset'))
+    assert.ok(lastSent().includes('已重置为渠道默认模型配置'))
   })
 
   await test('M3 灵魂引导：无 soul→guidance；提炼 soulDraft→固化；有 soul→正常对话', async () => {
@@ -147,7 +170,22 @@ test('WechatChannel 渠道核心', async () => {
     await ch3._handleMessage(msg('今天做什么'))
     assert.strictEqual(last3(), 'RE:今天做什么', '有 soul 后走正常对话')
     const sid3 = await memory3.getActiveSession()
-    assert.strictEqual((await memory3.getChat(sid3)).length, 2, '正常对话落盘 session chat（引导对话未计入）')
+    // 引导已不再单独占据流程层：引导对话同样正常落盘 session chat，
+    // 为后续对话保留完整上下文（3 轮 user/assistant 交替 = 6 条）
+    const chat3 = await memory3.getChat(sid3)
+    assert.strictEqual(chat3.length, 6, '三轮对话（含引导）全部落盘 session chat')
+    assert.deepStrictEqual(
+      chat3.map(c => `${c.role}:${c.text}`),
+      [
+        'user:你好',
+        'assistant:你好呀，我还没有人格设定，你希望我怎样陪伴我？给我取个名字吧？',
+        'user:我希望你陪伴我工作',
+        'assistant:记住了！',
+        'user:今天做什么',
+        'assistant:RE:今天做什么',
+      ],
+      '落盘顺序应为 user/assistant 交替，引导对话亦在上下文中',
+    )
     fs.rmSync(baseDir3, { recursive: true, force: true })
   })
 
