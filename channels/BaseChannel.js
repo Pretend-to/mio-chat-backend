@@ -461,6 +461,7 @@ export class BaseChannel {
         channel: this,
         provider: this.provider,
         model: this.model,
+        images: ctx.rawMsg?.images || ctx.images || null,
         onEmitTextBlock,
       })
 
@@ -479,7 +480,14 @@ export class BaseChannel {
       // 4. 会话持久化落盘
       if (emittedBlocks.length > 0) {
         const fullAssistantReply = emittedBlocks.join('\n\n')
-        await this.memory.appendToChat(sid, { from_user_id: ctx.from, role: 'user', text })
+        let finalUserText = text
+        const imgList = ctx.rawMsg?.images || ctx.images || null
+        if (Array.isArray(imgList) && imgList.length > 0) {
+          for (const img of imgList) {
+            finalUserText += `\n![图片](${img})`
+          }
+        }
+        await this.memory.appendToChat(sid, { from_user_id: ctx.from, role: 'user', text: finalUserText })
         const updatedSession = await this.memory.appendToChat(sid, { role: 'assistant', text: fullAssistantReply })
         const currentCount = updatedSession?.chat?.length || 0
         this.log?.info?.(`[${this.channelType}] 💾 会话历史已成功落盘 | 会话: ${sid} | 本轮交互已追加 | 累计条数: ${currentCount} 条`)

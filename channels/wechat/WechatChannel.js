@@ -11,10 +11,14 @@
 import fs from 'node:fs'
 import { sleep } from '../memory/sleep.js'
 import { BaseChannel } from '../BaseChannel.js'
-import { extractText, buildSendMsg, buildSendImageMsg, splitWechatText } from './msgHelper.js'
+import { extractText, buildSendMsg, buildSendImageMsg, splitWechatText, extractImages, extractFiles } from './msgHelper.js'
+import { bufferToImageUrl } from '../../utils/imgTools.js'
+import storageService from '../../lib/storage/StorageService.js'
 
 const LONG_POLL_MS = 30_000
 const RETRY_DELAY_MS = 3_000
+
+
 
 export class WechatChannel extends BaseChannel {
   /**
@@ -68,6 +72,145 @@ export class WechatChannel extends BaseChannel {
     return extractText(msg)
   }
 
+  async handleIncomingMessage(msg) {
+    const from = msg.from_user_id || msg.userId || msg.from
+    if (from !== this.masterId) {
+      this.log?.warn?.(`[WechatChannel] 拦截非绑定者消息 (from=${from}, master=${this.masterId})`)
+      return
+    }
+
+    const text = extractText(msg)
+    const rawImages = extractImages(msg)
+    const rawFiles = extractFiles(msg)
+
+    // 1. 初始化缓冲池
+    if (!this._msgBuffer) this._msgBuffer = new Map()
+    let buf = this._msgBuffer.get(from)
+
+    const hasIncomingMedia = rawImages.length > 0 || rawFiles.length > 0
+    const hasPendingMedia = buf && (buf.pendingCount > 0 || buf.images?.length > 0 || buf.files?.length > 0)
+
+    // 2. 纯文本且完全没有挂起/缓冲的媒体任务时，零延迟立刻放行
+    if (!hasIncomingMedia && !hasPendingMedia) {
+      if (buf) {
+        clearTimeout(buf.timer)
+        this._msgBuffer.delete(from)
+      }
+      await super.handleIncomingMessage(msg)
+      return
+    }
+
+    // 3. 有媒体或挂起任务，建立缓冲
+    if (!buf) {
+      buf = { timer: null, textParts: [], images: [], files: [], pendingCount: 0, contextToken: null, rawMsg: msg }
+      this._msgBuffer.set(from, buf)
+    }
+
+    buf.contextToken = msg.context_token || buf.contextToken
+    buf.rawMsg = msg
+
+    // 过滤掉纯图片/纯文件占位符，保留用户真实输入的文字
+    if (text && !text.startsWith('[图片]') && !text.startsWith('[文件:')) {
+      buf.textParts.push(text)
+    }
+
+    // 4. 如果是图片消息，增加挂起计数，并在后台异步解密转存
+    if (rawImages.length > 0) {
+      buf.pendingCount += rawImages.length
+
+      ;(async () => {
+        for (const img of rawImages) {
+          try {
+            const buffer = await this.client.downloadAndDecryptMedia(img.full_url, img.aes_key)
+            const localUrl = typeof this.bufferToImageUrl === 'function'
+              ? await this.bufferToImageUrl(buffer)
+              : await bufferToImageUrl('', buffer)
+            buf.images.push(localUrl)
+          } catch (e) {
+            this.log?.error?.(`[WechatChannel] 图片下载解密失败: ${e.message}`)
+          } finally {
+            buf.pendingCount = Math.max(0, buf.pendingCount - 1)
+          }
+        }
+      })()
+    }
+
+    // 5. 如果是文件消息，增加挂起计数，并在后台异步解密转存到 Storage
+    if (rawFiles.length > 0) {
+      buf.pendingCount += rawFiles.length
+
+      ;(async () => {
+        for (const f of rawFiles) {
+          try {
+            const buffer = await this.client.downloadAndDecryptMedia(f.full_url, f.aes_key)
+            let localUrl
+            if (typeof this.uploadFile === 'function') {
+              localUrl = await this.uploadFile(buffer, f.file_name)
+            } else {
+              const res = await storageService.upload(buffer, f.file_name, 'file', { dedup: true })
+              localUrl = res.url
+            }
+            if (!buf.files) buf.files = []
+            buf.files.push({ name: f.file_name, url: localUrl })
+            this.log?.info?.(`[WechatChannel] 文件解密转存成功: ${f.file_name} -> ${localUrl}`)
+          } catch (e) {
+            this.log?.error?.(`[WechatChannel] 文件下载解密失败: ${e.message}`)
+          } finally {
+            buf.pendingCount = Math.max(0, buf.pendingCount - 1)
+          }
+        }
+      })()
+    }
+
+    // 6. 触发/重置 1.2 秒防抖定时器
+    if (buf.timer) clearTimeout(buf.timer)
+
+    const triggerDebouncedMessage = async () => {
+      // 检查当前是否还有正在后台解密的媒体
+      if (buf.pendingCount > 0) {
+        buf.timer = setTimeout(triggerDebouncedMessage, 300)
+        return
+      }
+
+      this._msgBuffer.delete(from)
+
+      const combinedTextParts = []
+      const userText = buf.textParts.join('\n').trim()
+      if (userText) combinedTextParts.push(userText)
+
+      if (Array.isArray(buf.files) && buf.files.length > 0) {
+        const fileLinks = buf.files.map(f => `[文件: ${f.name}](${f.url})`).join('\n')
+        combinedTextParts.push(fileLinks)
+      }
+
+      let finalAddressableText = combinedTextParts.join('\n\n').trim()
+      if (!finalAddressableText && buf.images.length > 0) {
+        finalAddressableText = '[图片]'
+      }
+
+      if (!finalAddressableText) return
+
+      const mergedMsg = {
+        ...buf.rawMsg,
+        context_token: buf.contextToken,
+        images: buf.images.length > 0 ? buf.images : undefined,
+        item_list: [
+          {
+            type: 1,
+            text: finalAddressableText,
+            text_item: { text: finalAddressableText }
+          }
+        ]
+      }
+
+      this.log?.info?.(`[WechatChannel] ⚡ 微信消息防抖合并完成: 合并文本行数=${buf.textParts.length}, 图片数=${buf.images.length}, 文件数=${buf.files?.length || 0}`)
+      await super.handleIncomingMessage(mergedMsg)
+    }
+
+    buf.timer = setTimeout(triggerDebouncedMessage, 1200)
+  }
+
+
   buildSendMsg({ to, fromBot, contextToken, text }) {
     return buildSendMsg({
       to,
@@ -76,6 +219,7 @@ export class WechatChannel extends BaseChannel {
       text,
     })
   }
+
 
   async doSendMessage(payload) {
     return this.client.sendMessage(payload)

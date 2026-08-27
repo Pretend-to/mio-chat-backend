@@ -8,11 +8,57 @@ export function extractText(msg) {
   for (const it of items) {
     // 微信官方真实 iLink 结构：item.text_item.text
     if (it.text_item?.text != null) return it.text_item.text
+    // 语音消息自带 ASR 文字
+    if (it.voice_item?.text != null) return it.voice_item.text
     if (it.type === 1 || it.type === 'text') return it.text ?? it.content ?? ''
     if (it.text != null) return it.text
+    // 图片消息占位，防止被判定为空白消息过滤
+    if (it.image_item != null || it.type === 2) return '[图片]'
+    // 文件消息占位
+    if (it.file_item != null || it.type === 4) {
+      const name = it.file_item?.file_name || '未命名文件'
+      return `[文件: ${name}]`
+    }
   }
   return ''
 }
+
+/** 提取微信消息中的加密图片列表 */
+export function extractImages(msg) {
+  const items = msg?.item_list || []
+  const images = []
+  for (const it of items) {
+    if (it.image_item || it.type === 2) {
+      const media = it.image_item?.media
+      const aesKey = media?.aes_key || it.image_item?.aeskey || ''
+      const fullUrl = media?.full_url || ''
+      if (fullUrl && aesKey) {
+        images.push({ full_url: fullUrl, aes_key: aesKey })
+      }
+    }
+  }
+  return images
+}
+
+/** 提取微信消息中的加密文件列表 */
+export function extractFiles(msg) {
+  const items = msg?.item_list || []
+  const files = []
+  for (const it of items) {
+    if (it.file_item || it.type === 4) {
+      const media = it.file_item?.media
+      const aesKey = media?.aes_key || it.file_item?.aeskey || ''
+      const fullUrl = media?.full_url || ''
+      const fileName = it.file_item?.file_name || 'file'
+      if (fullUrl && aesKey) {
+        files.push({ full_url: fullUrl, aes_key: aesKey, file_name: fileName })
+      }
+    }
+  }
+  return files
+}
+
+
 
 /**
  * 构造下行文本 WeixinMessage（发给用户，带回 context_token，message_type=2 bot）。

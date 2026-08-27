@@ -21,9 +21,41 @@ function encryptAesEcb(plaintext, key) {
   return Buffer.concat([cipher.update(plaintext), cipher.final()])
 }
 
+export function decryptAesEcb(ciphertext, key) {
+  const decipher = crypto.createDecipheriv('aes-128-ecb', key, null)
+  decipher.setAutoPadding(true)
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()])
+}
+
+export function parseAesKey(aesKeyStr) {
+  if (!aesKeyStr) return null
+  let buf
+  try {
+    buf = Buffer.from(aesKeyStr, 'base64')
+  } catch {
+    buf = Buffer.from(aesKeyStr, 'utf-8')
+  }
+  // 如果解码出 32 字节且为 hex 字符串，将其转换为 16 字节 Buffer
+  if (buf.length === 32) {
+    const hexStr = buf.toString('utf-8')
+    if (/^[0-9a-fA-F]{32}$/.test(hexStr)) {
+      return Buffer.from(hexStr, 'hex')
+    }
+  }
+  if (buf.length === 16) {
+    return buf
+  }
+  // 兜底：若本身就是 32 字节 hex
+  if (typeof aesKeyStr === 'string' && /^[0-9a-fA-F]{32}$/.test(aesKeyStr)) {
+    return Buffer.from(aesKeyStr, 'hex')
+  }
+  return buf
+}
+
 function aesEcbPaddedSize(plaintextSize) {
   return Math.ceil((plaintextSize + 1) / 16) * 16
 }
+
 
 const DEFAULT_LONG_POLL_TIMEOUT_MS = 35_000
 const DEFAULT_API_TIMEOUT_MS = 15_000
@@ -327,6 +359,26 @@ export class IlinkClient {
   async notifyStart() {
     return await this._post('ilink/bot/msg/notifystart', { base_info: this._baseInfo() }, { label: 'notifyStart', timeoutMs: DEFAULT_CONFIG_TIMEOUT_MS })
   }
+
+  /**
+   * 下载并解密微信 CDN 媒体文件 (AES-128-ECB)
+   * @param {string} fullUrl 密文下载地址
+   * @param {string} aesKeyStr 媒体自带的 AES 密钥（base64 或 hex）
+   * @returns {Promise<Buffer>} 明文数据
+   */
+  async downloadAndDecryptMedia(fullUrl, aesKeyStr) {
+    const resp = await fetch(fullUrl)
+    if (!resp.ok) {
+      throw new Error(`下载媒体失败: ${resp.status} ${resp.statusText}`)
+    }
+    const ciphertext = Buffer.from(await resp.arrayBuffer())
+    const key = parseAesKey(aesKeyStr)
+    if (!key || key.length !== 16) {
+      throw new Error(`无效的 AES 密钥长度: ${key ? key.length : 'null'}`)
+    }
+    return decryptAesEcb(ciphertext, key)
+  }
 }
+
 
 export default IlinkClient

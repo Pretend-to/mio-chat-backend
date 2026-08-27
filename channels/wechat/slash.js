@@ -138,7 +138,11 @@ export class SlashCommandHandler {
           return wrap('灵魂已重设 ✅')
         }
         const soul = await this.memory.readSoul()
-        return wrap(soul ? `【灵魂】\n${soul}` : '还没有设定灵魂，直接告诉我你希望我怎样陪伴你吧～')
+        return wrap(
+          soul
+            ? `【灵魂】\n${soul}`
+            : '【灵魂】\n当前尚未设定专属人格。\n建议直接告诉我你希望我扮演的角色（如“叫你小管家，说话幽默一点”），或输入「/soul set <设定内容>」直接配置，我会为你永久记住～'
+        )
       }
 
       case 'memory': {
