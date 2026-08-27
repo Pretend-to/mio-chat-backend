@@ -75,7 +75,7 @@ test('Channel 管理 API（mock iLink）', async () => {
     const raw = await store.get(c0.id)
     assert.strictEqual(raw.token, 'tk', 'token 落库')
     assert.strictEqual(raw.botId, 'bot-9', 'botId 落库')
-    assert.strictEqual(raw.status, 'bound', 'status=bound')
+    assert.strictEqual(raw.status, 'running', 'status=running (已自动启动)')
     const pub = await store.getPublic(c0.id)
     assert.ok(!('token' in pub), 'token 脱敏')
   })

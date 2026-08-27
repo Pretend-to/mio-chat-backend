@@ -17,6 +17,27 @@ export function createEchoLlm({ prefix = '' } = {}) {
   }
 }
 
+function parseMultimodalContent(text) {
+  if (typeof text !== 'string') return text
+  const regex = /!\[.*?\]\((https?:\/\/.*?|data:.*?)\)/g
+  const parts = []
+  let lastIndex = 0
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    const textPart = text.slice(lastIndex, match.index).trim()
+    if (textPart) {
+      parts.push({ type: 'text', text: textPart })
+    }
+    parts.push({ type: 'image_url', image_url: { url: match[1] } })
+    lastIndex = regex.lastIndex
+  }
+  const rest = text.slice(lastIndex).trim()
+  if (rest) {
+    parts.push({ type: 'text', text: rest })
+  }
+  return parts.length > 0 ? parts : text
+}
+
 export function createBackendLlm(opts = {}) {
   const customService = opts.llmService || null
 
@@ -45,7 +66,12 @@ export function createBackendLlm(opts = {}) {
       if (ctx.soul?.trim()) {
         systemSections.push(`【你的灵魂设定与行为准则】\n${ctx.soul.trim()}`)
       } else {
-        systemSections.push('【灵魂设定】\n当前尚未设定专属灵魂人格 (Soul)。你可以使用 `channel_profile(action="update", soul="...")` 工具自主设定并保存你的人格特征。')
+        systemSections.push([
+          '【灵魂设定】',
+          '你当前尚未设定专属灵魂人格 (Soul)。你是一个温暖、聪明、善解人意的全能 AI 助手。',
+          '💡【引导提示】：由于你还没有专属人设，请在适当时机（例如初次认识、开启新对话或交流顺畅时），自然友好地向用户自我介绍，并主动建议用户为你设定专属人格、语气或名字（例如：“你希望我怎样陪伴你呢？可以随时给我取个专属名字或者设定喜欢的性格哦～”）。',
+          '一旦用户明确表达了对你的名字、性格、语气或角色期待，你可以直接调用 `channel_profile(action="update", soul="...")` 工具自主将这份灵魂固化保存，永久成为用户的专属陪伴。',
+        ].join('\n'))
       }
 
       if (ctx.globalMem?.trim()) {
@@ -86,17 +112,28 @@ export function createBackendLlm(opts = {}) {
         for (const item of ctx.chat) {
           if (!item || !item.text) continue
           const role = item.role === 'assistant' ? 'assistant' : 'user'
-          messages.push({ content: item.text, role })
+          messages.push({ content: parseMultimodalContent(item.text), role })
         }
       }
 
       // 3. 当前最新用户输入
-      messages.push({ content: ctx.text, role: 'user' })
+      let latestContent = parseMultimodalContent(ctx.text)
+      if (Array.isArray(ctx.images) && ctx.images.length > 0) {
+        const parts = Array.isArray(latestContent) ? latestContent : [{ type: 'text', text: ctx.text || '[图片]' }]
+        for (const img of ctx.images) {
+          if (!parts.some(p => p.type === 'image_url' && p.image_url?.url === img)) {
+            parts.push({ type: 'image_url', image_url: { url: img } })
+          }
+        }
+        latestContent = parts
+      }
+      messages.push({ content: latestContent, role: 'user' })
 
       // 详细打印消息组装诊断日志
       const log = ctx.channel?.log || console
       log.info?.(`[${ctx.channel?.channelType || 'channel'}] 🧩 消息链拼装完成: 总消息数=${messages.length} (System段数=${systemSections.length}, 历史轮数=${chatHistoryCount}, 当前输入="${ctx.text.slice(0, 30)}")`)
       log.info?.(`[${ctx.channel?.channelType || 'channel'}] 🧠 记忆载入详情: Soul=${ctx.soul ? '已设定' : '无'}, GlobalMem=${ctx.globalMem ? `${ctx.globalMem.length}字` : '无'}, Crystal=${ctx.crystal ? `${ctx.crystal.length}字` : '无'}`)
+
 
       // 4. 确定使用的 provider 与 model
       const targetProvider = ctx.provider || (typeof svc._getDefaultProvider === 'function' ? svc._getDefaultProvider() : undefined)
