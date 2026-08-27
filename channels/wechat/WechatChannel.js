@@ -9,6 +9,7 @@
  */
 
 import fs from 'node:fs'
+import path from 'node:path'
 import { sleep } from '../memory/sleep.js'
 import { BaseChannel } from '../BaseChannel.js'
 import { extractText, buildSendMsg, buildSendImageMsg, splitWechatText, extractImages, extractFiles } from './msgHelper.js'
@@ -122,10 +123,20 @@ export class WechatChannel extends BaseChannel {
         for (const img of rawImages) {
           try {
             const buffer = await this.client.downloadAndDecryptMedia(img.full_url, img.aes_key)
-            const localUrl = typeof this.bufferToImageUrl === 'function'
+            let localUrl = typeof this.bufferToImageUrl === 'function'
               ? await this.bufferToImageUrl(buffer)
               : await bufferToImageUrl('', buffer)
+            
+            // 转换为绝对 file:// 协议路径，方便本地工具直读
+            if (localUrl && localUrl.startsWith('/f/up/')) {
+              const parts = localUrl.split('/')
+              const safeType = parts[3]
+              const safeName = parts[4]
+              const absPath = path.join(process.cwd(), 'output', 'uploaded', safeType, safeName)
+              localUrl = `file://${absPath}`
+            }
             buf.images.push(localUrl)
+            this.log?.info?.(`[WechatChannel] 图片解密转存成功: ${localUrl}`)
           } catch (e) {
             this.log?.error?.(`[WechatChannel] 图片下载解密失败: ${e.message}`)
           } finally {
@@ -149,6 +160,14 @@ export class WechatChannel extends BaseChannel {
             } else {
               const res = await storageService.upload(buffer, f.file_name, 'file', { dedup: true })
               localUrl = res.url
+            }
+            // 转换为绝对 file:// 协议路径
+            if (localUrl && localUrl.startsWith('/f/up/')) {
+              const parts = localUrl.split('/')
+              const safeType = parts[3]
+              const safeName = parts[4]
+              const absPath = path.join(process.cwd(), 'output', 'uploaded', safeType, safeName)
+              localUrl = `file://${absPath}`
             }
             if (!buf.files) buf.files = []
             buf.files.push({ name: f.file_name, url: localUrl })
@@ -180,12 +199,25 @@ export class WechatChannel extends BaseChannel {
 
       if (Array.isArray(buf.files) && buf.files.length > 0) {
         const fileLinks = buf.files.map(f => `[文件: ${f.name}](${f.url})`).join('\n')
-        combinedTextParts.push(fileLinks)
+        combinedTextParts.push(`\n以下是用户上传的文件：\n${fileLinks}`)
+      }
+
+      if (Array.isArray(buf.images) && buf.images.length > 0) {
+        const imgLinks = buf.images.join('\n')
+        combinedTextParts.push(`\n以下是用户所上传的图片链接：\n${imgLinks}`)
       }
 
       let finalAddressableText = combinedTextParts.join('\n\n').trim()
-      if (!finalAddressableText && buf.images.length > 0) {
-        finalAddressableText = '[图片]'
+      if (!finalAddressableText && (buf.images?.length > 0 || buf.files?.length > 0)) {
+        const parts = []
+        if (buf.images?.length > 0) {
+          parts.push(`[图片]\n\n以下是用户所上传的图片链接：\n${buf.images.join('\n')}`)
+        }
+        if (buf.files?.length > 0) {
+          const fileLinks = buf.files.map(f => `[文件: ${f.name}](${f.url})`).join('\n')
+          parts.push(`[文件]\n\n以下是用户上传的文件：\n${fileLinks}`)
+        }
+        finalAddressableText = parts.join('\n\n')
       }
 
       if (!finalAddressableText) return
@@ -194,6 +226,7 @@ export class WechatChannel extends BaseChannel {
         ...buf.rawMsg,
         context_token: buf.contextToken,
         images: buf.images.length > 0 ? buf.images : undefined,
+        files: buf.files?.length > 0 ? buf.files : undefined,
         item_list: [
           {
             type: 1,

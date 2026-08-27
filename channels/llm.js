@@ -19,7 +19,7 @@ export function createEchoLlm({ prefix = '' } = {}) {
 
 function parseMultimodalContent(text) {
   if (typeof text !== 'string') return text
-  const regex = /!\[.*?\]\((https?:\/\/.*?|data:.*?)\)/g
+  const regex = /!\[.*?\]\(((?:https?|data|file):\/\/.*?|\/f\/up\/.*?|\/f\/gen\/.*?)\)/g
   const parts = []
   let lastIndex = 0
   let match
@@ -117,16 +117,46 @@ export function createBackendLlm(opts = {}) {
       }
 
       // 3. 当前最新用户输入
-      let latestContent = parseMultimodalContent(ctx.text)
-      if (Array.isArray(ctx.images) && ctx.images.length > 0) {
-        const parts = Array.isArray(latestContent) ? latestContent : [{ type: 'text', text: ctx.text || '[图片]' }]
-        for (const img of ctx.images) {
-          if (!parts.some(p => p.type === 'image_url' && p.image_url?.url === img)) {
-            parts.push({ type: 'image_url', image_url: { url: img } })
+      let textContent = ctx.text || ''
+      const imageList = Array.isArray(ctx.images) ? [...ctx.images] : []
+
+      // 提取文本中可能已包含的 Markdown 图片链接
+      const parsed = parseMultimodalContent(textContent)
+      if (Array.isArray(parsed)) {
+        for (const p of parsed) {
+          if (p.type === 'image_url') {
+            const url = p.image_url?.url || p.image_url
+            if (url && !imageList.includes(url)) {
+              imageList.push(url)
+            }
           }
         }
-        latestContent = parts
       }
+
+      // 与前端保持一致：在文本中显式注入图片链接提示（方便非视觉模型自主识别并调用 vision 工具）
+      if (imageList.length > 0) {
+        const imagePrompt = `\n\n以下是用户所上传的图片链接：\n${imageList.join('\n')}`
+        if (!textContent.includes('以下是用户所上传的图片链接：') && !textContent.includes(imageList[0])) {
+          textContent = (textContent ? textContent + imagePrompt : imagePrompt).trim()
+        }
+      }
+
+      let latestContent
+      if (imageList.length > 0) {
+        // 与前端结构一致：先 image_url 对象列表，再 text 对象
+        const parts = imageList.map(url => ({
+          type: 'image_url',
+          image_url: { url }
+        }))
+        parts.push({
+          type: 'text',
+          text: textContent || '[图片]'
+        })
+        latestContent = parts
+      } else {
+        latestContent = parsed
+      }
+
       messages.push({ content: latestContent, role: 'user' })
 
       // 详细打印消息组装诊断日志

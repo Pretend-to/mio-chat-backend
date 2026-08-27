@@ -484,7 +484,9 @@ export class BaseChannel {
         const imgList = ctx.rawMsg?.images || ctx.images || null
         if (Array.isArray(imgList) && imgList.length > 0) {
           for (const img of imgList) {
-            finalUserText += `\n![图片](${img})`
+            if (!finalUserText.includes(`![图片](${img})`)) {
+              finalUserText += `\n![图片](${img})`
+            }
           }
         }
         await this.memory.appendToChat(sid, { from_user_id: ctx.from, role: 'user', text: finalUserText })

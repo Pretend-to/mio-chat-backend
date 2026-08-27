@@ -99,7 +99,13 @@ async function bufferToImageUrl(baseUrl, buffer) {
 async function getLocalFileAsBase64(url) {
   try {
     let filePath
-    if (url.startsWith('/f/up/')) {
+    if (url.startsWith('file://')) {
+      try {
+        filePath = new URL(url).pathname
+      } catch {
+        filePath = url.replace(/^file:\/\//, '')
+      }
+    } else if (url.startsWith('/f/up/')) {
       const parts = url.split('/')
       const type = parts[3]
       const name = parts[4]
@@ -108,21 +114,28 @@ async function getLocalFileAsBase64(url) {
       const parts = url.split('/')
       const name = parts[4]
       filePath = path.join(process.cwd(), 'output', 'generated', 'file', name)
+    } else if (path.isAbsolute(url)) {
+      filePath = url
+    } else if (url.startsWith('./') || url.startsWith('../') || url.startsWith('output/')) {
+      filePath = path.join(process.cwd(), url)
     } else if (url.startsWith('/')) {
       filePath = path.join(process.cwd(), url)
     }
 
     if (filePath && fs.existsSync(filePath)) {
       const buffer = fs.readFileSync(filePath)
+      const type = await fileType.fileTypeFromBuffer(buffer)
       const ext = path.extname(filePath).toLowerCase()
       const mimeMap = {
         '.gif': 'image/gif',
         '.jpeg': 'image/jpeg',
         '.jpg': 'image/jpeg',
         '.png': 'image/png',
-        '.webp': 'image/webp'
+        '.webp': 'image/webp',
+        '.bmp': 'image/bmp',
+        '.svg': 'image/svg+xml'
       }
-      const mimeType = mimeMap[ext] || 'image/png'
+      const mimeType = type?.mime || mimeMap[ext] || 'image/jpeg'
       return `data:${mimeType};base64,${buffer.toString('base64')}`
     }
   } catch (error) {
@@ -135,4 +148,43 @@ async function getLocalFileAsBase64(url) {
   return null
 }
 
-export { imgUrlToBase64, getBufferName, base64ToImageUrl, bufferToImageUrl, getLocalFileAsBase64 }
+/**
+ * 统一将各种图片资源（HTTP URL、file:// URL、/f/up/... 本地虚拟存储路径、本地绝对路径、Base64）解析为标准 Data URI
+ * @param {string} url - 图片路径或 URL
+ * @param {string} [id] - 日志追踪 ID
+ * @returns {Promise<string>} 标准 data:image/...;base64,... 格式的 Data URI
+ */
+async function resolveImageAsBase64(url, id = 'default') {
+  if (!url || typeof url !== 'string') return url
+  if (url.startsWith('data:')) return url
+
+  // 1. 本地文件（file:// 协议、虚拟存储 /f/up/...、/f/gen/...、绝对路径或相对路径）
+  if (
+    url.startsWith('file://') ||
+    url.startsWith('/f/up/') ||
+    url.startsWith('/f/gen/') ||
+    url.startsWith('output/') ||
+    url.startsWith('./') ||
+    (path.isAbsolute(url) && fs.existsSync(url))
+  ) {
+    const localBase64 = await getLocalFileAsBase64(url)
+    if (localBase64) return localBase64
+  }
+
+  // 2. HTTP / HTTPS 远程图片
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    const res = await imgUrlToBase64(url, id)
+    if (typeof res === 'object' && res?.data) return res.data
+    if (typeof res === 'string' && res.startsWith('data:')) return res
+    return url
+  }
+
+  // 3. 纯 Base64 字符串（不带 data: 前缀）
+  if (url.length > 50 && !url.includes(' ') && !url.includes('\n')) {
+    return `data:image/jpeg;base64,${url}`
+  }
+
+  return url
+}
+
+export { imgUrlToBase64, getBufferName, base64ToImageUrl, bufferToImageUrl, getLocalFileAsBase64, resolveImageAsBase64 }
