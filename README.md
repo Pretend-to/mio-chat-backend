@@ -51,6 +51,41 @@ The core agent loop everyone uses is five lines of ReAct. The observable differe
 
 ## Highlights
 
+### 📊 Unified Admin Settings & Observability Dashboard
+Enterprise-grade global configuration management and full-link observability — no more black boxes or tangled config files.
+
+- **Global System & Storage Engine**: Zero-downtime hot-switching between Local storage and S3-compatible Object Storage (AWS S3 / Cloudflare R2 / MinIO); system configs are persisted in SQLite and applied immediately via Web UI and REST API.
+- **Dynamic Model Management**: Built-in LiteLLM dynamic sync engine (covering 3,200+ frontier and open-source models), supporting custom Providers, API Keys, Base URLs, context windows, and real-time Temperature tuning.
+- **Observability Dashboard**: Real-time visual monitoring of throughput, Token consumption metrics (Prompt / Completion breakdown), latency distributions, and per-Agent conversation activities.
+
+<!-- 截图回填：后台设置与 Dashboard 监控界面 → docs/assets/screenshots/dashboard.png -->
+<img src="./docs/assets/screenshots/dashboard.png" width="800" alt="MioChat Admin Settings & Observability Dashboard" />
+
+### 🔌 Hot-Pluggable Tools & Modern Plugin Architecture
+Uniting cross-language open ecosystems with zero-downtime runtime extensibility.
+
+- **Standardized Plugin Layout**: Clean separation of metadata, tools, and lifecycle hooks:
+  ```text
+  my-plugin/
+  ├── plugin.json       # Plugin metadata (name, version, dependencies, permissions)
+  ├── index.js          # Entrypoint (extends MioPlugin, manages lifecycle)
+  ├── tools/            # Tools catalog (extends MioFunction, with Zod validation & final run guard)
+  └── hooks/            # Interceptors mounted across 16 system-wide lifecycle hooks
+  ```
+- **Zero-Downtime Hot-Reload**: Dynamically load, unload, or hot-swap plugin code without restarting the backend; paired with the frontend **Tools Manager** to toggle individual tools or plugin packs per conversation.
+- **Three-Layer Seamless Fusion**: Open standard **Agent Skills** (scans `.claude/`, `.cursor/`, `.gemini/`) + **MCP (Model Context Protocol)** adapter + native high-performance tools.
+
+### 📱 Multi-Platform Channels (WeChat & Beyond)
+Seamlessly embed Agents into real-world IM apps like WeChat with dedicated souls and multimodal capabilities.
+
+- **WeChat iLink Instant Connect**: Generates a login QR code on the frontend. **Once confirmed on your phone, the backend automatically establishes credentials and spins up long-polling within seconds** — zero manual launch required.
+- **Full Multimodal Decryption & Consumption**:
+  - 🖼️ **Image Decryption**: AES-128-ECB ciphertext download and decipher -> Local/S3 storage -> Structured multimodal arrays with multi-turn image history playback.
+  - 📄 **File Processing**: PDF / Word / Excel / code files ciphertext decipher -> Automatic Markdown links that drive the `parse` tool for autonomous deep extraction.
+  - 🎙️ **Native Voice ASR**: Reads Tencent's native server-side ASR transcription text directly for millisecond-latency streaming responses.
+- **1.2s Intelligent Debouncing Queue**: Tailored for high-frequency WeChat burst pushes — aggregates multi-image bursts, file-before-text, and split prompts into single unified requests, eliminating AI pre-replying and out-of-order execution.
+- **Independent Soul & Memory Persistence**: Each Channel is mapped to a dedicated AgentId with isolated Soul persona, GlobalMem long-term facts, and session Crystal memories, supported by `/soul`, `/model`, and `/sessions` Slash commands.
+
 ### 🧠 Multi-Agent hybrid groups
 Break the single-agent silo; run a swarm of heterogeneous LLMs and personas together.
 
@@ -82,18 +117,11 @@ Solves the loss-of-control problem when AI executes dangerous tools (shell comma
 ### ⏰ Autonomous tasks & scheduled inspection
 Offline autonomy with a visual inspection dashboard.
 
-- Flexible scheduling: standard Cron expressions, relative time, or one-shot triggers.
-- Visual Task panel + secure sandbox: inspect execution logs, wake tasks manually; per-task prompts and shell-command allowlists keep the agent from idling.
+- **Flexible scheduling**: standard Cron expressions, relative time, or one-shot (`once`) triggers with built-in anti-repetition guards.
+- **Visual Task panel + secure sandbox**: inspect execution logs, wake tasks manually; per-task prompts and shell-command allowlists keep the agent from idling.
 
 <!-- 截图回填：定时任务与后台 Agent 巡检界面 → docs/assets/screenshots/cron-task.png -->
 <img src="./docs/assets/screenshots/cron-task.png" width="800" alt="Scheduled tasks & background agent inspection" />
-
-### 🔌 Three-layer extensible ecosystem
-Expert knowledge, cross-language standards, and high-performance runtime tools together.
-
-- **Skills** (expert guidance) + **MCP protocol** + **Native Plugins** (hot-reload, 9 built-in plugins / ~38 tools).
-- **Zod parameter interception + AI self-correction**: tool arguments are strictly validated against Zod schemas; invalid arguments are caught and fed back to the LLM for zero-touch automatic correction.
-- Skills follow the open **Agent Skills** standard: `SkillService` scans `.claude/` / `.cursor/` / `.gemini/` skill directories — skills written for other agents install here as-is.
 
 ### 🎨 Artifacts & dynamic tool management
 - **Artifacts canvas** with `mio-previewer`: independent preview of code, HTML, SVG, Mermaid diagrams and dynamic UI components — side-by-side interaction.

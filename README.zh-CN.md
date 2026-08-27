@@ -51,6 +51,41 @@ Mio-Chat 是一个由多个模块构成的完整 Agent 生态系统：
 
 ## 特性亮点
 
+### 📊 统一后台设置与可视化 Dashboard
+提供企业级的全局配置管理与全链路可观测性，告别黑盒与繁琐的配置文件。
+
+- **全局系统与存储中心**：支持在本地存储 (Local) 与 S3 兼容对象存储 (AWS S3 / Cloudflare R2 / MinIO) 之间**零重启热切换**；系统配置统一持久化至 SQLite，通过界面与 REST API 即时热生效。
+- **动态模型管理**：内置 LiteLLM 数据库动态同步引擎（覆盖 3,200+ 种主流及开源模型规格），支持自定义 Provider、API Key、Base URL、上下文窗口及 Temperature 动态调优。
+- **可观测性仪表盘**：实时可视化监控系统吞吐量、Token 消耗统计（Prompt / Completion 细分）、调用延迟分布以及各 Agent 的会话活跃度。
+
+<!-- 截图回填：后台设置与 Dashboard 监控界面 → docs/assets/screenshots/dashboard.png -->
+<img src="./docs/assets/screenshots/dashboard.png" width="800" alt="MioChat 后台设置与可视化 Dashboard 监控界面" />
+
+### 🔌 工具热插拔与现代化插件架构
+兼顾跨语言标准生态与运行时极速扩展，打造零停机维护的工具生态。
+
+- **规范化插件目录**：清晰解耦元数据、工具函数与拦截切面：
+  ```text
+  my-plugin/
+  ├── plugin.json       # 插件元信息（名称、版本、依赖权限等）
+  ├── index.js          # 插件入口（继承 MioPlugin，定义生命周期）
+  ├── tools/            # 工具集（继承 MioFunction，带 Zod 参数校验与 final run 安全守卫）
+  └── hooks/            # 挂载在全系统 16 个生命周期切面上的 Hook 拦截器
+  ```
+- **零停机动态热插拔 (Zero-Downtime Hot-Reload)**：无需重启后端服务即可动态加载、卸载或更新插件代码；前端支持 **Tools Manager**，允许在特定会话中按需启用或禁用具体工具。
+- **三层生态深度融合**：全面兼容开放标准 **Agent Skills** 专家经验（自动扫描 `.claude/` / `.cursor/` / `.gemini/`）+ **MCP (Model Context Protocol)** 协议接入 + 原生高响应 Native Tools。
+
+### 📱 全平台多渠道接入 (Channels)
+让 Agent 无缝融入微信等日常即时通讯工具，赋予专属灵魂与全模态感知。
+
+- **微信 iLink 极速接入**：前端生成登录二维码，**手机扫码确认后后端自动建立凭证并秒级拉起长轮询服务**，实现零手动干预的无缝开箱即用。
+- **全模态解密与消费**：
+  - 🖼️ **图片解密**：AES-128-ECB 密文下载解密 -> 转存存储 -> 自动组装为多模态消息数组，支持多轮对话图文历史回溯。
+  - 📄 **文件支持**：PDF / Word / Excel / 代码文件密文解密 -> 自动生成 Markdown 访问链接并驱动 `parse` 工具自主解析。
+  - 🎙️ **极速语音**：直接读取腾讯原生服务端 ASR 语音转写文本，毫秒级流式响应。
+- **1.2s 智能防抖聚合队列**：专为微信高频连续推送场景打造，自动聚合用户连发的「多张图片」、「先发文件再发字」等碎片化消息，杜绝 AI 抢答与并发乱序。
+- **独立灵魂与记忆持久化**：每个渠道独立绑定 AgentId，拥有专属灵魂设定（Soul）、长期记忆（GlobalMem）、会话结晶（Crystal），并支持 `/soul`、`/model`、`/sessions` 等全套 Slash 交互命令。
+
 ### 🧠 多 Agent 混合群组
 打破单 Agent 孤岛，实现异构 LLM 与多元人格的集群智慧。
 
@@ -82,18 +117,11 @@ Mio-Chat 是一个由多个模块构成的完整 Agent 生态系统：
 ### ⏰ 定时任务与后台巡检
 赋予 Agent 离线自治与可视化巡检能力。
 
-- **灵活调度**：支持标准 Cron 表达式、相对时间与单次触发。
+- **灵活调度**：支持标准 Cron 表达式、相对时间与单次触发（`once`），内置防重复执行闭环。
 - **可视化面板与安全沙盒**：前端提供专用的 Task 管理面板，可直观查看执行日志与手动唤醒；后端支持设置任务专属 Prompt 与 shell 命令白名单，防止 Agent 陷入无意义的用户交互等待。
 
 <!-- 截图回填：定时任务与后台 Agent 巡检界面 → docs/assets/screenshots/cron-task.png -->
 <img src="./docs/assets/screenshots/cron-task.png" width="800" alt="定时任务与后台 Agent 巡检界面" />
-
-### 🔌 三层可插拔生态
-兼顾专家经验、跨语言标准与高性能运行时工具。
-
-- **Skills 专家经验指南 + MCP 协议 + Native Plugins 运行时热重载**（9 个内置插件 / 约 38 个工具）。
-- **Zod 参数拦截与 AI 自纠错**：工具参数通过 Zod Schema 进行严格校验。当 LLM 传递非法参数时，系统自动捕捉报错并喂回大模型，触发 LLM 零人工干预自动修正参数。
-- 技能遵循开放 **Agent Skills** 标准：`SkillService` 扫描 `.claude/` / `.cursor/` / `.gemini/` 技能目录——给其他 agent 写好的技能，这里原样能装。
 
 ### 🎨 Artifacts 与动态工具管理
 - **Artifacts 画板交互**：结合 `mio-previewer`，实现代码、HTML 网页、SVG 矢量图、Mermaid 流程图及动态 UI 组件的独立画板预览与分屏交互。
