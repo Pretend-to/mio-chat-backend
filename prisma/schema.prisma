@@ -202,13 +202,16 @@ model LLMCallLog {
   createdAt        DateTime @default(now()) @map("created_at")
 
   @@index([requestId])
+  @@index([requestId, id])
   @@index([userId])
   @@index([userIp])
   @@index([contactorId])
   @@index([provider])
   @@index([model])
   @@index([status])
+  @@index([status, createdAt])
   @@index([createdAt])
+  @@index([createdAt, status])
   @@map("llm_call_logs")
 }
 

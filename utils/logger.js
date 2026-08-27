@@ -89,6 +89,9 @@ export class EnhancedLogger extends EventEmitter {
    * 检查日志级别是否应该输出
    */
   shouldLog(level) {
+    if (level === 'DEBUG') {
+      return Boolean(global.debug || process.env.NODE_ENV === 'development' || this.config.level === 'DEBUG')
+    }
     const currentLevel = this.config.levels[this.config.level] || 3
     const messageLevel = this.config.levels[level] || 0
     return messageLevel <= currentLevel
@@ -359,8 +362,7 @@ export class EnhancedLogger extends EventEmitter {
    * 调试日志
    */
   debug(msg, extra = {}) {
-    // 检查全局 debug 标志（保持原有行为）
-    if (global.debug || process.env.NODE_ENV === 'development') {
+    if (this.shouldLog('DEBUG')) {
       this.log('DEBUG', msg, extra)
     }
   }
