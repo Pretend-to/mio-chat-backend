@@ -1,0 +1,9 @@
+{
+  "name": "channel-manager-plugin",
+  "version": "1.0.0",
+  "description": "Internal plugin for autonomous channel and agent profile self-management by LLM",
+  "type": "module",
+  "main": "index.js",
+  "author": "mio",
+  "hidden": true
+}
