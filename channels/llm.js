@@ -258,6 +258,10 @@ function assembleStructuredContent(chunks) {
       })
     }
   }
+
+  flushReason()
+  flushText()
+
   return content
 }
 
@@ -382,12 +386,6 @@ export function createBackendLlm(opts = {}) {
 
       messages.push({ content: latestContent, role: 'user' })
 
-      // 详细打印消息组装诊断日志
-      const log = ctx.channel?.log || console
-      log.info?.(`[${ctx.channel?.channelType || 'channel'}] 🧩 消息链拼装完成: 总消息数=${messages.length} (System段数=${systemSections.length}, 历史轮数=${chatHistoryCount}, 当前输入="${ctx.text.slice(0, 30)}")`)
-      log.info?.(`[${ctx.channel?.channelType || 'channel'}] 🧠 记忆载入详情: Soul=${ctx.soul ? '已设定' : '无'}, GlobalMem=${ctx.globalMem ? `${ctx.globalMem.length}字` : '无'}, Crystal=${ctx.crystal ? `${ctx.crystal.length}字` : '无'}`)
-
-
       // 4. 确定使用的 provider 与 model
       const targetProvider = ctx.provider || (typeof svc._getDefaultProvider === 'function' ? svc._getDefaultProvider() : undefined)
       let targetModel = ctx.model || null
@@ -440,6 +438,11 @@ export function createBackendLlm(opts = {}) {
       const finalTools = (Array.isArray(savedTools) && savedTools.length > 0) ? savedTools : defaultChannelTools
       const savedEffort = ctx.memory ? await ctx.memory.getAgentMeta('reasoning_effort', 0) : 0
       const chatParams = (typeof savedEffort === 'number' && savedEffort > 0) ? { reasoning_effort: savedEffort } : {}
+
+      // 详细打印消息组装诊断日志（包含工具数、思考强度等关键信息）
+      const log = ctx.channel?.log || console
+      log.info?.(`[${ctx.channel?.channelType || 'channel'}] 🧩 消息链拼装完成: 总消息数=${messages.length} (System段数=${systemSections.length}, 历史轮数=${chatHistoryCount}, 注入工具数=${finalTools.length}, 思考强度=${savedEffort}, 当前输入="${ctx.text.slice(0, 30)}")`)
+      log.info?.(`[${ctx.channel?.channelType || 'channel'}] 🧠 记忆载入详情: Soul=${ctx.soul ? '已设定' : '无'}, GlobalMem=${ctx.globalMem ? `${ctx.globalMem.length}字` : '无'}, Crystal=${ctx.crystal ? `${ctx.crystal.length}字` : '无'}`)
 
       const event = {
         body: {

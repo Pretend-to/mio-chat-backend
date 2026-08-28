@@ -512,8 +512,17 @@ export class BaseChannel {
 
         // Assistant 消息落盘（写入包含 tool_call, reason, text 的标准结构化 content 节点数组）
         const assistantContent = (Array.isArray(reply?.content) && reply.content.length > 0)
-          ? reply.content
+          ? [...reply.content]
           : [{ data: { text: fullAssistantReply }, type: 'text' }]
+
+        // 双重保障：若 reply.content 中只有 reason/tool_call 而遗漏了最终文本，则补齐 text 节点
+        const hasTextNode = assistantContent.some(c => c.type === 'text' && c.data?.text?.trim())
+        if (!hasTextNode && fullAssistantReply?.trim()) {
+          assistantContent.push({
+            data: { text: fullAssistantReply.trim() },
+            type: 'text',
+          })
+        }
 
         const assistantMsg = {
           content: assistantContent,
