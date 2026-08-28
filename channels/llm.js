@@ -343,7 +343,7 @@ export function createBackendLlm(opts = {}) {
         messages.push(...convertedLLMMessages)
       }
 
-      // 3. 当前最新用户输入
+      // 3. 当前最新用户输入 (纯净原始输入，保障多轮历史与当前输入 100% 幂等稳定)
       let textContent = ctx.text || ''
       const imageList = Array.isArray(ctx.images) ? [...ctx.images] : []
 

@@ -59,16 +59,7 @@ export class WechatChannel extends BaseChannel {
    * 4. 复杂任务或工具调用时，严禁长时间静默，穿插阶段性进展输出。
    * 5. 配额防爆：感知 24h 10 条限额预警，自动压制分条拆分。
    */
-  getChannelPrompt(ctx = {}) {
-    const contextToken = ctx.contextToken || null
-    const currentUsage = contextToken ? (this._tokenQuotaMap.get(contextToken) || 0) : 0
-    const remaining = Math.max(0, 10 - currentUsage)
-
-    let quotaNotice = ''
-    if (contextToken && remaining <= 4) {
-      quotaNotice = `\n⚠️【微信 24h 通道配额紧缺预警】：当前凭证已累计回复 ${currentUsage}/10 条消息（仅剩 ${remaining} 次配额）！请严禁使用 <msg> / <break/> 切分为多条气泡！必须将你的解答、进度与结论合并在 1 条消息内一次性输出！`
-    }
-
+  getChannelPrompt() {
     return [
       '【微信渠道交互与消息风格规范】',
       '1. 你正在通过【微信】直接与用户私聊，请遵循真实人类微信聊天习惯：',
@@ -82,8 +73,7 @@ export class WechatChannel extends BaseChannel {
       '     <msg>好嘞，正在帮你画一张可爱的自画像，可能需要十几秒～</msg>',
       '     (随后执行 draw 工具)',
       '     <msg>画好啦！你看看喜欢不～</msg>',
-      quotaNotice,
-    ].filter(Boolean).join('\n')
+    ].join('\n')
   }
 
   /**
