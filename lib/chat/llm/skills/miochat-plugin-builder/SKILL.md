@@ -53,7 +53,86 @@ export default class MyPlugin extends Plugin {
 }
 ```
 
-### 2. Developing Hooks (`hooks/`)
+### 2. Developing Tools (`tools/`)
+Tools represent actions and functions available to the LLM agent. Place files inheriting `MioFunction` in the `tools/` directory.
+
+#### Basic Tool Example
+```javascript
+import { MioFunction } from '../../../lib/function.js'
+
+export default class MyTool extends MioFunction {
+  constructor() {
+    super({
+      name: 'my_tool',
+      description: 'Tool description for LLM system prompt',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Search keyword' }
+        },
+        required: ['query']
+      }
+    })
+    this.func = this.execute.bind(this)
+  }
+
+  async execute(e) {
+    const { query } = e.params
+    return { success: true, result: `Searched for ${query}` }
+  }
+}
+```
+
+#### Dynamic Schema & Polymorphism (`getDescription` / `getParameters`)
+`MioFunction` allows overriding `getDescription(context)` and `getParameters(type, context)` to dynamically tailor prompt instructions and parameters based on the execution context (e.g. Group Chat vs Single Chat vs specific External Channels):
+
+```javascript
+export default class ContextAwareTool extends MioFunction {
+  constructor() {
+    super({
+      name: 'smart_profile',
+      description: 'Single chat default instructions',
+      parameters: {
+        type: 'object',
+        properties: { prompt: { type: 'string' } },
+        required: ['prompt']
+      }
+    })
+    this.func = this.execute.bind(this)
+  }
+
+  // Dynamic description based on context (e.g., group chat vs single chat)
+  getDescription(context = null) {
+    if (context?.isGroup || context?.metaData?.memberId) {
+      return 'Group chat instructions: manage role title and duties in the group...'
+    }
+    return this.description // Fallback to default
+  }
+
+  // Dynamic parameters schema based on context
+  getParameters(type = null, context = null) {
+    if (context?.isGroup || context?.metaData?.memberId) {
+      return {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Group member title' },
+          intro: { type: 'string', description: 'Group member duties' },
+          prompt: { type: 'string', description: 'Personal prompt instructions' }
+        },
+        required: ['prompt']
+      }
+    }
+    return this.parameters // 100% backwards compatible fallback
+  }
+
+  async execute(e) {
+    const { prompt, title, intro } = e.params
+    return { success: true, prompt, title, intro }
+  }
+}
+```
+
+### 3. Developing Hooks (`hooks/`)
 Hooks allow you to intercept tool execution. Just place files inheriting `BaseHook` in the `hooks/` directory.
 
 ```javascript
@@ -85,7 +164,7 @@ export default class MyRateLimitHook extends BaseHook {
 > **Detailed Hook Points**:
 > For a full list of system-wide hook points (including `TOOL_`, `LLM_`, and `PLUGIN_` lifecycle hooks) and advanced AOP design patterns, please refer to the core documentation: [hooks.md](file:///home/mio/servers/mio-chat-backend/docs/core/hooks.md).
 
-### 3. Using Presets (`presets/`)
+### 4. Using Presets (`presets/`)
 Any `.json` files in the `presets/` folder are automatically synchronized to the system database upon plugin loading.
 
 **Preset JSON Structure:**

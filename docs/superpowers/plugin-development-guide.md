@@ -69,6 +69,55 @@ export default class MyTool extends MioFunction {
 }
 ```
 
+#### 2.2.1 动态 Schema 与多态感知 (覆盖 getParameters / getDescription)
+`MioFunction` 提供了 `getDescription(context)` 与 `getParameters(type, context)` 方法。开发者可重写它们，使工具能够根据当前的会话环境（单聊、群聊、外部渠道）动态暴露不同的描述与入参结构：
+
+```js
+import { MioFunction } from '../../lib/function.js';
+
+export default class ContextAwareTool extends MioFunction {
+  constructor() {
+    super({
+      name: 'smart_profile',
+      description: '单聊默认说明',
+      parameters: {
+        type: 'object',
+        properties: { prompt: { type: 'string' } }
+      }
+    });
+  }
+
+  // 动态描述：群聊与单聊区分
+  getDescription(context = null) {
+    if (context?.isGroup || context?.metaData?.memberId) {
+      return '群聊场景专用说明：支持更新你在群名单中的角色头衔与职责...';
+    }
+    return this.description;
+  }
+
+  // 动态 Schema：按需追加群聊专用字段
+  getParameters(type = null, context = null) {
+    if (context?.isGroup || context?.metaData?.memberId) {
+      return {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: '群内头衔' },
+          intro: { type: 'string', description: '群内职责' },
+          prompt: { type: 'string', description: '人设 Prompt' }
+        }
+      };
+    }
+    return this.parameters;
+  }
+
+  async func(e) {
+    const { prompt, title, intro } = e.params;
+    // e.metaData / e.body / e.client 均可在执行期访问
+    return { success: true };
+  }
+}
+```
+
 ### 2.3 开发钩子 (hooks/)
 钩子允许你在工具执行的各个生命周期注入逻辑。只需在 `hooks/` 目录下创建文件，系统会自动加载。
 

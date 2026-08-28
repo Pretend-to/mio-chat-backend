@@ -23,6 +23,16 @@ class MioFunction {
     // return any object as the result
   }
 
+  // Dynamic description polymorphism (can be overridden to customize Prompt per context, e.g. group chat)
+  getDescription(context = null) {
+    return this.description;
+  }
+
+  // Dynamic parameters polymorphism (can be overridden to customize JSON Schema per context)
+  getParameters(type = null, context = null) {
+    return this.parameters;
+  }
+
   // Get a readable display name for this tool based on its arguments
   getDisplayName(params) {
     return null;

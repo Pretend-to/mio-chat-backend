@@ -84,6 +84,55 @@ export default class MyTool extends MioFunction {
 }
 ```
 
+### 5. 创建情境自适应/多态工具 (覆盖 getParameters / getDescription)
+```javascript
+import { MioFunction } from '../../../function.js'
+
+export default class ContextAwareTool extends MioFunction {
+  constructor() {
+    super({
+      name: 'contextTool',
+      description: '默认单聊说明',
+      parameters: {
+        type: 'object',
+        properties: { text: { type: 'string' } },
+        required: ['text']
+      }
+    })
+    this.func = this.execute
+  }
+
+  // 动态描述 (根据群聊/单聊/渠道上下文自适应)
+  getDescription(context = null) {
+    if (context?.isGroup || context?.metaData?.memberId) {
+      return '群聊场景专属描述：管理群成员职责与分工...'
+    }
+    return this.description
+  }
+
+  // 动态 Schema (根据上下文自适应暴露不同的字段)
+  getParameters(type = null, context = null) {
+    if (context?.isGroup || context?.metaData?.memberId) {
+      return {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: '群内头衔' },
+          intro: { type: 'string', description: '群内职责介绍' },
+          text: { type: 'string', description: '内容' }
+        },
+        required: ['text']
+      }
+    }
+    return this.parameters
+  }
+
+  async execute(e) {
+    const { text, title, intro } = e.params
+    return { success: true, text, title, intro }
+  }
+}
+```
+
 ## 常用代码片段
 
 ### 获取插件配置

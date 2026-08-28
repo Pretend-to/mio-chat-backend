@@ -35,21 +35,94 @@ export default class MyPlugin extends Plugin {
 ```
 
 ### 3.2 编写工具 (`tools/`)
-工具是插件对外提供的“能力”。
+工具是插件对外提供的“能力”，继承自 `MioFunction`。
+
+#### 1) 基础工具定义
 ```javascript
-import MioFunction from '../../../lib/function.js';
+import { MioFunction } from '../../../lib/function.js';
 
 export default class MyTool extends MioFunction {
   constructor() {
     super({
       name: 'get_weather',
       description: '获取指定城市的天气信息',
-      parameters: { /* JSON Schema */ }
+      parameters: {
+        type: 'object',
+        properties: {
+          city: { type: 'string', description: '城市名称' }
+        },
+        required: ['city']
+      }
     });
+    this.func = this.execute.bind(this);
   }
 
-  async func({ params }) {
-    return { weather: 'Sunny', temp: 25 };
+  async execute(e) {
+    const { city } = e.params;
+    return { weather: 'Sunny', temp: 25, city };
+  }
+}
+```
+
+#### 2) 动态 Schema 与多态感知 (进阶特性)
+`MioFunction` 支持根据**当前会话上下文（单聊、群聊、不同渠道/平台）**动态调整工具的 Description 与入参 Schema。通过覆盖 `getDescription(context)` 与 `getParameters(type, context)` 实现多态：
+
+```javascript
+import { MioFunction } from '../../../lib/function.js';
+
+export default class ContextAwareTool extends MioFunction {
+  constructor() {
+    super({
+      name: 'my_tool',
+      description: '单聊默认工具说明',
+      parameters: {
+        type: 'object',
+        properties: {
+          content: { type: 'string', description: '内容' }
+        },
+        required: ['content']
+      }
+    });
+    this.func = this.execute.bind(this);
+  }
+
+  /**
+   * 动态返回工具描述（Prompt 指引）
+   * @param {Object|null} context - 请求上下文（包含 platform, isGroup, metaData 等）
+   */
+  getDescription(context = null) {
+    if (context?.isGroup || context?.platform === 'group' || context?.metaData?.memberId) {
+      return '在群聊场景下的定制说明：管理当前群成员的职责与协同设定...';
+    }
+    return this.description; // 回退默认描述
+  }
+
+  /**
+   * 动态返回入参 JSON Schema
+   * @param {string|null} type - 目标模型平台（openai, gemini, claude 等）
+   * @param {Object|null} context - 请求上下文
+   */
+  getParameters(type = null, context = null) {
+    if (context?.isGroup || context?.platform === 'group' || context?.metaData?.memberId) {
+      return {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: '群内头衔' },
+          intro: { type: 'string', description: '群内专长与职责介绍' },
+          content: { type: 'string', description: '内容' }
+        },
+        required: ['content']
+      };
+    }
+    return this.parameters; // 回退默认参数定义（保持 100% 向后兼容）
+  }
+
+  async execute(e) {
+    // e.metaData: { contactorId, memberId, memberName, ... }
+    // e.body: 请求体
+    // e.client: Socket.IO 客户端连接（可调用 sendSystemMessage 等）
+    const { content, title, intro } = e.params;
+    return { success: true, message: '操作完成' };
   }
 }
 ```
