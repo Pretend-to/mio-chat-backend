@@ -426,7 +426,18 @@ export class BaseChannel {
                 url: imgUrl,
               })
             } catch (e) {
-              this.log?.error?.(`[${this.channelType}] 原生图片发送失败: ${e.message}`)
+              this.log?.warn?.(`[${this.channelType}] ⚠️ 原生图片直传失败 (${e.message})，自动平滑降级为图文通知下发`)
+              if (imgUrl && (imgUrl.startsWith('http://') || imgUrl.startsWith('https://') || imgUrl.startsWith('/f/gen/') || imgUrl.startsWith('/f/up/'))) {
+                const noticeText = `🖼️ [图片已生成]\n查看原图: ${imgUrl}`
+                emittedBlocks.push(noticeText)
+                const payload = this.buildSendMsg({
+                  contextToken: ctx.contextToken,
+                  fromBot: this.client.botId,
+                  text: noticeText,
+                  to: ctx.from,
+                })
+                await this.doSendMessage(payload).catch(() => {})
+              }
             }
             // 微小等待让微信服务端消息完全完成入库序列
             await new Promise((r) => setTimeout(r, 100))

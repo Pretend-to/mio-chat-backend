@@ -61,7 +61,7 @@ export class SlashCommandHandler {
 
       case 'tools': {
         const defaultChannelTools = [
-          'memory', 'search', 'draw', 'vision', 'parse', 'cron', 'toolsmanager',
+          'memory', 'search', 'draw', 'vision', 'parse', 'cron', 'toolsmanager', 'share',
           'Skill', 'reload_skills',
           'bash', 'bash_input', 'read_screen', 'wait', 'shell_policy',
           'channel_profile', 'channel_session', 'channel_model',

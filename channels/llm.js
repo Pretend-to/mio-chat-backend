@@ -400,7 +400,7 @@ export function createBackendLlm(opts = {}) {
         }
       }
 
-      const emittedImages = new Set()
+      const emittedRenders = new Set()
       const collectedChunks = []
 
       // 5. 构造虚拟 Event
@@ -425,7 +425,7 @@ export function createBackendLlm(opts = {}) {
 
       const defaultChannelTools = [
         // ai-plugin
-        'memory', 'search', 'draw', 'vision', 'parse', 'cron', 'toolsmanager',
+        'memory', 'search', 'draw', 'vision', 'parse', 'cron', 'toolsmanager', 'share',
         // skill-plugin
         'Skill', 'reload_skills',
         // terminal-pty
@@ -554,7 +554,7 @@ export function createBackendLlm(opts = {}) {
                 job.currentTool = null
               }
             }
-            // 严格以 extraRender（如 setOuterRender / setExtraRender）作为富媒体渲染的唯一协议契约
+            // 严格以 extraRender（如 setOuterRender / setExtraRender）作为富媒体/状态渲染的契约
             if (data.type === 'toolCall' || data.type === 'extraRender') {
               const toolPayload = data.content || data
               const renders = [
@@ -562,12 +562,21 @@ export function createBackendLlm(opts = {}) {
                 ...(Array.isArray(data.extraRender) ? data.extraRender : (data.extraRender ? [data.extraRender] : [])),
               ]
 
-              // 仅扫描 extraRender 中的规范渲染项
+              // 扫描 extraRender 中的规范渲染项并实时推送到渠道
               for (const r of renders) {
-                if (r?.type === 'image' && r.url && !emittedImages.has(r.url)) {
-                  emittedImages.add(r.url)
+                if (!r) continue
+                const renderKey = r.url || r.text || (r.title ? `${r.title}:${r.description}` : JSON.stringify(r))
+                if (emittedRenders.has(renderKey)) continue
+                emittedRenders.add(renderKey)
+
+                if (r.type === 'image' && r.url) {
                   if (typeof ctx.onEmitTextBlock === 'function') {
                     await ctx.onEmitTextBlock('', { extraRender: r, image: r.url })
+                  }
+                } else if (r.type === 'text' || r.type === 'notice' || r.type === 'alert' || r.type === 'link' || r.type === 'card') {
+                  const notice = r.text || (r.title ? `[${r.title}] ${r.description || ''}` : r.description)
+                  if (notice && typeof ctx.onEmitTextBlock === 'function') {
+                    await ctx.onEmitTextBlock(notice, { extraRender: r })
                   }
                 }
               }

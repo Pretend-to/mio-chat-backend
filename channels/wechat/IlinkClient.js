@@ -334,10 +334,11 @@ export class IlinkClient {
       throw new Error(`获取上传 URL 失败: ${JSON.stringify(uploadInfo)}`)
     }
 
-    // 上传二进制密文到腾讯 novac2c CDN（必须携带明确的 Content-Length，支持重试）
+    // 上传二进制密文到腾讯 novac2c CDN（快速失败：5s 超时，2 次尝试，失败立即平滑降级）
     let uploadRes = null
     let lastErr = null
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    const UPLOAD_TIMEOUT_MS = 5_000
+    for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         uploadRes = await fetch(cdnUrl, {
           body: ciphertext,
@@ -347,7 +348,7 @@ export class IlinkClient {
             'User-Agent': 'MioChat-iLink/1.0',
           },
           method: 'POST',
-          signal: AbortSignal.timeout(DEFAULT_API_TIMEOUT_MS),
+          signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
         })
         if (uploadRes.ok) {
           break
@@ -357,8 +358,8 @@ export class IlinkClient {
       } catch (err) {
         lastErr = err
       }
-      if (attempt < 3) {
-        await sleep(1000 * attempt)
+      if (attempt < 2) {
+        await sleep(500)
       }
     }
 
