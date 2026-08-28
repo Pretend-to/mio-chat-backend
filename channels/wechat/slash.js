@@ -76,8 +76,9 @@ export class SlashCommandHandler {
         const enabledSet = new Set(currentTools)
 
         if (!arg || arg === 'ls' || arg === 'list') {
+          const allTools = Array.from(new Set([...defaultChannelTools, ...currentTools]))
           const lines = ['【工具状态管理】', `当前已激活工具 (共 ${enabledSet.size} 个):`]
-          for (const t of defaultChannelTools) {
+          for (const t of allTools) {
             const status = enabledSet.has(t) ? '✅ [已启用]' : '❌ [已禁用]'
             lines.push(`  ${status} ${t}`)
           }
