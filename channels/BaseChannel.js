@@ -477,8 +477,8 @@ export class BaseChannel {
       // 等待发送队列全部串行发送完毕
       await sendQueue
 
-      // 4. 会话持久化落盘
-      if (emittedBlocks.length > 0) {
+      // 4. 会话持久化落盘（包含完整 Tool Calls、参数、运行结果、思考链以及文本节点）
+      if (emittedBlocks.length > 0 || (reply?.content && reply.content.length > 0)) {
         const fullAssistantReply = emittedBlocks.join('\n\n')
         let finalUserText = text
         const imgList = ctx.rawMsg?.images || ctx.images || null
@@ -489,10 +489,30 @@ export class BaseChannel {
             }
           }
         }
-        await this.memory.appendToChat(sid, { from_user_id: ctx.from, role: 'user', text: finalUserText })
-        const updatedSession = await this.memory.appendToChat(sid, { role: 'assistant', text: fullAssistantReply })
+        // 用户消息落盘
+        const userMsg = {
+          content: [{ data: { text: finalUserText }, type: 'text' }],
+          from_user_id: ctx.from,
+          role: 'user',
+          text: finalUserText,
+        }
+        await this.memory.appendToChat(sid, userMsg)
+
+        // Assistant 消息落盘（优先写入包含 tool_call, reason, text 的完整结构化 content 节点数组）
+        const assistantContent = (Array.isArray(reply?.content) && reply.content.length > 0)
+          ? reply.content
+          : [{ data: { text: fullAssistantReply }, type: 'text' }]
+
+        const assistantMsg = {
+          content: assistantContent,
+          role: 'assistant',
+          text: fullAssistantReply,
+        }
+
+        const updatedSession = await this.memory.appendToChat(sid, assistantMsg)
         const currentCount = updatedSession?.chat?.length || 0
-        this.log?.info?.(`[${this.channelType}] 💾 会话历史已成功落盘 | 会话: ${sid} | 本轮交互已追加 | 累计条数: ${currentCount} 条`)
+        const toolCallCount = assistantContent.filter(c => c.type === 'tool_call').length
+        this.log?.info?.(`[${this.channelType}] 💾 会话历史已成功落盘 | 会话: ${sid} | 本轮交互已追加 (含 ${toolCallCount} 个 ToolCalls) | 累计条数: ${currentCount} 条`)
         if (reply?.crystal) {
           await this.memory.setCrystal(sid, reply.crystal)
           this.log?.info?.(`[${this.channelType}] 💎 会话结晶已更新 | 会话: ${sid} | 结晶长度: ${reply.crystal.length} 字符`)

@@ -6,6 +6,7 @@
  * 2. 默认装配注入全量核心工具集（ai-plugin, skill-plugin, terminal-pty, channel-manager-plugin）
  * 3. 自动将 SkillService 中的技能目录注册注入到 System Prompt (<skill_registry>)
  * 4. 监听底层流式输出并利用状态机将完成的文本块和原生媒体 (图片等) 实时推送给渠道
+ * 5. 精密装配并还原历史消息中的 Tool Calls（ID、入参、运行结果）及思考链，防止多轮对话工具依赖断裂
  */
 
 import skillService from '../lib/chat/llm/services/SkillService.js'
@@ -36,6 +37,170 @@ function parseMultimodalContent(text) {
     parts.push({ type: 'text', text: rest })
   }
   return parts.length > 0 ? parts : text
+}
+
+/**
+ * 渠道历史消息 (ctx.chat) 精密转换为大模型标准 messages 数组（支持 Tool Calls, Reasoning, Tool Results）
+ */
+function convertChatHistoryToLLMMessages(chatHistory) {
+  const msgs = []
+  if (!Array.isArray(chatHistory)) return msgs
+
+  for (const item of chatHistory) {
+    if (!item) continue
+
+    // 1. 如果包含结构化 content 数组（与 TaskRunner/前端格式一致）
+    if (Array.isArray(item.content)) {
+      if (item.role === 'system') {
+        const textContent = item.content.filter(c => c.type === 'text').map(c => c.data?.text || '').join('')
+        msgs.push({ content: textContent, role: 'system' })
+      } else if (item.role === 'user') {
+        const textContent = item.content.filter(c => c.type === 'text').map(c => c.data?.text || '').join('')
+        msgs.push({ content: parseMultimodalContent(textContent || item.text || ''), role: 'user' })
+      } else if (item.role === 'assistant' || item.role === 'other') {
+        let currentAssistant = null
+        let pendingReasoning = ''
+        let pendingToolMessages = []
+
+        const flushAssistant = () => {
+          if (currentAssistant) {
+            if (pendingReasoning) {
+              currentAssistant.reasoning_content = pendingReasoning
+              pendingReasoning = ''
+            }
+            if (!currentAssistant.content && (!currentAssistant.tool_calls || currentAssistant.tool_calls.length === 0)) {
+              currentAssistant.content = ''
+            }
+            msgs.push(currentAssistant)
+            currentAssistant = null
+          }
+          if (pendingToolMessages.length > 0) {
+            msgs.push(...pendingToolMessages)
+            pendingToolMessages = []
+          }
+        }
+
+        item.content.forEach((elm) => {
+          if (elm.type === 'reason') {
+            if (currentAssistant && currentAssistant.tool_calls && currentAssistant.tool_calls.length > 0) {
+              flushAssistant()
+            }
+            pendingReasoning += elm.data?.text || ''
+          } else if (elm.type === 'text') {
+            if (currentAssistant && currentAssistant.tool_calls && currentAssistant.tool_calls.length > 0) {
+              flushAssistant()
+            }
+            if (!currentAssistant) {
+              currentAssistant = { content: '', role: 'assistant' }
+            }
+            currentAssistant.content = (currentAssistant.content || '') + (elm.data?.text || '')
+          } else if (elm.type === 'tool_call') {
+            if (!currentAssistant) {
+              currentAssistant = { role: 'assistant' }
+            }
+            if (!currentAssistant.tool_calls) {
+              currentAssistant.tool_calls = []
+            }
+            const args = elm.data.arguments || elm.data.parameters || ''
+            const callId = elm.data.id || `call_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+            currentAssistant.tool_calls.push({
+              function: {
+                arguments: typeof args === 'string' ? args : JSON.stringify(args || {}),
+                name: elm.data.name,
+              },
+              id: callId,
+              type: 'function',
+            })
+
+            pendingToolMessages.push({
+              content: typeof elm.data.result === 'string' ? elm.data.result : JSON.stringify(elm.data.result || 'Success'),
+              name: elm.data.name,
+              role: 'tool',
+              tool_call_id: callId,
+            })
+          }
+        })
+
+        flushAssistant()
+
+        if (pendingReasoning) {
+          msgs.push({
+            content: '',
+            reasoning_content: pendingReasoning,
+            role: 'assistant',
+          })
+        }
+      } else if (item.role === 'tool') {
+        msgs.push(item)
+      }
+    } else if (item.tool_calls || item.role === 'tool') {
+      // 2. 如果本身已经是标准的 OpenAI 格式消息节点
+      msgs.push(item)
+    } else if (item.text || item.content) {
+      // 3. 兜底降级：老的简单 { role, text } 格式
+      const textContent = typeof item.content === 'string' ? item.content : (item.text || '')
+      if (textContent) {
+        const role = item.role === 'assistant' ? 'assistant' : (item.role === 'system' ? 'system' : 'user')
+        msgs.push({ content: parseMultimodalContent(textContent), role })
+      }
+    }
+  }
+  return msgs
+}
+
+/**
+ * 将本轮运行接收到的所有流式 chunks 转为结构化 content 节点数组，用于落盘
+ */
+function assembleStructuredContent(chunks) {
+  const content = []
+  if (!Array.isArray(chunks) || chunks.length === 0) return content
+
+  const now = Date.now()
+  for (const chunk of chunks) {
+    if (!chunk) continue
+    if (chunk.type === 'reason') {
+      content.push({
+        data: {
+          duration: chunk.data?.duration ?? 0,
+          startTime: chunk.data?.startTime || now,
+          text: chunk.data?.text ?? '',
+        },
+        type: 'reason',
+      })
+    } else if (chunk.type === 'content') {
+      content.push({
+        data: { text: chunk.content },
+        type: 'text',
+      })
+    } else if (chunk.type === 'toolCall') {
+      let callStatus = 'waiting'
+      if (chunk.content?.result) {
+        callStatus = 'done'
+      } else if (chunk.content?.action === 'running' || chunk.content?.action === 'pending') {
+        callStatus = 'running'
+      }
+
+      const toolCallData = {
+        ...chunk.content,
+        arguments: chunk.content?.arguments || chunk.content?.parameters || '',
+        status: callStatus,
+      }
+
+      content.push({
+        data: toolCallData,
+        type: 'tool_call',
+      })
+    } else if (chunk.type === 'crystallize') {
+      content.push({
+        data: {
+          status: chunk.content?.status || 'finished',
+          summary: chunk.content?.summary || '',
+        },
+        type: 'crystallize_event',
+      })
+    }
+  }
+  return content
 }
 
 export function createBackendLlm(opts = {}) {
@@ -106,14 +271,11 @@ export function createBackendLlm(opts = {}) {
         role: 'system',
       })
 
-      // 2. 带入多轮会话历史 (chat: [{ role, text }])
+      // 2. 带入多轮会话历史 (精准支持 Tool Calls / Tool Results / Reasoning 消息还原)
       const chatHistoryCount = Array.isArray(ctx.chat) ? ctx.chat.length : 0
-      if (Array.isArray(ctx.chat)) {
-        for (const item of ctx.chat) {
-          if (!item || !item.text) continue
-          const role = item.role === 'assistant' ? 'assistant' : 'user'
-          messages.push({ content: parseMultimodalContent(item.text), role })
-        }
+      if (Array.isArray(ctx.chat) && ctx.chat.length > 0) {
+        const convertedLLMMessages = convertChatHistoryToLLMMessages(ctx.chat)
+        messages.push(...convertedLLMMessages)
       }
 
       // 3. 当前最新用户输入
@@ -145,12 +307,12 @@ export function createBackendLlm(opts = {}) {
       if (imageList.length > 0) {
         // 与前端结构一致：先 image_url 对象列表，再 text 对象
         const parts = imageList.map(url => ({
-          type: 'image_url',
-          image_url: { url }
+          image_url: { url },
+          type: 'image_url'
         }))
         parts.push({
-          type: 'text',
-          text: textContent || '[图片]'
+          text: textContent || '[图片]',
+          type: 'text'
         })
         latestContent = parts
       } else {
@@ -180,6 +342,7 @@ export function createBackendLlm(opts = {}) {
       }
 
       const emittedImages = new Set()
+      const collectedChunks = []
 
       // 5. 构造虚拟 Event
       let currentTextBlock = ''
@@ -189,7 +352,6 @@ export function createBackendLlm(opts = {}) {
       /**
        * 将累积的完整文本块原样交给渠道，由渠道适配器（如 WechatChannel.splitTextToSegments）
        * 按自身协议（<msg>/<break/>）统一切分，再经伪队列逐条发送。
-       * 该层不再解析任何分隔符，避免 llm 层与 channel 层双份切分导致重复发送。
        */
       const flushTextBlock = async () => {
         let textToSend = currentTextBlock.trim()
@@ -250,14 +412,20 @@ export function createBackendLlm(opts = {}) {
           removeListener: () => {},
           sendOpenaiMessage: () => {},
         },
+        emitInteraction: () => true,
+        error: (err) => {
+          streamError = err
+        },
+        onAbort: () => {},
+        pending: () => {},
         registerInteraction: async (interactionId, callback) => {
           if (ctx.channel && typeof ctx.channel.requestUserConfirmation === 'function') {
             try {
               const approved = await ctx.channel.requestUserConfirmation({
-                title: '终端/敏感命令执行审批',
+                contextToken: ctx.contextToken,
                 description: `LLM 正在申请执行命令，是否授权？`,
                 from: ctx.from,
-                contextToken: ctx.contextToken,
+                title: '终端/敏感命令执行审批',
               })
               callback({ approved })
             } catch (err) {
@@ -267,17 +435,14 @@ export function createBackendLlm(opts = {}) {
             callback({ approved: true })
           }
         },
-        unregisterInteraction: () => true,
-        emitInteraction: () => true,
-        error: (err) => {
-          streamError = err
-        },
-        onAbort: () => {},
-        pending: () => {},
         reply: () => {},
         requestId: `${ctx.channel?.channelType || 'channel'}_${ctx.sessionId || Date.now()}_${Date.now()}`,
+        unregisterInteraction: () => true,
         update: async (data) => {
           if (!data) return
+          // 收集全量流式 chunk 用于完美组装结构化落盘数据
+          collectedChunks.push(data)
+
           if (data.type === 'content') {
             currentBlockType = 'text'
             if (typeof data.content === 'string') {
@@ -288,9 +453,6 @@ export function createBackendLlm(opts = {}) {
               const job = ctx.channel.activeJobs.get(ctx.sessionId)
               job.lastProgressText = currentTextBlock.slice(0, 100)
             }
-            // 不做实时 <msg>/<break/> 切分：文本统一在 flush 边界整块交给渠道，
-            // 由渠道适配器（WechatChannel.splitTextToSegments）统一切分后经伪队列发送，
-            // 避免 llm 层与 channel 层双份解析导致重复发送。
           } else {
             if (currentBlockType === 'text') {
               await flushTextBlock()
@@ -372,9 +534,18 @@ export function createBackendLlm(opts = {}) {
       }
 
       await flushTextBlock()
-      return { completed: true }
+
+      // 组装完整的结构化 content 节点数组用于 session 持久化落盘
+      const structuredContent = assembleStructuredContent(collectedChunks)
+
+      return {
+        completed: true,
+        content: structuredContent,
+        rawMessages: event.body.messages,
+      }
     },
   }
 }
 
 export default { createBackendLlm, createEchoLlm }
+
