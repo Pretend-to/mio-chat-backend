@@ -1,5 +1,7 @@
 import crypto from 'node:crypto'
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
 /**
  * IlinkClient — 微信 ClawBot / iLink 协议层客户端（直连，不依赖 OpenClaw）
  *
@@ -266,7 +268,7 @@ export class IlinkClient {
    */
   async getUploadUrl({ filekey, mediaType = 1, toUserId = this.userId, rawSize, rawFileMd5, aesKeyHex, fileSize } = {}) {
     if (!toUserId) throw new Error('getUploadUrl requires to_user_id')
-    return await this._post(
+    const resp = await this._post(
       'ilink/bot/getuploadurl',
       {
         aeskey: aesKeyHex,
@@ -281,6 +283,10 @@ export class IlinkClient {
       },
       { label: 'getUploadUrl', timeoutMs: DEFAULT_API_TIMEOUT_MS },
     )
+    if (resp && resp.ret && resp.ret !== 0) {
+      throw new Error(`getUploadUrl 失败: ret=${resp.ret} errmsg=${resp.errmsg ?? '(none)'}`)
+    }
+    return resp
   }
 
   /**
@@ -295,13 +301,13 @@ export class IlinkClient {
   async uploadMedia(buffer, { mediaType = 1, toUserId = this.userId } = {}) {
     const rawSize = buffer.length
     const rawFileMd5 = crypto.createHash('md5').update(buffer).digest('hex')
-    const fileSizeCiphertext = aesEcbPaddedSize(rawSize)
     const filekey = crypto.randomBytes(16).toString('hex')
     const aesKey = crypto.randomBytes(16)
     const aesKeyHex = aesKey.toString('hex')
 
     // 微信官方标准：AES-128-ECB 加密
     const ciphertext = encryptAesEcb(buffer, aesKey)
+    const fileSizeCiphertext = ciphertext.length
 
     const uploadInfo = await this.getUploadUrl({
       aesKeyHex,
@@ -317,6 +323,9 @@ export class IlinkClient {
     const uploadParam = uploadInfo?.upload_param
 
     let cdnUrl = uploadFullUrl
+    if (cdnUrl && cdnUrl.includes('.cdn.weixin.qq.com') && cdnUrl.startsWith('http://')) {
+      cdnUrl = cdnUrl.replace('http://', 'https://')
+    }
     if (!cdnUrl && uploadParam) {
       cdnUrl = `${CDN_BASE_URL}/upload?encrypted_query_param=${encodeURIComponent(uploadParam)}&filekey=${encodeURIComponent(filekey)}`
     }
@@ -325,25 +334,43 @@ export class IlinkClient {
       throw new Error(`获取上传 URL 失败: ${JSON.stringify(uploadInfo)}`)
     }
 
-    // 上传二进制密文到腾讯 novac2c CDN
-    const uploadRes = await fetch(cdnUrl, {
-      body: ciphertext,
-      headers: {
-        'Content-Type': 'application/octet-stream',
-      },
-      method: 'POST',
-    })
+    // 上传二进制密文到腾讯 novac2c CDN（必须携带明确的 Content-Length，支持重试）
+    let uploadRes = null
+    let lastErr = null
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        uploadRes = await fetch(cdnUrl, {
+          body: ciphertext,
+          headers: {
+            'Content-Length': String(ciphertext.length),
+            'Content-Type': 'application/octet-stream',
+            'User-Agent': 'MioChat-iLink/1.0',
+          },
+          method: 'POST',
+          signal: AbortSignal.timeout(DEFAULT_API_TIMEOUT_MS),
+        })
+        if (uploadRes.ok) {
+          break
+        }
+        const errText = await uploadRes.text().catch(() => '')
+        lastErr = new Error(`HTTP ${uploadRes.status} ${errText}`)
+      } catch (err) {
+        lastErr = err
+      }
+      if (attempt < 3) {
+        await sleep(1000 * attempt)
+      }
+    }
 
-    if (!uploadRes.ok) {
-      const errText = await uploadRes.text()
-      throw new Error(`上传媒体到微信 CDN 失败: ${uploadRes.status} ${errText}`)
+    if (!uploadRes || !uploadRes.ok) {
+      throw new Error(`上传媒体到微信 CDN 失败: ${lastErr?.message || uploadRes?.status}`)
     }
 
     // 微信 CDN 成功后会在 Header 中返回 x-encrypted-param
     const downloadParam = uploadRes.headers.get('x-encrypted-param') || uploadParam || ''
 
     return {
-      aes_key: Buffer.from(aesKeyHex).toString('base64'),
+      aes_key: aesKey.toString('base64'),
       encrypt_query_param: downloadParam,
       encrypt_type: 1,
       file_size_ciphertext: fileSizeCiphertext,

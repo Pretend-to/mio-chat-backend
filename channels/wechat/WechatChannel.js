@@ -302,9 +302,20 @@ export class WechatChannel extends BaseChannel {
     }
     let imgBuffer = buffer
     if (!imgBuffer && url) {
-      if (url.startsWith('http://') || url.startsWith('https://')) {
+      if (url.startsWith('data:image/')) {
+        const base64Part = url.split(',')[1] || ''
+        imgBuffer = Buffer.from(base64Part, 'base64')
+      } else if (url.startsWith('http://') || url.startsWith('https://')) {
         const resp = await fetch(url)
+        if (!resp.ok) throw new Error(`远程图片拉取失败: ${resp.status} ${url}`)
         imgBuffer = Buffer.from(await resp.arrayBuffer())
+      } else if (url.startsWith('/f/gen/') || url.startsWith('/f/up/')) {
+        const subPath = url.startsWith('/f/gen/') ? url.slice('/f/gen/'.length) : url.slice('/f/up/'.length)
+        const baseFolder = url.startsWith('/f/gen/') ? path.join(process.cwd(), 'output', 'generated') : path.join(process.cwd(), 'output', 'uploaded')
+        const diskPath = path.join(baseFolder, subPath)
+        if (fs.existsSync(diskPath)) {
+          imgBuffer = await fs.promises.readFile(diskPath)
+        }
       } else if (fs.existsSync(url)) {
         imgBuffer = await fs.promises.readFile(url)
       }
