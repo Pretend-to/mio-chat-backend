@@ -262,6 +262,17 @@ function assembleStructuredContent(chunks) {
   flushReason()
   flushText()
 
+  // 兜底保障：扫描所有 tool_call 节点，若存在未完成 (action !== 'finished' 或 result 为空) 的节点，自动补全 User aborted
+  for (const node of content) {
+    if (node.type === 'tool_call') {
+      if (node.data.action !== 'finished' || !node.data.result || node.data.status === 'running') {
+        node.data.action = 'finished'
+        node.data.status = 'aborted'
+        node.data.result = node.data.result || 'User aborted.'
+      }
+    }
+  }
+
   return content
 }
 
@@ -588,9 +599,21 @@ export function createBackendLlm(opts = {}) {
                 if (emittedRenders.has(renderKey)) continue
                 emittedRenders.add(renderKey)
 
-                if (r.type === 'image' && r.url) {
+                if (r.type === 'image' && (r.url || r.buffer || r.localPath)) {
                   if (typeof ctx.onEmitTextBlock === 'function') {
                     await ctx.onEmitTextBlock('', { extraRender: r, image: r.url })
+                  }
+                } else if ((r.type === 'audio' || r.type === 'voice') && (r.url || r.buffer || r.localPath)) {
+                  if (typeof ctx.onEmitTextBlock === 'function') {
+                    await ctx.onEmitTextBlock('', { audio: r.url, extraRender: r })
+                  }
+                } else if ((r.type === 'file' || r.type === 'document') && (r.url || r.buffer || r.localPath)) {
+                  if (typeof ctx.onEmitTextBlock === 'function') {
+                    await ctx.onEmitTextBlock('', { extraRender: r, file: r.url })
+                  }
+                } else if (r.type === 'video' && (r.url || r.buffer || r.localPath)) {
+                  if (typeof ctx.onEmitTextBlock === 'function') {
+                    await ctx.onEmitTextBlock('', { extraRender: r, video: r.url })
                   }
                 } else if (r.type === 'text' || r.type === 'notice' || r.type === 'alert' || r.type === 'link' || r.type === 'card') {
                   const notice = r.text || (r.title ? `[${r.title}] ${r.description || ''}` : r.description)
@@ -648,7 +671,7 @@ export function createBackendLlm(opts = {}) {
         })
       })
 
-      if (streamError) {
+      if (streamError && !event.aborted) {
         throw streamError
       }
 
@@ -658,7 +681,8 @@ export function createBackendLlm(opts = {}) {
       const structuredContent = assembleStructuredContent(collectedChunks)
 
       return {
-        completed: true,
+        aborted: !!event.aborted,
+        completed: !event.aborted,
         content: structuredContent,
         crystal: latestCrystal || event.body?.settings?.previous_summary || null,
         rawMessages: event.body.messages,

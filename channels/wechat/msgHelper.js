@@ -112,9 +112,108 @@ export function buildSendImageMsg({ to, fromBot, contextToken, mediaInfo }) {
       {
         type: 2, // IMAGE
         image_item: {
+          hd_size: mediaInfo.file_size_ciphertext || mediaInfo.raw_size || 0,
           media: mediaObj,
           mid_size: mediaInfo.file_size_ciphertext || mediaInfo.raw_size || 0,
-          hd_size: mediaInfo.file_size_ciphertext || mediaInfo.raw_size || 0,
+        },
+      },
+    ],
+    to_user_id: to,
+  }
+}
+
+/**
+ * 构造下行原生语音 WeixinMessage（Silk 格式）。
+ */
+export function buildSendVoiceMsg({ to, fromBot, contextToken, mediaInfo, durationMs = 0, text = '' }) {
+  const now = Date.now()
+  const randomSuffix = Math.random().toString(36).slice(2, 10)
+  const mediaObj = {
+    aes_key: mediaInfo.aes_key,
+    encrypt_query_param: mediaInfo.encrypt_query_param || '',
+    encrypt_type: mediaInfo.encrypt_type || 1,
+  }
+
+  return {
+    client_id: `bot_voice_${now}_${randomSuffix}`,
+    context_token: contextToken,
+    create_time_ms: now,
+    from_user_id: fromBot,
+    message_state: 2, // FINISH
+    message_type: 2, // BOT
+    item_list: [
+      {
+        type: 3, // VOICE
+        voice_item: {
+          media: mediaObj,
+          play_length: durationMs > 0 ? Math.round(durationMs) : (mediaInfo.play_length || 1000),
+          text: text || '',
+        },
+      },
+    ],
+    to_user_id: to,
+  }
+}
+
+/**
+ * 构造下行原生文件 WeixinMessage。
+ */
+export function buildSendFileMsg({ to, fromBot, contextToken, mediaInfo, fileName = 'file' }) {
+  const now = Date.now()
+  const randomSuffix = Math.random().toString(36).slice(2, 10)
+  const mediaObj = {
+    aes_key: mediaInfo.aes_key,
+    encrypt_query_param: mediaInfo.encrypt_query_param || '',
+    encrypt_type: mediaInfo.encrypt_type || 1,
+  }
+
+  return {
+    client_id: `bot_file_${now}_${randomSuffix}`,
+    context_token: contextToken,
+    create_time_ms: now,
+    from_user_id: fromBot,
+    message_state: 2, // FINISH
+    message_type: 2, // BOT
+    item_list: [
+      {
+        type: 4, // FILE
+        file_item: {
+          file_name: fileName,
+          len: mediaInfo.raw_size || mediaInfo.file_size_ciphertext || 0,
+          media: mediaObj,
+        },
+      },
+    ],
+    to_user_id: to,
+  }
+}
+
+/**
+ * 构造下行原生视频 WeixinMessage。
+ */
+export function buildSendVideoMsg({ to, fromBot, contextToken, mediaInfo, durationMs = 0 }) {
+  const now = Date.now()
+  const randomSuffix = Math.random().toString(36).slice(2, 10)
+  const mediaObj = {
+    aes_key: mediaInfo.aes_key,
+    encrypt_query_param: mediaInfo.encrypt_query_param || '',
+    encrypt_type: mediaInfo.encrypt_type || 1,
+  }
+
+  return {
+    client_id: `bot_video_${now}_${randomSuffix}`,
+    context_token: contextToken,
+    create_time_ms: now,
+    from_user_id: fromBot,
+    message_state: 2, // FINISH
+    message_type: 2, // BOT
+    item_list: [
+      {
+        type: 5, // VIDEO
+        video_item: {
+          media: mediaObj,
+          play_length: durationMs > 0 ? Math.round(durationMs / 1000) : 0,
+          video_size: mediaInfo.raw_size || mediaInfo.file_size_ciphertext || 0,
         },
       },
     ],
