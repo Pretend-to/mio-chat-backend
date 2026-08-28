@@ -151,7 +151,7 @@ function convertChatHistoryToLLMMessages(chatHistory) {
 }
 
 /**
- * 将本轮运行接收到的所有流式 chunks 转为结构化 content 节点数组（合并连续文本与思考块，绝不碎片化落盘）
+ * 将本轮运行接收到的所有流式 chunks 转为结构化 content 节点数组（合并连续文本与思考块，tool_call 按 ID 原地更新，绝不重复碎片化落盘）
  */
 function assembleStructuredContent(chunks) {
   const content = []
@@ -161,18 +161,22 @@ function assembleStructuredContent(chunks) {
   let currentReason = ''
   let reasonData = null
 
+  // 用于 tool_call 按 id 去重与状态合并：callId -> content array index
+  const toolCallIndexMap = new Map()
+
   const flushText = () => {
-    if (currentText) {
+    const trimmed = currentText.trim()
+    if (trimmed) {
       content.push({
         data: { text: currentText },
         type: 'text',
       })
-      currentText = ''
     }
+    currentText = ''
   }
 
   const flushReason = () => {
-    if (currentReason) {
+    if (currentReason && currentReason.trim()) {
       content.push({
         data: {
           duration: reasonData?.duration ?? 0,
@@ -181,17 +185,17 @@ function assembleStructuredContent(chunks) {
         },
         type: 'reason',
       })
-      currentReason = ''
-      reasonData = null
     }
+    currentReason = ''
+    reasonData = null
   }
 
   for (const chunk of chunks) {
     if (!chunk) continue
 
-    if (chunk.type === 'reason') {
+    if (chunk.type === 'reason' || chunk.type === 'reasoningContent') {
       flushText()
-      currentReason += chunk.data?.text || ''
+      currentReason += chunk.data?.text || (typeof chunk.content === 'string' ? chunk.content : '')
       if (!reasonData && chunk.data) {
         reasonData = chunk.data
       }
@@ -199,27 +203,49 @@ function assembleStructuredContent(chunks) {
       flushReason()
       if (typeof chunk.content === 'string') {
         currentText += chunk.content
+      } else if (typeof chunk.data?.text === 'string') {
+        currentText += chunk.data.text
       }
     } else if (chunk.type === 'toolCall') {
       flushText()
       flushReason()
-      let callStatus = 'waiting'
-      if (chunk.content?.result) {
-        callStatus = 'done'
-      } else if (chunk.content?.action === 'running' || chunk.content?.action === 'pending') {
-        callStatus = 'running'
-      }
 
+      const toolPayload = chunk.content || chunk
+      const callId = toolPayload.id || `call_${Date.now()}`
+      const isFinished = toolPayload.action === 'finished' || !!toolPayload.result
+      const callStatus = isFinished ? 'done' : (toolPayload.action === 'started' ? 'waiting' : 'running')
+
+      const rawArgs = toolPayload.arguments || toolPayload.parameters || ''
       const toolCallData = {
-        ...chunk.content,
-        arguments: chunk.content?.arguments || chunk.content?.parameters || '',
+        ...toolPayload,
+        action: toolPayload.action || (isFinished ? 'finished' : 'running'),
+        arguments: typeof rawArgs === 'object' ? JSON.stringify(rawArgs) : rawArgs,
+        id: callId,
+        name: toolPayload.name || '',
+        parameters: typeof rawArgs === 'object' ? JSON.stringify(rawArgs) : rawArgs,
+        result: toolPayload.result || '',
         status: callStatus,
       }
 
-      content.push({
-        data: toolCallData,
-        type: 'tool_call',
-      })
+      if (toolCallIndexMap.has(callId)) {
+        // 已有该 tool_call，原地合并更新为最新状态（避免 started/pending/finished 重复创建节点）
+        const idx = toolCallIndexMap.get(callId)
+        const existing = content[idx]
+        existing.data = {
+          ...existing.data,
+          ...toolCallData,
+          result: toolCallData.result || existing.data.result || '',
+          extraRender: toolCallData.extraRender || existing.data.extraRender,
+        }
+      } else {
+        // 新 tool_call 节点
+        const node = {
+          data: toolCallData,
+          type: 'tool_call',
+        }
+        content.push(node)
+        toolCallIndexMap.set(callId, content.length - 1)
+      }
     } else if (chunk.type === 'crystallize') {
       flushText()
       flushReason()
