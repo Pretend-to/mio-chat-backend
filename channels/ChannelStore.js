@@ -33,16 +33,24 @@ export class ChannelStore {
     if (this._cache) return this._cache
     try {
       const raw = await fs.promises.readFile(this.file, UTF8)
-      this._cache = JSON.parse(raw)
+      this._cache = raw && raw.trim() ? JSON.parse(raw.trim()) : []
     } catch (e) {
-      if (e.code === 'ENOENT') this._cache = []
-      else throw e
+      if (e.code === 'ENOENT') {
+        this._cache = []
+      } else if (e instanceof SyntaxError) {
+        console.error(`[ChannelStore] JSON parse error in ${this.file}: ${e.message}. Fallback to [].`)
+        this._cache = []
+      } else {
+        throw e
+      }
     }
     return this._cache
   }
   async _save() {
     await fs.promises.mkdir(path.dirname(this.file), { recursive: true })
-    await fs.promises.writeFile(this.file, JSON.stringify(this._cache ?? [], null, 2), UTF8)
+    const tmpFile = `${this.file}.${Date.now()}_${Math.random().toString(36).slice(2)}.tmp`
+    await fs.promises.writeFile(tmpFile, JSON.stringify(this._cache ?? [], null, 2), UTF8)
+    await fs.promises.rename(tmpFile, this.file)
   }
   _public(c) {
     // 脱敏对外：token 不返回明文

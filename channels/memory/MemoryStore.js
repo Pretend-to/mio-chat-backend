@@ -71,7 +71,9 @@ export class MemoryStore {
   }
   async _writeFile(fp, data) {
     await fs.promises.mkdir(path.dirname(fp), { recursive: true })
-    await fs.promises.writeFile(fp, data, UTF8)
+    const tmpFp = `${fp}.${Date.now()}_${Math.random().toString(36).slice(2)}.tmp`
+    await fs.promises.writeFile(tmpFp, data, UTF8)
+    await fs.promises.rename(tmpFp, fp)
   }
 
   // ===============================================================
@@ -237,8 +239,18 @@ export class MemoryStore {
   // agent 元数据（last_user_activity / keepalive 提醒状态等，持久化 JSON）
   // ===============================================================
   async _readMeta() {
-    const raw = await this._readFile(path.join(this._agentDir(), 'meta.json'), null)
-    return raw ? JSON.parse(raw) : {}
+    const fp = path.join(this._agentDir(), 'meta.json')
+    const raw = await this._readFile(fp, null)
+    if (!raw || !raw.trim()) return {}
+    try {
+      return JSON.parse(raw.trim())
+    } catch (e) {
+      if (e instanceof SyntaxError) {
+        console.error(`[MemoryStore] Meta JSON parse error in ${fp}: ${e.message}. Resetting meta fallback.`)
+        return {}
+      }
+      throw e
+    }
   }
   async _writeMeta(meta) {
     await this._writeFile(path.join(this._agentDir(), 'meta.json'), JSON.stringify(meta, null, 2))
