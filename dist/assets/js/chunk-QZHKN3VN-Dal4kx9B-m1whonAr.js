@@ -1,0 +1,2 @@
+import{Gn as t}from"./vendor_editor_preview-oXzy4oTJ.js";var i=class{constructor(t){this.init=t,this.records=this.init()}static{t(this,"ImperativeState")}reset(){this.records=this.init()}};export{i as t};
+//# sourceMappingURL=chunk-QZHKN3VN-Dal4kx9B-m1whonAr.js.map

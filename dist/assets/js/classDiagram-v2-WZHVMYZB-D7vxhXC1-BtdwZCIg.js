@@ -1,0 +1,2 @@
+import{Gn as r}from"./vendor_editor_preview-oXzy4oTJ.js";import"./chunk-FMBD7UC4-D4kohRVY-rFUd10xm.js";import"./chunk-55IACEB6-DWUqxxdp-BwgZneT3.js";import"./chunk-QN33PNHL-BFbXAWI4-SX0fbKr9.js";import{i as s,n as e,r as a,t as o}from"./chunk-B4BG7PRW-DQj3X15n-DUmDSe_z.js";var t={parser:a,get db(){return new e},renderer:o,styles:s,init:r(r=>{r.class||={},r.class.arrowMarkerAbsolute=r.arrowMarkerAbsolute},"init")};export{t as diagram};
+//# sourceMappingURL=classDiagram-v2-WZHVMYZB-D7vxhXC1-BtdwZCIg.js.map
