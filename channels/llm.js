@@ -82,7 +82,7 @@ function convertChatHistoryToLLMMessages(chatHistory) {
           }
         }
 
-        item.content.forEach((elm) => {
+        item.content.forEach((elm, elmIdx) => {
           if (elm.type === 'reason') {
             if (currentAssistant && currentAssistant.tool_calls && currentAssistant.tool_calls.length > 0) {
               flushAssistant()
@@ -104,7 +104,7 @@ function convertChatHistoryToLLMMessages(chatHistory) {
               currentAssistant.tool_calls = []
             }
             const args = elm.data.arguments || elm.data.parameters || ''
-            const callId = elm.data.id || `call_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+            const callId = elm.data.id || `call_${elm.data.name || 'tool'}_${elmIdx}`
             currentAssistant.tool_calls.push({
               function: {
                 arguments: typeof args === 'string' ? args : JSON.stringify(args || {}),
