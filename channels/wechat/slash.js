@@ -27,6 +27,8 @@ export class SlashCommandHandler {
           [
             '/help 帮助',
             '/model [ls/name/reset] 查看或切换模型',
+            '/think [0-4/off/low/medium/high/max] 管理思考推理强度',
+            '/tools [ls/on/off/reset] 管理与开启/关闭工具',
             '/sessions 列出会话',
             '/new [标题] 新建会话',
             '/use <id> 切换会话',
@@ -38,6 +40,109 @@ export class SlashCommandHandler {
             '/delete <id> 删除会话',
           ].join('\n')
         )
+      }
+
+      case 'tools': {
+        const defaultChannelTools = [
+          'memory', 'search', 'draw', 'vision', 'parse', 'cron', 'toolsmanager',
+          'Skill', 'reload_skills',
+          'bash', 'bash_input', 'read_screen', 'wait', 'shell_policy',
+          'channel_profile', 'channel_session', 'channel_model',
+        ]
+        const currentTools = (await this.memory.getAgentMeta('tools', null)) || defaultChannelTools
+        const enabledSet = new Set(currentTools)
+
+        if (!arg || arg === 'ls' || arg === 'list') {
+          const lines = ['【工具状态管理】', `当前已激活工具 (共 ${enabledSet.size} 个):`]
+          for (const t of defaultChannelTools) {
+            const status = enabledSet.has(t) ? '✅ [已启用]' : '❌ [已禁用]'
+            lines.push(`  ${status} ${t}`)
+          }
+          lines.push('\n用法：')
+          lines.push('  • /tools on <工具名1,工具名2> 开启工具')
+          lines.push('  • /tools off <工具名1,工具名2> 禁用工具')
+          lines.push('  • /tools reset 恢复默认工具集')
+          return wrap(lines.join('\n'))
+        }
+
+        const [subCmd, ...toolArgs] = arg.split(/\s+/)
+        const toolStr = toolArgs.join(' ')
+
+        if (subCmd === 'reset') {
+          await this.memory.setAgentMeta('tools', defaultChannelTools)
+          return wrap('已将工具集合成功重置为系统默认配置 ✅')
+        }
+
+        if (subCmd === 'on' || subCmd === 'enable') {
+          if (!toolStr) return wrap('用法：/tools on <工具名1,工具名2>')
+          const targets = toolStr.split(/[,，\s]+/).filter(Boolean)
+          targets.forEach(t => enabledSet.add(t))
+          const newList = Array.from(enabledSet)
+          await this.memory.setAgentMeta('tools', newList)
+          return wrap(`已开启工具 [${targets.join(', ')}]，当前激活工具总计 ${newList.length} 个 ✅`)
+        }
+
+        if (subCmd === 'off' || subCmd === 'disable') {
+          if (!toolStr) return wrap('用法：/tools off <工具名1,工具名2>')
+          const targets = toolStr.split(/[,，\s]+/).filter(Boolean)
+          targets.forEach(t => enabledSet.delete(t))
+          const newList = Array.from(enabledSet)
+          await this.memory.setAgentMeta('tools', newList)
+          return wrap(`已禁用工具 [${targets.join(', ')}]，当前激活工具总计 ${newList.length} 个 🚫`)
+        }
+
+        return wrap('未知指令，请使用 /tools ls, /tools on <工具名>, /tools off <工具名> 或 /tools reset')
+      }
+
+      case 'think':
+      case 'reasoning': {
+        const effortMap = {
+          '0': '0 (Off/关闭)',
+          '1': '1 (Low/浅度思考)',
+          '2': '2 (Medium/中度思考)',
+          '3': '3 (High/深度思考)',
+          '4': '4 (Max/极限思考)',
+          'off': '0 (Off/关闭)',
+          'low': '1 (Low/浅度思考)',
+          'medium': '2 (Medium/中度思考)',
+          'high': '3 (High/深度思考)',
+          'max': '4 (Max/极限思考)',
+        }
+        const valMap = {
+          '0': 0, 'off': 0, 'close': 0, 'none': 0,
+          '1': 1, 'low': 1,
+          '2': 2, 'medium': 2, 'med': 2,
+          '3': 3, 'high': 3,
+          '4': 4, 'max': 4, 'ultra': 4
+        }
+
+        const currentEffort = await this.memory.getAgentMeta('reasoning_effort', 0)
+
+        if (!arg) {
+          return wrap(
+            [
+              `【思考/推理强度】`,
+              `当前强度: ${effortMap[String(currentEffort)] || `${currentEffort} 级`}`,
+              ``,
+              `设置用法: /think <档位>`,
+              `可选档位:`,
+              `  • 0 或 off  : 关闭思考链`,
+              `  • 1 或 low  : 浅度推理 / 快速思考`,
+              `  • 2 或 medium : 中度推理 (默认)`,
+              `  • 3 或 high : 深度推理 / 复杂解题`,
+              `  • 4 或 max  : 极限推理 / 最大算力预算`,
+            ].join('\n')
+          )
+        }
+
+        const normalizedArg = arg.toLowerCase().trim()
+        if (normalizedArg in valMap) {
+          const targetLevel = valMap[normalizedArg]
+          await this.memory.setAgentMeta('reasoning_effort', targetLevel)
+          return wrap(`思考/推理强度已设置为: ${effortMap[String(targetLevel)]} ✅`)
+        }
+
+        return wrap(`未知档位 "${arg}"，有效档位: 0(off), 1(low), 2(medium), 3(high), 4(max)`)
       }
 
       case 'model': {
