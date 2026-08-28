@@ -507,11 +507,10 @@ export class BaseChannel {
           content: [{ data: { text: finalUserText }, type: 'text' }],
           from_user_id: ctx.from,
           role: 'user',
-          text: finalUserText,
         }
         await this.memory.appendToChat(sid, userMsg)
 
-        // Assistant 消息落盘（优先写入包含 tool_call, reason, text 的完整结构化 content 节点数组）
+        // Assistant 消息落盘（写入包含 tool_call, reason, text 的标准结构化 content 节点数组）
         const assistantContent = (Array.isArray(reply?.content) && reply.content.length > 0)
           ? reply.content
           : [{ data: { text: fullAssistantReply }, type: 'text' }]
@@ -519,7 +518,6 @@ export class BaseChannel {
         const assistantMsg = {
           content: assistantContent,
           role: 'assistant',
-          text: fullAssistantReply,
         }
 
         const updatedSession = await this.memory.appendToChat(sid, assistantMsg)
