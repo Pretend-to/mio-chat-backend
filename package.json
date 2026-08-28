@@ -1,6 +1,7 @@
 {
   "name": "mio-chat",
-  "type": "module","packageManager": "pnpm@10.34.5",
+  "type": "module",
+  "packageManager": "pnpm@10.34.5",
   "version": "0.0.1",
   "description": "AI-Powered chat platform,support ONEBOT v11",
   "engines": {
@@ -64,6 +65,7 @@
     "officeparser": "^5.2.2",
     "openai": "^6.49.0",
     "puppeteer-core": "^25.3.0",
+    "silk-wasm": "^3.7.1",
     "socket.io": "^4.8.3",
     "vhtml": "^2.2.0",
     "ws": "^8.21.1"
