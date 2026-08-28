@@ -383,13 +383,20 @@ export class BaseChannel {
     }
 
     startTypingHeartbeat()
-    this.activeJobs.set(sid, {
+    const activeJobObj = {
+      abort: () => {
+        if (typingTimer) clearInterval(typingTimer)
+        if (typeof activeJobObj._abortLlm === 'function') {
+          try { activeJobObj._abortLlm() } catch {}
+        }
+      },
+      currentTool: null,
+      lastProgressText: '',
       startTime: Date.now(),
       text,
-      currentTool: null,
       toolCount: 0,
-      lastProgressText: '',
-    })
+    }
+    this.activeJobs.set(sid, activeJobObj)
 
     try {
       const soul = await this.memory.readSoul()
@@ -460,22 +467,23 @@ export class BaseChannel {
 
       // 3. 调用底层 LLM
       const reply = await this.llm.process({
+        agentId: this.memory.agentId,
+        channel: this,
+        chat,
+        contextToken: ctx.contextToken,
+        crystal: crystal || '',
+        from: ctx.from,
+        globalMem: globalMem || '',
+        guidance: !soul,
+        images: ctx.rawMsg?.images || ctx.images || null,
+        memory: this.memory,
+        model: this.model,
+        onEmitTextBlock,
+        onRegisterAbort: (abortFn) => { activeJobObj._abortLlm = abortFn },
+        provider: this.provider,
         sessionId: sid,
         soul: soul || '',
-        globalMem: globalMem || '',
-        crystal: crystal || '',
-        chat,
-        guidance: !soul,
         text,
-        from: ctx.from,
-        contextToken: ctx.contextToken,
-        agentId: this.memory.agentId,
-        memory: this.memory,
-        channel: this,
-        provider: this.provider,
-        model: this.model,
-        images: ctx.rawMsg?.images || ctx.images || null,
-        onEmitTextBlock,
       })
 
       // 兼容传统同步返回的 LLM 驱动

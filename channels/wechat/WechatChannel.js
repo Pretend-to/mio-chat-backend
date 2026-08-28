@@ -376,7 +376,10 @@ export class WechatChannel extends BaseChannel {
         for (const msg of msgs) {
           if (!this.running) break
           this.log?.info?.(`[WechatChannel] 🔍 原始消息结构: ${JSON.stringify(msg)}`)
-          await this.handleIncomingMessage(msg)
+          // 非阻塞异步派发处理，确保长轮询循环立即发起下一次 getUpdates，实时感知后续并发插话
+          this.handleIncomingMessage(msg).catch((err) => {
+            this.log?.error?.(`[WechatChannel] 处理消息发生未捕获异常: ${err?.message}`, err)
+          })
         }
       } catch (e) {
         if (!this.running) break

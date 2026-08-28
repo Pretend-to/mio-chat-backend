@@ -26,6 +26,7 @@ export class SlashCommandHandler {
         return wrap(
           [
             '/help 帮助',
+            '/abort 停止/中止当前正在运行的任务',
             '/model [ls/name/reset] 查看或切换模型',
             '/think [0-4/off/low/medium/high/max] 管理思考推理强度',
             '/tools [ls/on/off/reset] 管理与开启/关闭工具',
@@ -40,6 +41,22 @@ export class SlashCommandHandler {
             '/delete <id> 删除会话',
           ].join('\n')
         )
+      }
+
+      case 'abort':
+      case 'stop':
+      case 'cancel':
+      case 'interrupt': {
+        const sid = await active()
+        if (sid && this.channel?.activeJobs && this.channel.activeJobs.has(sid)) {
+          const job = this.channel.activeJobs.get(sid)
+          if (typeof job.abort === 'function') {
+            job.abort()
+          }
+          this.channel.activeJobs.delete(sid)
+          return wrap('⏹️ 已成功中止当前正在运行的任务')
+        }
+        return wrap('当前没有正在执行的任务')
       }
 
       case 'tools': {

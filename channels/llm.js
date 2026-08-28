@@ -444,6 +444,7 @@ export function createBackendLlm(opts = {}) {
       log.info?.(`[${ctx.channel?.channelType || 'channel'}] 🧩 消息链拼装完成: 总消息数=${messages.length} (System段数=${systemSections.length}, 历史轮数=${chatHistoryCount}, 注入工具数=${finalTools.length}, 思考强度=${savedEffort}, 当前输入="${ctx.text.slice(0, 30)}")`)
       log.info?.(`[${ctx.channel?.channelType || 'channel'}] 🧠 记忆载入详情: Soul=${ctx.soul ? '已设定' : '无'}, GlobalMem=${ctx.globalMem ? `${ctx.globalMem.length}字` : '无'}, Crystal=${ctx.crystal ? `${ctx.crystal.length}字` : '无'}`)
 
+      const abortCallbacks = []
       const event = {
         body: {
           channel: ctx.channel?.channelType || 'channel',
@@ -485,7 +486,24 @@ export function createBackendLlm(opts = {}) {
         error: (err) => {
           streamError = err
         },
-        onAbort: () => {},
+        aborted: false,
+        abort: () => {
+          if (event.aborted) return
+          event.aborted = true
+          abortCallbacks.forEach(cb => {
+            try { cb() } catch {}
+          })
+          if (typeof event.complete === 'function') {
+            event.complete()
+          }
+        },
+        onAbort: (cb) => {
+          if (event.aborted) {
+            try { cb() } catch {}
+          } else {
+            abortCallbacks.push(cb)
+          }
+        },
         pending: () => {},
         registerInteraction: async (interactionId, callback) => {
           if (ctx.channel && typeof ctx.channel.requestUserConfirmation === 'function') {
@@ -565,6 +583,10 @@ export function createBackendLlm(opts = {}) {
           role: 'admin',
           username: 'ChannelMaster',
         },
+      }
+
+      if (typeof ctx.onRegisterAbort === 'function') {
+        ctx.onRegisterAbort(() => event.abort())
       }
 
       // 等待底层 LLM 完整运行完毕（包含所有递归工具轮次）
