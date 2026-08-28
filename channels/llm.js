@@ -375,6 +375,10 @@ export function createBackendLlm(opts = {}) {
         'channel_profile', 'channel_session', 'channel_model',
       ]
 
+      const savedTools = ctx.memory ? await ctx.memory.getAgentMeta('tools', null) : null
+      const finalTools = (Array.isArray(savedTools) && savedTools.length > 0) ? savedTools : defaultChannelTools
+      const savedEffort = ctx.memory ? await ctx.memory.getAgentMeta('reasoning_effort', 0) : 0
+
       const event = {
         body: {
           channel: ctx.channel?.channelType || 'channel',
@@ -384,14 +388,14 @@ export function createBackendLlm(opts = {}) {
               model: targetModel,
               stream: true,
             },
-            chatParams: { reasoning_effort: 0 },
+            chatParams: { reasoning_effort: savedEffort },
             crystallization: { enabled: true },
             crystallization_token_watermark: 'auto',
             previous_summary: ctx.crystal || '',
             provider: targetProvider,
             toolCallSettings: {
               mode: 'AUTO',
-              tools: defaultChannelTools,
+              tools: finalTools,
             },
           },
         },

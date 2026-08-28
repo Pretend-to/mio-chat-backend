@@ -133,6 +133,11 @@ export class BaseChannel {
   async start() {
     this.running = true
     this._abort = new AbortController()
+    if (this.memory) {
+      try {
+        this.latestContextToken = await this.memory.getAgentMeta('latestContextToken', null)
+      } catch {}
+    }
     try {
       if (typeof this.client.notifyStart === 'function') {
         await this.client.notifyStart()
@@ -166,7 +171,14 @@ export class BaseChannel {
     }
 
     const contextToken = msg.context_token || null
-    await this.keepAlive.recordActivity(contextToken)
+    if (contextToken) {
+      this.latestContextToken = contextToken
+      if (this.memory) {
+        this.memory.setAgentMeta('latestContextToken', contextToken).catch(() => {})
+      }
+    }
+    const effectiveToken = contextToken || this.latestContextToken || null
+    await this.keepAlive.recordActivity(effectiveToken)
 
     // 更新渠道活跃时间
     if (typeof this.onActivity === 'function') {
@@ -182,7 +194,7 @@ export class BaseChannel {
     this.log?.info?.(`[${this.channelType}] 👤 用户输入: "${text}"`)
 
     // 1. 检查是否有挂起待审批的敏感操作
-    if (this._handlePendingConfirmation(text.trim(), { from, contextToken })) {
+    if (this._handlePendingConfirmation(text.trim(), { from, contextToken: effectiveToken })) {
       return
     }
 
@@ -191,18 +203,18 @@ export class BaseChannel {
     if (sid && this.activeJobs.has(sid) && !text.trim().startsWith('/')) {
       const activeJob = this.activeJobs.get(sid)
       this.log?.info?.(`[${this.channelType}] ⚡ 检测到主任务正在运行中，触发临时即时插话回复 (sid=${sid}, toolCount=${activeJob.toolCount})`)
-      return this._handleTransientInterruption(text.trim(), activeJob, { contextToken, from, sid })
+      return this._handleTransientInterruption(text.trim(), activeJob, { contextToken: effectiveToken, from, sid })
     }
 
     // 3. 正常路由
     try {
-      const reply = await this._route(text, { contextToken, from, rawMsg: msg })
+      const reply = await this._route(text, { contextToken: effectiveToken, from, rawMsg: msg })
       if (reply?.text) {
         this.log?.info?.(`[${this.channelType}] 🤖 回复渠道: "${reply.text.slice(0, 50)}${reply.text.length > 50 ? '...' : ''}"`)
         const payload = this.buildSendMsg({
           to: from,
           fromBot: this.client.botId,
-          contextToken,
+          contextToken: effectiveToken,
           text: reply.text,
         })
         const sendResult = await this.doSendMessage(payload)
@@ -210,7 +222,7 @@ export class BaseChannel {
       }
     } catch (e) {
       this.log?.error?.(`[${this.channelType}] 处理消息失败: ${e?.message}`)
-      await this._safeSend(from, contextToken, `抱歉，处理出错了：${e?.message}（回复 /help 查看命令）`)
+      await this._safeSend(from, effectiveToken, `抱歉，处理出错了：${e?.message}（回复 /help 查看命令）`)
     }
   }
 
@@ -247,7 +259,7 @@ export class BaseChannel {
         guidance: false,
         text: promptStatus,
         from: ctx.from,
-        contextToken: ctx.contextToken,
+        contextToken: ctx.contextToken || this.latestContextToken || null,
         agentId: this.memory.agentId,
         memory: this.memory,
         channel: this,
@@ -255,26 +267,27 @@ export class BaseChannel {
         model: this.model,
         onEmitTextBlock: async (msgContent) => {
           if (msgContent?.trim()) {
-            await this._safeSend(ctx.from, ctx.contextToken, msgContent.trim())
+            await this._safeSend(ctx.from, ctx.contextToken || this.latestContextToken, msgContent.trim())
           }
         },
       })
       if (reply?.text?.trim()) {
-        await this._safeSend(ctx.from, ctx.contextToken, reply.text.trim())
+        await this._safeSend(ctx.from, ctx.contextToken || this.latestContextToken, reply.text.trim())
       }
     } catch (e) {
       this.log?.warn?.(`[${this.channelType}] 临时插话回复失败: ${e.message}`)
-      await this._safeSend(ctx.from, ctx.contextToken, `我正在后台全力处理刚才的任务（已运行 ${elapsedSec}s），马上就好哦～`)
+      await this._safeSend(ctx.from, ctx.contextToken || this.latestContextToken, `我正在后台全力处理刚才的任务（已运行 ${elapsedSec}s），马上就好哦～`)
     }
   }
 
   async _safeSend(from, contextToken, text) {
+    const targetToken = contextToken || this.latestContextToken || null
     try {
-      for (const seg of this.splitTextToSegments(text, { contextToken, from })) {
+      for (const seg of this.splitTextToSegments(text, { contextToken: targetToken, from })) {
         const payload = this.buildSendMsg({
           to: from,
           fromBot: this.client.botId,
-          contextToken,
+          contextToken: targetToken,
           text: seg,
         })
         await this.doSendMessage(payload)

@@ -44,13 +44,16 @@ export class ChannelRuntime {
         c.setAuth({ token: channel.token, botId: channel.botId, userId: channel.userId })
         return c
       })()
+    const savedProvider = await memory.getAgentMeta('provider', channel.provider || null)
+    const savedModel = await memory.getAgentMeta('model', channel.model || null)
+
     const chn = new WechatChannel({ 
       client, 
       memory, 
       masterId: channel.userId, 
       llm: this.llm,
-      provider: channel.provider || null,
-      model: channel.model || null,
+      provider: savedProvider,
+      model: savedModel,
       logger: typeof logger !== 'undefined' ? logger : console,
       onActivity: () => {
         this.channelStore.update(channelId, { lastActive: Date.now() }).catch(() => {})
