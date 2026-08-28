@@ -472,6 +472,7 @@ export function createBackendLlm(opts = {}) {
           provider: ctx.provider,
           type: 'channel',
         },
+        memory: ctx.memory,
         client: {
           emit: () => {},
           on: () => {},

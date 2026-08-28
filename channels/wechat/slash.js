@@ -47,14 +47,20 @@ export class SlashCommandHandler {
       case 'stop':
       case 'cancel':
       case 'interrupt': {
-        const sid = await active()
-        if (sid && this.channel?.activeJobs && this.channel.activeJobs.has(sid)) {
-          const job = this.channel.activeJobs.get(sid)
-          if (typeof job.abort === 'function') {
-            job.abort()
+        if (this.channel?.activeJobs && this.channel.activeJobs.size > 0) {
+          let count = 0
+          for (const [jobSid, job] of Array.from(this.channel.activeJobs.entries())) {
+            try {
+              if (typeof job.abort === 'function') {
+                job.abort()
+              }
+            } catch (e) {
+              console.error('[Slash] abort job error:', e)
+            }
+            this.channel.activeJobs.delete(jobSid)
+            count++
           }
-          this.channel.activeJobs.delete(sid)
-          return wrap('⏹️ 已成功中止当前正在运行的任务')
+          return wrap(`⏹️ 已成功中止正在运行的任务 (${count} 个)`)
         }
         return wrap('当前没有正在执行的任务')
       }
