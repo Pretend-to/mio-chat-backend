@@ -37,6 +37,17 @@ export class WechatChannel extends BaseChannel {
     })
     this._buf = ''
     this._typingTickets = new Map() // userId -> typing_ticket（可缓存）
+    this._tokenQuotaMap = new Map() // contextToken -> count (微信 24h 内限额回复 10 条消息)
+  }
+
+  _recordTokenUsage(contextToken) {
+    if (!contextToken) return 1
+    const count = (this._tokenQuotaMap.get(contextToken) || 0) + 1
+    this._tokenQuotaMap.set(contextToken, count)
+    if (count >= 8) {
+      this.log?.warn?.(`[WechatChannel] ⚠️ 警告：contextToken "${contextToken.slice(0, 10)}..." 24h 下发额度已达 ${count}/10 条！`)
+    }
+    return count
   }
 
   // ===============================================================
@@ -46,8 +57,18 @@ export class WechatChannel extends BaseChannel {
    * 2. 避免大段长篇大论，单条消息控制在 1~3 句话；
    * 3. 支持使用 <msg>...</msg> 或 <break/> 分隔符将一次回复切分成多条微信消息逐条发出；
    * 4. 复杂任务或工具调用时，严禁长时间静默，穿插阶段性进展输出。
+   * 5. 配额防爆：感知 24h 10 条限额预警，自动压制分条拆分。
    */
-  getChannelPrompt() {
+  getChannelPrompt(ctx = {}) {
+    const contextToken = ctx.contextToken || null
+    const currentUsage = contextToken ? (this._tokenQuotaMap.get(contextToken) || 0) : 0
+    const remaining = Math.max(0, 10 - currentUsage)
+
+    let quotaNotice = ''
+    if (contextToken && remaining <= 4) {
+      quotaNotice = `\n⚠️【微信 24h 通道配额紧缺预警】：当前凭证已累计回复 ${currentUsage}/10 条消息（仅剩 ${remaining} 次配额）！请严禁使用 <msg> / <break/> 切分为多条气泡！必须将你的解答、进度与结论合并在 1 条消息内一次性输出！`
+    }
+
     return [
       '【微信渠道交互与消息风格规范】',
       '1. 你正在通过【微信】直接与用户私聊，请遵循真实人类微信聊天习惯：',
@@ -61,12 +82,30 @@ export class WechatChannel extends BaseChannel {
       '     <msg>好嘞，正在帮你画一张可爱的自画像，可能需要十几秒～</msg>',
       '     (随后执行 draw 工具)',
       '     <msg>画好啦！你看看喜欢不～</msg>',
-    ].join('\n')
+      quotaNotice,
+    ].filter(Boolean).join('\n')
   }
 
-  /** 微信渠道：将 LLM 产出的完整文本按 <msg>/<break/> 协议切分为多条独立气泡 */
-  splitTextToSegments(text) {
-    return splitWechatText(text)
+  /**
+   * 微信渠道：将 LLM 产出的文本切分为微信消息气泡。
+   * 智能配额保护：当 contextToken 使用频次过高或单次分条数挤占剩余额度时，自动抑制 <msg> 拆分，强行合并为单条下发！
+   */
+  splitTextToSegments(text, ctx = {}) {
+    const contextToken = ctx.contextToken || null
+    const currentUsage = contextToken ? (this._tokenQuotaMap.get(contextToken) || 0) : 0
+    const rawSegments = splitWechatText(text)
+
+    if (rawSegments.length <= 1) return rawSegments
+
+    // 微信限额 10 条，安全阀设为 8
+    const remainingQuota = Math.max(1, 8 - currentUsage)
+
+    if (currentUsage >= 6 || rawSegments.length > remainingQuota) {
+      this.log?.warn?.(`[WechatChannel] 🛡️ 配额智能防护触发：contextToken 额度已用 ${currentUsage}/10，将 ${rawSegments.length} 段分条合并为 1 条微信气泡下发！`)
+      return [rawSegments.join('\n\n')]
+    }
+
+    return rawSegments
   }
 
   extractText(msg) {
@@ -255,6 +294,9 @@ export class WechatChannel extends BaseChannel {
 
 
   async doSendMessage(payload) {
+    if (payload?.context_token) {
+      this._recordTokenUsage(payload.context_token)
+    }
     return this.client.sendMessage(payload)
   }
 
@@ -265,6 +307,9 @@ export class WechatChannel extends BaseChannel {
    * 3. 构造 type: 2 (IMAGE) 的 WeixinMessage 发送
    */
   async doSendImage({ to, contextToken, buffer, url }) {
+    if (contextToken) {
+      this._recordTokenUsage(contextToken)
+    }
     let imgBuffer = buffer
     if (!imgBuffer && url) {
       if (url.startsWith('http://') || url.startsWith('https://')) {

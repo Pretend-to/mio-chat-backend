@@ -68,4 +68,29 @@ describe('Channel Session History & Slash Commands Test', () => {
     assert.match(resOn.text, /已开启工具/)
     assert.strictEqual(store.get('tools').includes('bash'), true)
   })
+
+  test('should auto-merge text segments when contextToken quota is running low in WechatChannel', async () => {
+    const { WechatChannel } = await import('../../channels/wechat/WechatChannel.js')
+    const channel = new WechatChannel({
+      client: { botId: 'bot123', sendMessage: async () => ({}) },
+      masterId: 'user123',
+      memory: { ensure: async () => {} },
+    })
+
+    const sampleText = '<msg>First message</msg><msg>Second message</msg><msg>Third message</msg>'
+    const ctxNormal = { contextToken: 'token_fresh_123' }
+    const normalSegs = channel.splitTextToSegments(sampleText, ctxNormal)
+    assert.strictEqual(normalSegs.length, 3)
+
+    // 模拟 token 使用接近额度上限（已用 7 次）
+    for (let i = 0; i < 7; i++) {
+      channel._recordTokenUsage('token_busy_456')
+    }
+
+    const ctxBusy = { contextToken: 'token_busy_456' }
+    const busySegs = channel.splitTextToSegments(sampleText, ctxBusy)
+    // 应该被自动防爆合并为 1 条整体发送
+    assert.strictEqual(busySegs.length, 1)
+    assert.match(busySegs[0], /First message[\s\S]*Second message[\s\S]*Third message/)
+  })
 })

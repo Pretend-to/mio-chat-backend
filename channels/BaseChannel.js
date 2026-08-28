@@ -270,7 +270,7 @@ export class BaseChannel {
 
   async _safeSend(from, contextToken, text) {
     try {
-      for (const seg of this.splitTextToSegments(text)) {
+      for (const seg of this.splitTextToSegments(text, { contextToken, from })) {
         const payload = this.buildSendMsg({
           to: from,
           fromBot: this.client.botId,
@@ -414,7 +414,7 @@ export class BaseChannel {
 
 // B. 如果有文本，先按渠道协议切分（微信：<msg>/<break/>），再逐条伪队列发送
           if (textBlock?.trim()) {
-            const segments = this.splitTextToSegments(textBlock.trim())
+            const segments = this.splitTextToSegments(textBlock.trim(), ctx)
             for (const seg of segments) {
               emittedBlocks.push(seg)
               this.log?.info?.(`[${this.channelType}] 🤖 实时推送文本块: "${seg.slice(0, 50)}${seg.length > 50 ? '...' : ''}"`)
