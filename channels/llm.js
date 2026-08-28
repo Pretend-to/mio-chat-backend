@@ -53,7 +53,9 @@ function convertChatHistoryToLLMMessages(chatHistory) {
     if (Array.isArray(item.content)) {
       if (item.role === 'system') {
         const textContent = item.content.filter(c => c.type === 'text').map(c => c.data?.text || '').join('')
-        msgs.push({ content: textContent, role: 'system' })
+        if (textContent.trim()) {
+          msgs.push({ content: `[系统通知]: ${textContent.trim()}`, role: 'user' })
+        }
       } else if (item.role === 'user') {
         const textContent = item.content.filter(c => c.type === 'text').map(c => c.data?.text || '').join('')
         msgs.push({ content: parseMultimodalContent(textContent || item.text || ''), role: 'user' })
@@ -149,30 +151,58 @@ function convertChatHistoryToLLMMessages(chatHistory) {
 }
 
 /**
- * 将本轮运行接收到的所有流式 chunks 转为结构化 content 节点数组，用于落盘
+ * 将本轮运行接收到的所有流式 chunks 转为结构化 content 节点数组（合并连续文本与思考块，绝不碎片化落盘）
  */
 function assembleStructuredContent(chunks) {
   const content = []
   if (!Array.isArray(chunks) || chunks.length === 0) return content
 
-  const now = Date.now()
-  for (const chunk of chunks) {
-    if (!chunk) continue
-    if (chunk.type === 'reason') {
+  let currentText = ''
+  let currentReason = ''
+  let reasonData = null
+
+  const flushText = () => {
+    if (currentText) {
+      content.push({
+        data: { text: currentText },
+        type: 'text',
+      })
+      currentText = ''
+    }
+  }
+
+  const flushReason = () => {
+    if (currentReason) {
       content.push({
         data: {
-          duration: chunk.data?.duration ?? 0,
-          startTime: chunk.data?.startTime || now,
-          text: chunk.data?.text ?? '',
+          duration: reasonData?.duration ?? 0,
+          startTime: reasonData?.startTime || Date.now(),
+          text: currentReason,
         },
         type: 'reason',
       })
+      currentReason = ''
+      reasonData = null
+    }
+  }
+
+  for (const chunk of chunks) {
+    if (!chunk) continue
+
+    if (chunk.type === 'reason') {
+      flushText()
+      currentReason += chunk.data?.text || ''
+      if (!reasonData && chunk.data) {
+        reasonData = chunk.data
+      }
     } else if (chunk.type === 'content') {
-      content.push({
-        data: { text: chunk.content },
-        type: 'text',
-      })
+      flushReason()
+      if (typeof chunk.content === 'string') {
+        currentText += chunk.content
+      }
     } else if (chunk.type === 'toolCall') {
+      flushText()
+      flushReason()
       let callStatus = 'waiting'
       if (chunk.content?.result) {
         callStatus = 'done'
@@ -191,6 +221,8 @@ function assembleStructuredContent(chunks) {
         type: 'tool_call',
       })
     } else if (chunk.type === 'crystallize') {
+      flushText()
+      flushReason()
       content.push({
         data: {
           status: chunk.content?.status || 'finished',
@@ -227,7 +259,30 @@ export function createBackendLlm(opts = {}) {
       const messages = []
 
       // 1. 组装 System Prompt（包含灵魂设定、全局长期记忆、会话结晶、技能目录）
+      // 1. 组装 System Prompt（静态前缀优先排列，确保 Prompt Caching inputcache 100% 命中）
       const systemSections = []
+
+      // 静态前缀：Skill 注册表 (与 Web UI 保持一致置顶)
+      const skillsBlock = skillService?.buildSystemPromptBlock ? skillService.buildSystemPromptBlock() : ''
+      if (skillsBlock) {
+        systemSections.push(skillsBlock)
+      }
+
+      // 静态前缀：自治与工具说明
+      systemSections.push([
+        '【工具使用与自治能力】',
+        '你可以使用 `channel_profile` 自主管理自身灵魂，使用 `channel_session` 管理会话历史，使用 `channel_model` 切换底层模型，使用 `toolsmanager` 管理所有工具开闭，使用 `memory` 记录用户事实，使用 `bash` 执行终端命令，使用 `Skill` 加载专家能力。',
+      ].join('\n'))
+
+      // 静态前缀：渠道交互风格 Prompt
+      if (ctx.channel && typeof ctx.channel.getChannelPrompt === 'function') {
+        const channelPrompt = ctx.channel.getChannelPrompt()
+        if (channelPrompt?.trim()) {
+          systemSections.push(channelPrompt.trim())
+        }
+      }
+
+      // 稳定前缀：灵魂人设
       if (ctx.soul?.trim()) {
         systemSections.push(`【你的灵魂设定与行为准则】\n${ctx.soul.trim()}`)
       } else {
@@ -239,32 +294,12 @@ export function createBackendLlm(opts = {}) {
         ].join('\n'))
       }
 
+      // 稳定前缀：全局长期记忆
       if (ctx.globalMem?.trim()) {
         systemSections.push(`【关于用户的全局长期记忆与稳定事实】\n${ctx.globalMem.trim()}`)
       }
 
-      if (ctx.crystal?.trim()) {
-        systemSections.push(`【当前会话的上下文结晶摘要】\n${ctx.crystal.trim()}`)
-      }
-
-      systemSections.push([
-        '【工具使用与自治能力】',
-        '你可以使用 `channel_profile` 自主管理自身灵魂，使用 `channel_session` 管理会话历史，使用 `channel_model` 切换底层模型，使用 `toolsmanager` 管理所有工具开闭，使用 `memory` 记录用户事实，使用 `bash` 执行终端命令，使用 `Skill` 加载专家能力。',
-      ].join('\n'))
-
-      // 注入技能目录 (<skill_registry>)
-      const skillsBlock = skillService?.buildSystemPromptBlock ? skillService.buildSystemPromptBlock() : ''
-      if (skillsBlock) {
-        systemSections.push(skillsBlock)
-      }
-
-      // 注入渠道专属交互风格 Prompt（如微信的口语化、简短、<msg>分条机制）
-      if (ctx.channel && typeof ctx.channel.getChannelPrompt === 'function') {
-        const channelPrompt = ctx.channel.getChannelPrompt()
-        if (channelPrompt?.trim()) {
-          systemSections.push(channelPrompt.trim())
-        }
-      }
+      // 会话结晶已在 settings.crystallization.previous_summary 中传递，此处不在 System Prompt 中重复拼接，避免破坏 Prompt Caching 缓存
 
       messages.push({
         content: systemSections.join('\n\n'),
@@ -378,6 +413,7 @@ export function createBackendLlm(opts = {}) {
       const savedTools = ctx.memory ? await ctx.memory.getAgentMeta('tools', null) : null
       const finalTools = (Array.isArray(savedTools) && savedTools.length > 0) ? savedTools : defaultChannelTools
       const savedEffort = ctx.memory ? await ctx.memory.getAgentMeta('reasoning_effort', 0) : 0
+      const chatParams = (typeof savedEffort === 'number' && savedEffort > 0) ? { reasoning_effort: savedEffort } : {}
 
       const event = {
         body: {
@@ -388,7 +424,7 @@ export function createBackendLlm(opts = {}) {
               model: targetModel,
               stream: true,
             },
-            chatParams: { reasoning_effort: savedEffort },
+            chatParams,
             crystallization: { enabled: true },
             crystallization_token_watermark: 'auto',
             previous_summary: ctx.crystal || '',
