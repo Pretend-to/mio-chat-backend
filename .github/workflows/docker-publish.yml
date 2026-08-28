@@ -39,12 +39,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
+      # pnpm 版本由 package.json 的 packageManager 字段唯一定义，
+      # 此处不再传 version，避免双重指定触发 ERR_PNPM_BAD_PM_VERSION
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
