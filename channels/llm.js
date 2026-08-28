@@ -329,7 +329,10 @@ export function createBackendLlm(opts = {}) {
         systemSections.push(`【关于用户的全局长期记忆与稳定事实】\n${ctx.globalMem.trim()}`)
       }
 
-      // 会话结晶已在 settings.crystallization.previous_summary 中传递，此处不在 System Prompt 中重复拼接，避免破坏 Prompt Caching 缓存
+      // 会话结晶 (memory_crystal)
+      if (ctx.crystal?.trim()) {
+        systemSections.push(`【会话历史事实结晶】\n<memory_crystal>\n${ctx.crystal.trim()}\n</memory_crystal>`)
+      }
 
       messages.push({
         content: systemSections.join('\n\n'),
@@ -444,6 +447,7 @@ export function createBackendLlm(opts = {}) {
       log.info?.(`[${ctx.channel?.channelType || 'channel'}] 🧩 消息链拼装完成: 总消息数=${messages.length} (System段数=${systemSections.length}, 历史轮数=${chatHistoryCount}, 注入工具数=${finalTools.length}, 思考强度=${savedEffort}, 当前输入="${ctx.text.slice(0, 30)}")`)
       log.info?.(`[${ctx.channel?.channelType || 'channel'}] 🧠 记忆载入详情: Soul=${ctx.soul ? '已设定' : '无'}, GlobalMem=${ctx.globalMem ? `${ctx.globalMem.length}字` : '无'}, Crystal=${ctx.crystal ? `${ctx.crystal.length}字` : '无'}`)
 
+      let latestCrystal = null
       const abortCallbacks = []
       const event = {
         body: {
@@ -530,6 +534,20 @@ export function createBackendLlm(opts = {}) {
           if (!data) return
           // 收集全量流式 chunk 用于完美组装结构化落盘数据
           collectedChunks.push(data)
+
+          if (data.type === 'crystallize') {
+            if (data.content?.status === 'finished' && data.content?.summary) {
+              const summaryXml = data.content.summary.trim()
+              if (summaryXml) {
+                latestCrystal = summaryXml
+                if (ctx.memory && ctx.sessionId) {
+                  ctx.memory.setCrystal(ctx.sessionId, summaryXml).catch(err => {
+                    ctx.channel?.log?.error?.(`[${ctx.channel?.channelType || 'channel'}] 记忆结晶落盘失败:`, err)
+                  })
+                }
+              }
+            }
+          }
 
           if (data.type === 'content') {
             currentBlockType = 'text'
@@ -642,6 +660,7 @@ export function createBackendLlm(opts = {}) {
       return {
         completed: true,
         content: structuredContent,
+        crystal: latestCrystal || event.body?.settings?.previous_summary || null,
         rawMessages: event.body.messages,
       }
     },
