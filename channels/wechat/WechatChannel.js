@@ -91,13 +91,15 @@ export class WechatChannel extends BaseChannel {
     this.log?.info?.(`[WechatChannel] 微信长轮询已启动，监听来自 masterId=${this.masterId} 的消息`)
     while (this.running) {
       try {
-        const res = await this.client.getUpdates({
-          getUpdatesBuf: this._buf,
-          timeoutMs: LONG_POLL_MS,
-        })
+        // 注意：IlinkClient.getUpdates 签名为 (buff, { timeoutMs, signal })，
+        // 第一参数是字符串游标，不可传对象，否则 get_updates_buf 非法导致服务端 ret=-12
+        const res = await this.client.getUpdates(this._buf, { timeoutMs: LONG_POLL_MS })
         if (!this.running) break
 
-        if (res && res.ret === 0) {
+        // iLink 空轮询超时响应可能不带 ret 字段（如空 body → {}），缺省视为成功；
+        // 旧版 _loop 从不检查 ret，仅此处的 -14/-12 等显式错误码需要处理
+        const ret = res?.ret ?? 0
+        if (ret === 0) {
           if (res.get_updates_buf != null) {
             this._buf = res.get_updates_buf
           }
@@ -105,12 +107,12 @@ export class WechatChannel extends BaseChannel {
           for (const msg of msgs) {
             await this.handleIncomingMessage(msg)
           }
-        } else if (res && res.ret === -14) {
+        } else if (ret === -14) {
           this.log?.error?.('[WechatChannel] 微信会话已过期 (ret=-14)，需要重新扫码')
           this.stop()
           break
         } else {
-          this.log?.warn?.(`[WechatChannel] getUpdates 返回异常: ret=${res?.ret}`)
+          this.log?.warn?.(`[WechatChannel] getUpdates 返回异常: ret=${ret}`)
           await sleep(RETRY_DELAY_MS)
         }
       } catch (err) {
@@ -319,8 +321,12 @@ export class WechatChannel extends BaseChannel {
 
   /**
    * 微信原生语音发送实现 (VOICE=4，自动转码为 Silk v3 格式)
+   * ⚠️ 2026-08-28 实测禁用：sendmessage 成功返回 message_id，但微信客户端无法渲染该语音气泡。
+   * 现直接抛错走 BaseChannel 的 catch 分支，降级为「音频链接」文本通知。恢复原生直传时解开下方注释即可。
    */
   async doSendVoice({ to, contextToken, buffer, url, localPath, text = '', durationMs = 0 }) {
+    throw new Error('微信客户端暂无法渲染原生语音消息，降级为链接发送')
+    /*
     if (contextToken) {
       this._recordTokenUsage(contextToken)
     }
@@ -343,12 +349,17 @@ export class WechatChannel extends BaseChannel {
     const sendRes = await this.client.sendMessage(voiceMsg)
     this.log?.info?.(`[WechatChannel] 📤 原生语音消息发送结果 (长度: ${durationMs || calculatedDuration}ms): ${JSON.stringify(sendRes)}`)
     return sendRes
+    */
   }
 
   /**
    * 微信原生文件发送实现 (FILE=3)
+   * ⚠️ 2026-08-28 实测禁用：文件消息直传整条链路发送失败（服务端拒绝）。
+   * 现直接抛错走 BaseChannel 的 catch 分支，降级为「下载链接」文本通知。恢复原生直传时解开下方注释即可。
    */
   async doSendFile({ to, contextToken, buffer, url, localPath, fileName }) {
+    throw new Error('微信原生文件消息发送失败，降级为下载链接发送')
+    /*
     if (contextToken) {
       this._recordTokenUsage(contextToken)
     }
@@ -370,6 +381,7 @@ export class WechatChannel extends BaseChannel {
     const sendRes = await this.client.sendMessage(fileMsg)
     this.log?.info?.(`[WechatChannel] 📤 原生文件消息发送结果 (${finalFileName}): ${JSON.stringify(sendRes)}`)
     return sendRes
+    */
   }
 
   /**

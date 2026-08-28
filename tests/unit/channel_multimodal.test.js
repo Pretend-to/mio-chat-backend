@@ -2,10 +2,10 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
-import { createBackendLlm } from '/Users/krumio/Code/mio-chat-backend/channels/llm.js'
-import { MemoryStore } from '/Users/krumio/Code/mio-chat-backend/channels/memory/MemoryStore.js'
-import { WechatChannel } from '/Users/krumio/Code/mio-chat-backend/channels/wechat/WechatChannel.js'
-import { convertAudioToSilk } from '/Users/krumio/Code/mio-chat-backend/channels/wechat/audioHelper.js'
+import { createBackendLlm } from '../../channels/llm.js'
+import { MemoryStore } from '../../channels/memory/MemoryStore.js'
+import { WechatChannel } from '../../channels/wechat/WechatChannel.js'
+import { convertAudioToSilk } from '../../channels/wechat/audioHelper.js'
 
 describe('Channel Multi-Modal & ExtraRender Pipeline Test', () => {
   test('convertAudioToSilk should successfully transcode silent PCM/WAV to Silk v3 format with 0x02 prefix', async () => {
@@ -18,7 +18,7 @@ describe('Channel Multi-Modal & ExtraRender Pipeline Test', () => {
     assert.ok(durationMs > 0, 'Duration should be positive')
   })
 
-  test('WechatChannel should route audio extraRender to doSendVoice and send native VOICE message', async () => {
+  test('WechatChannel should degrade audio extraRender to link notice since native VOICE send is disabled', async () => {
     const memory = new MemoryStore({ agentId: 'test-multimodal-agent', storageDir: './data/test-channels' })
     const session = await memory.createSession({ title: 'Test MultiModal Session' })
     await memory.setActiveSession(session.id)
@@ -96,25 +96,21 @@ describe('Channel Multi-Modal & ExtraRender Pipeline Test', () => {
 
     await channel._route(ctx.text, ctx)
 
-    // Check sent messages
-    assert.ok(sentMessages.length >= 2, 'Should have sent both voice and text messages')
-
-    // Find voice message
+    // 原生语音链路已禁用（2026-08-28 实测客户端无法渲染）：不应有 type 3 消息、不应上传 CDN
     const voiceMsg = sentMessages.find(m => m.item_list?.some(it => it.type === 3))
-    assert.ok(voiceMsg, 'Should contain a native type 3 (VOICE) message')
-    assert.equal(voiceMsg.item_list[0].voice_item?.text, '你好，这是合成的语音测试！')
-    assert.ok(voiceMsg.item_list[0].voice_item?.media?.aes_key)
-
-    // Check upload media was called with mediaType 4 (VOICE)
+    assert.ok(!voiceMsg, 'Should NOT contain a native type 3 (VOICE) message')
     const voiceUpload = uploadedMedia.find(u => u.opts.mediaType === 4)
-    assert.ok(voiceUpload, 'Should upload to WeChat CDN with mediaType 4 (VOICE)')
-    assert.equal(voiceUpload.buf[0], 0x02, 'Uploaded audio must be transcoded to Silk with 0x02 header')
+    assert.ok(!voiceUpload, 'Should NOT upload to WeChat CDN with mediaType 4 (VOICE)')
+
+    // 文本回复应正常送达（extraRender 仅含 buffer 无 url，降级无链接可发，仅发文本）
+    const textMsg = sentMessages.find(m => m.item_list?.some(it => it.text_item?.text?.includes('请听语音回复')))
+    assert.ok(textMsg, 'Text reply should still be delivered')
 
     // Cleanup
     await memory.deleteSession(session.id)
   })
 
-  test('WechatChannel should route file extraRender from share tool to doSendFile and send native FILE message', async () => {
+  test('WechatChannel should degrade file extraRender to download-link notice since native FILE send is disabled', async () => {
     const memory = new MemoryStore({ agentId: 'test-multimodal-agent-2', storageDir: './data/test-channels' })
     const session = await memory.createSession({ title: 'Test Share File Session' })
     await memory.setActiveSession(session.id)
@@ -186,14 +182,16 @@ describe('Channel Multi-Modal & ExtraRender Pipeline Test', () => {
 
     await channel._route(ctx.text, ctx)
 
-    // Find file message
+    // 原生文件链路已禁用（2026-08-28 实测发送失败）：不应有 type 4 消息、不应上传 CDN
     const fileMsg = sentMessages.find(m => m.item_list?.some(it => it.type === 4))
-    assert.ok(fileMsg, 'Should contain a native type 4 (FILE) message')
-    assert.equal(fileMsg.item_list[0].file_item?.file_name, '财务季度报告.pdf')
-
-    // Check upload media was called with mediaType 3 (FILE)
+    assert.ok(!fileMsg, 'Should NOT contain a native type 4 (FILE) message')
     const fileUpload = uploadedMedia.find(u => u.opts.mediaType === 3)
-    assert.ok(fileUpload, 'Should upload to WeChat CDN with mediaType 3 (FILE)')
+    assert.ok(!fileUpload, 'Should NOT upload to WeChat CDN with mediaType 3 (FILE)')
+
+    // 应降级为下载链接文本通知
+    const linkNotice = sentMessages.find(m => m.item_list?.some(it => it.text_item?.text?.includes('下载链接')))
+    assert.ok(linkNotice, 'Should degrade to a download-link text notice')
+    assert.ok(linkNotice.item_list[0].text_item.text.includes('财务季度报告.pdf'), 'Notice should mention the file name')
 
     // Cleanup
     await memory.deleteSession(session.id)
