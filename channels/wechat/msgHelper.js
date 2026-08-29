@@ -179,7 +179,8 @@ export function buildSendFileMsg({ to, fromBot, contextToken, mediaInfo, fileNam
         type: 4, // FILE
         file_item: {
           file_name: fileName,
-          len: mediaInfo.raw_size || mediaInfo.file_size_ciphertext || 0,
+          len: String(mediaInfo.raw_size || mediaInfo.file_size_ciphertext || 0),
+          md5: mediaInfo.raw_file_md5 || '',
           media: mediaObj,
         },
       },

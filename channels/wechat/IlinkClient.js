@@ -377,6 +377,7 @@ export class IlinkClient {
       encrypt_type: 1,
       file_size_ciphertext: fileSizeCiphertext,
       full_url: uploadFullUrl || '',
+      raw_file_md5: rawFileMd5,
       raw_size: rawSize,
     }
   }

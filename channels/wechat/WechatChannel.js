@@ -354,12 +354,8 @@ export class WechatChannel extends BaseChannel {
 
   /**
    * 微信原生文件发送实现 (FILE=3)
-   * ⚠️ 2026-08-28 实测禁用：文件消息直传整条链路发送失败（服务端拒绝）。
-   * 现直接抛错走 BaseChannel 的 catch 分支，降级为「下载链接」文本通知。恢复原生直传时解开下方注释即可。
    */
   async doSendFile({ to, contextToken, buffer, url, localPath, fileName }) {
-    throw new Error('微信原生文件消息发送失败，降级为下载链接发送')
-    /*
     if (contextToken) {
       this._recordTokenUsage(contextToken)
     }
@@ -381,7 +377,6 @@ export class WechatChannel extends BaseChannel {
     const sendRes = await this.client.sendMessage(fileMsg)
     this.log?.info?.(`[WechatChannel] 📤 原生文件消息发送结果 (${finalFileName}): ${JSON.stringify(sendRes)}`)
     return sendRes
-    */
   }
 
   /**
