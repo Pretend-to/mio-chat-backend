@@ -40,4 +40,10 @@ test('PushService 完整生命周期测试：VAPID生成与持久化、订阅增
   await pushService.removeSubscription(testSub.endpoint)
   const subsAfterRemove = await pushService.getSubscriptions()
   assert.strictEqual(subsAfterRemove.filter(s => s.endpoint === testSub.endpoint).length, 0, '注销后该 endpoint 必须被清除')
+
+  // 6. 清空所有订阅
+  await pushService.addSubscription(testSub, { device: 'pwa', userId: 'admin' })
+  await pushService.clearSubscriptions()
+  const subsAfterClear = await pushService.getSubscriptions()
+  assert.strictEqual(subsAfterClear.length, 0, '清空后订阅列表必须为空')
 })
