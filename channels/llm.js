@@ -554,9 +554,12 @@ export function createBackendLlm(opts = {}) {
                 let title = '安全操作二次确认'
                 const details = []
 
-                if (meta.type === 'global_memory' || meta.fact) {
+                if (meta.type === 'global_memory' || meta.fact || meta.content) {
                   title = '全局长期记忆更新审批'
-                  if (meta.fact) details.push(`📝 记忆内容：${meta.fact}`)
+                  const contentText = meta.content || meta.fact || ''
+                  if (contentText) details.push(`📝 记忆内容：${contentText}`)
+                  if (meta.category) details.push(`📁 记忆分类：${meta.category}`)
+                  if (meta.action) details.push(`⚙️ 操作类型：${meta.action === 'add' ? '新增' : meta.action === 'update' ? '更新' : meta.action === 'delete' ? '删除' : meta.action}`)
                   if (meta.target) details.push(`🎯 记忆目标：${meta.target}`)
                 } else if (meta.command) {
                   title = meta.highRisk ? '⚠️ 高危 Shell 命令授权' : '💻 Shell 命令授权'

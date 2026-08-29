@@ -201,6 +201,13 @@ export class BaseChannel {
 
   /** 统一消息路由入口：拦截确认 -> Slash 指令 -> 任务忙临时插话 -> 正式对话处理 */
   async _route(text, ctx) {
+    if (ctx?.contextToken) {
+      this.latestContextToken = ctx.contextToken
+      if (this.memory) {
+        this.memory.setAgentMeta('latestContextToken', ctx.contextToken).catch(() => {})
+      }
+    }
+
     // 0. 保活：记录用户活动时间并缓存 contextToken（对齐重构前 handleIncomingMessage 行为）
     await this.keepAlive.recordActivity(ctx?.contextToken || this.latestContextToken || null)
 

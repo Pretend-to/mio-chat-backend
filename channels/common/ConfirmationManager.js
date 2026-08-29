@@ -94,13 +94,23 @@ export class ConfirmationManager {
     clearTimeout(item.timer)
     this.pendingConfirmations.delete(pendingId)
 
+    // 无论确认还是取消，用户回复带来的最新 contextToken 必须立刻更新并持久化
+    if (ctx?.contextToken) {
+      this.channel.latestContextToken = ctx.contextToken
+      if (this.channel.memory) {
+        this.channel.memory.setAgentMeta('latestContextToken', ctx.contextToken).catch(() => {})
+      }
+    }
+
+    const replyToken = ctx?.contextToken || this.channel.latestContextToken || null
+
     if (isAllow) {
-      this.channel._safeSend(ctx.from, ctx.contextToken, '✅ 已确认授权，正在继续执行...')
-      item.resolve({ approved: true })
+      this.channel._safeSend(ctx.from, replyToken, '✅ 已确认授权，正在继续执行...')
+      item.resolve({ approved: true, contextToken: replyToken })
     } else {
       const feedback = rejectReason ? `🚫 已拒绝该操作（理由: ${rejectReason}）` : '🚫 已取消该操作'
-      this.channel._safeSend(ctx.from, ctx.contextToken, feedback)
-      item.resolve({ approved: false, reason: rejectReason || '用户已手动取消该操作' })
+      this.channel._safeSend(ctx.from, replyToken, feedback)
+      item.resolve({ approved: false, contextToken: replyToken, reason: rejectReason || '用户已手动取消该操作' })
     }
 
     return true
