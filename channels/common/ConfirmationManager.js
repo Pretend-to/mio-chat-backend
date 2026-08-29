@@ -50,9 +50,10 @@ export class ConfirmationManager {
       })
 
       // 向用户推送交互确认提示
+      const descBlock = (description || '').split('\n').map(line => `> ${line}`).join('\n')
       const confirmNotice = [
         `⚠️ **${title}**`,
-        `> ${description}`,
+        descBlock,
         '',
         '👉 回复【确认】或【/allow】执行',
         '👉 回复【取消】或【拒绝 理由】放弃',

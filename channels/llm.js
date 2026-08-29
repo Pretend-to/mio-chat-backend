@@ -548,11 +548,35 @@ export function createBackendLlm(opts = {}) {
             const reqFn = ctx.channel?.requestConfirmation || ctx.channel?.requestUserConfirmation
             if (ctx.channel && typeof reqFn === 'function') {
               try {
+                const meta = lastActionData?.meta || {}
                 const prompt = lastActionData?.prompt || 'LLM 正在申请执行敏感操作，是否授权？'
-                const title = lastActionData?.meta?.type === 'global_memory' ? '全局长期记忆更新审批' : '安全操作二次确认'
+                let title = '安全操作二次确认'
+                const details = []
+
+                if (meta.type === 'global_memory' || meta.fact) {
+                  title = '全局长期记忆更新审批'
+                  if (meta.fact) details.push(`📝 记忆内容：${meta.fact}`)
+                  if (meta.target) details.push(`🎯 记忆目标：${meta.target}`)
+                } else if (meta.command) {
+                  title = meta.highRisk ? '⚠️ 高危 Shell 命令授权' : '💻 Shell 命令授权'
+                  details.push(`💻 待执行命令：\`${meta.command}\``)
+                  if (meta.cwd) details.push(`📂 工作目录：${meta.cwd}`)
+                } else if (meta.params) {
+                  title = '⚙️ 系统配置修改审批'
+                  const paramsStr = typeof meta.params === 'object' ? JSON.stringify(meta.params, null, 2) : String(meta.params)
+                  details.push(`⚙️ 修改内容：\n${paramsStr}`)
+                } else if (meta.key && meta.value !== undefined) {
+                  title = '⚙️ 配置修改审批'
+                  details.push(`⚙️ 修改项：${meta.key} -> ${JSON.stringify(meta.value)}`)
+                }
+
+                const description = details.length > 0
+                  ? `${prompt}\n\n${details.join('\n')}`
+                  : prompt
+
                 const res = await reqFn.call(ctx.channel, {
                   contextToken: ctx.contextToken,
-                  description: prompt,
+                  description,
                   from: ctx.from,
                   title,
                 }, ctx)
