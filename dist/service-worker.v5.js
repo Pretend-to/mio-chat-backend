@@ -1,6 +1,6 @@
 const CACHE_DATABASE_NAME = "my-cache-db";
 const CACHE_OBJECT_STORE_NAME = "responses";
-const CACHE_VERSION = 17; // 每次修改 Service Worker 文件时，更新此版本号！
+const CACHE_VERSION = 18; // 每次修改 Service Worker 文件时，更新此版本号！
 const MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 天的缓存有效期 (毫秒)
 const CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // 每天清理一次 (毫秒)
 let db;
