@@ -90,7 +90,7 @@ async function bufferToImageUrl(baseUrl, buffer) {
   const type = await fileType.fileTypeFromBuffer(buffer)
   const contentType = type ? type.mime : 'image/png'
   
-  const result = await storageService.upload(buffer, filename, 'image', { contentType })
+  const result = await storageService.upload(buffer, filename, 'image', { contentType, dedup: true })
   
   const finalUrl = (baseUrl && result.url.startsWith('/')) ? `${baseUrl}${result.url}` : result.url
   return finalUrl

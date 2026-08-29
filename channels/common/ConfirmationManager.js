@@ -37,7 +37,7 @@ export class ConfirmationManager {
         if (this.pendingConfirmations.has(pendingId)) {
           this.pendingConfirmations.delete(pendingId)
           this.channel._safeSend(ctx.from, ctx.contextToken, `⏰ 操作确认超时已自动取消：${description}`)
-          reject(new Error('操作确认超时已取消'))
+          resolve({ approved: false, reason: '操作确认超时已取消' })
         }
       }, this.ttlMs)
 
@@ -50,12 +50,13 @@ export class ConfirmationManager {
       })
 
       // 向用户推送交互确认提示
+      const descBlock = (description || '').split('\n').map(line => `> ${line}`).join('\n')
       const confirmNotice = [
         `⚠️ **${title}**`,
-        `> ${description}`,
+        descBlock,
         '',
         '👉 回复【确认】或【/allow】执行',
-        '👉 回复【取消】放弃',
+        '👉 回复【取消】或【拒绝 理由】放弃',
       ].join('\n')
 
       this.channel._safeSend(ctx.from, ctx.contextToken, confirmNotice).catch(() => {})
@@ -71,9 +72,20 @@ export class ConfirmationManager {
   handleMessage(text, ctx) {
     if (this.pendingConfirmations.size === 0) return false
 
-    const normalized = (text || '').trim().toLowerCase()
-    const isAllow = ['确认', '允许', 'yes', 'y', 'ok', '/allow', '继续', '同意'].includes(normalized)
-    const isReject = ['取消', '拒绝', 'no', 'n', 'cancel', '/deny', '放弃'].includes(normalized)
+    const raw = (text || '').trim()
+    const normalized = raw.toLowerCase()
+    const isAllow = ['确认', '允许', 'yes', 'y', 'ok', '/allow', '继续', '同意', '好的', '行', '通过'].includes(normalized)
+    let isReject = ['取消', '拒绝', 'no', 'n', 'cancel', '/deny', '放弃', '不行', '不通过'].includes(normalized)
+    let rejectReason = ''
+
+    if (!isAllow && !isReject) {
+      // 提取“拒绝/取消/不通过”后面跟随的具体原因（如：“拒绝 因为当前是生产环境”）
+      const match = raw.match(/^(?:拒绝|取消|不通过|不同意|cancel|\/deny)\s*[:：,\s]?\s*(.+)$/i)
+      if (match) {
+        isReject = true
+        rejectReason = match[1]?.trim() || ''
+      }
+    }
 
     if (!isAllow && !isReject) return false
 
@@ -82,12 +94,23 @@ export class ConfirmationManager {
     clearTimeout(item.timer)
     this.pendingConfirmations.delete(pendingId)
 
+    // 无论确认还是取消，用户回复带来的最新 contextToken 必须立刻更新并持久化
+    if (ctx?.contextToken) {
+      this.channel.latestContextToken = ctx.contextToken
+      if (this.channel.memory) {
+        this.channel.memory.setAgentMeta('latestContextToken', ctx.contextToken).catch(() => {})
+      }
+    }
+
+    const replyToken = ctx?.contextToken || this.channel.latestContextToken || null
+
     if (isAllow) {
-      this.channel._safeSend(ctx.from, ctx.contextToken, '✅ 已确认授权，正在继续执行...')
-      item.resolve(true)
+      this.channel._safeSend(ctx.from, replyToken, '✅ 已确认授权，正在继续执行...')
+      item.resolve({ approved: true, contextToken: replyToken })
     } else {
-      this.channel._safeSend(ctx.from, ctx.contextToken, '🚫 已取消该操作')
-      item.reject(new Error('用户已手动取消该操作'))
+      const feedback = rejectReason ? `🚫 已拒绝该操作（理由: ${rejectReason}）` : '🚫 已取消该操作'
+      this.channel._safeSend(ctx.from, replyToken, feedback)
+      item.resolve({ approved: false, contextToken: replyToken, reason: rejectReason || '用户已手动取消该操作' })
     }
 
     return true

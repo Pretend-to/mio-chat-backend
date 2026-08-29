@@ -14,6 +14,7 @@ import { SlashHandler } from './SlashHandler.js'
 import { ConfirmationManager } from './ConfirmationManager.js'
 import { KeepAliveManager } from './KeepAliveManager.js'
 import { MediaResolver } from './MediaResolver.js'
+import sessions from '../../lib/server/socket.io/services/sessions.js'
 
 export class BaseChannel {
   /**
@@ -42,10 +43,14 @@ export class BaseChannel {
     keepAlive = {},
     logger = console,
     onActivity = null,
+    id = null,
+    channelId = null,
   }) {
     if (!client || !memory || !masterId) {
       throw new Error(`[${this.constructor.name}] requires client, memory, and masterId`)
     }
+    this.id = id || channelId || (memory && memory.agentId) || channelType
+    this.channelId = this.id
     this.client = client
     this.memory = memory
     this.masterId = masterId
@@ -200,6 +205,13 @@ export class BaseChannel {
 
   /** 统一消息路由入口：拦截确认 -> Slash 指令 -> 任务忙临时插话 -> 正式对话处理 */
   async _route(text, ctx) {
+    if (ctx?.contextToken) {
+      this.latestContextToken = ctx.contextToken
+      if (this.memory) {
+        this.memory.setAgentMeta('latestContextToken', ctx.contextToken).catch(() => {})
+      }
+    }
+
     // 0. 保活：记录用户活动时间并缓存 contextToken（对齐重构前 handleIncomingMessage 行为）
     await this.keepAlive.recordActivity(ctx?.contextToken || this.latestContextToken || null)
 
@@ -212,7 +224,22 @@ export class BaseChannel {
     if (text.trim().startsWith('/')) {
       const slashRes = await this.slashHandler.handle(text.trim(), ctx)
       if (slashRes?.text) {
-        await this._safeSend(ctx.from, ctx.contextToken, slashRes.text)
+        if (ctx.isWeb && ctx.webClient && ctx.messageId) {
+          const metaData = {
+            contactorId: ctx.channelId,
+            messageId: ctx.messageId,
+          }
+          ctx.webClient.sendOpenaiMessage('update', {
+            content: slashRes.text,
+            metaData,
+            type: 'content',
+          }, ctx.messageId)
+          ctx.webClient.sendOpenaiMessage('complete', {
+            metaData,
+          }, ctx.messageId)
+        } else {
+          await this._safeSend(ctx.from, ctx.contextToken, slashRes.text)
+        }
       }
       return slashRes
     }
@@ -297,6 +324,48 @@ export class BaseChannel {
     const session = await this.memory.getSession(sid)
     const chat = session?.chat || []
 
+    ctx.channelId = ctx.channelId || this.channelId || this.id || this.memory?.agentId
+
+    // 当消息来自第三方渠道（!ctx.isWeb）时，若 Web 客户端在线，向其广播用户消息并建立 Blank 占位
+    if (!ctx.isWeb) {
+      const userMsgId = ctx.userMessageId || `msg_u_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+      const assistantMsgId = ctx.messageId || `msg_a_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+      ctx.messageId = assistantMsgId
+
+      const onlineWebClients = sessions.getAllAdminClients()
+      if (onlineWebClients && onlineWebClients.length > 0) {
+        const userMsgContent = [{ data: { text }, type: 'text' }]
+        const imgList = ctx.rawMsg?.images || ctx.images || null
+        if (Array.isArray(imgList)) {
+          for (const img of imgList) {
+            userMsgContent.push({ data: { file: img }, type: 'image' })
+          }
+        }
+        if (Array.isArray(ctx.files)) {
+          for (const f of ctx.files) {
+            userMsgContent.push({ data: { file: f.url, name: f.name }, type: 'file' })
+          }
+        }
+        for (const client of onlineWebClients) {
+          client.send({
+            data: {
+              assistantMessageId: assistantMsgId,
+              contactorId: ctx.channelId,
+              userMessage: {
+                content: userMsgContent,
+                id: userMsgId,
+                role: 'user',
+                text,
+                time: Date.now(),
+              },
+            },
+            protocol: 'channel',
+            type: 'channel_user_message',
+          })
+        }
+      }
+    }
+
     const emittedBlocks = []
     const activeJobObj = {
       _abortLlm: null,
@@ -315,16 +384,22 @@ export class BaseChannel {
 
     let typingTimer = null
     try {
-      this.doSendTyping(ctx, 1).catch(() => {})
-      typingTimer = setInterval(() => {
+      if (!ctx.isWeb) {
         this.doSendTyping(ctx, 1).catch(() => {})
-      }, 4000)
+        typingTimer = setInterval(() => {
+          this.doSendTyping(ctx, 1).catch(() => {})
+        }, 4000)
+      }
 
       let sendQueue = Promise.resolve()
       let lastSendTimeMs = 0
 
       // 流式分发回调：检测到完整文本块或多模态 extraRender 时进入串行发送流水线
       const onEmitTextBlock = (textBlock, meta = {}) => {
+        if (ctx.isWeb) {
+          // Web 客户端已通过 Socket 实时流推送，无需向第三方 IM 网关重复发送
+          return Promise.resolve()
+        }
         sendQueue = sendQueue.then(async () => {
           // 1. 原生图片下发 (Image)
           if (meta.image || meta.extraRender?.type === 'image' || meta.extraRender?.imageUrl) {
@@ -492,6 +567,7 @@ export class BaseChannel {
       const reply = await this.llm.process({
         agentId: this.memory.agentId,
         channel: this,
+        channelId: ctx.channelId,
         chat,
         contextToken: ctx.contextToken,
         crystal: crystal || '',
@@ -499,7 +575,9 @@ export class BaseChannel {
         globalMem: globalMem || '',
         guidance: !soul,
         images: ctx.rawMsg?.images || ctx.images || null,
+        isWeb: ctx.isWeb,
         memory: this.memory,
+        messageId: ctx.messageId,
         model: this.model,
         onEmitTextBlock,
         onRegisterAbort: (abortFn) => { activeJobObj._abortLlm = abortFn },
@@ -507,6 +585,7 @@ export class BaseChannel {
         sessionId: sid,
         soul: soul || '',
         text,
+        webClient: ctx.webClient,
       })
 
       // 兼容传统同步返回
@@ -533,11 +612,13 @@ export class BaseChannel {
           }
         }
 
+        const now = Date.now()
         const userMsg = {
           content: [{ data: { text: finalUserText }, type: 'text' }],
           from_user_id: ctx.from,
           role: 'user',
           text: finalUserText,
+          time: ctx.time || ctx.rawMsg?.time || now,
         }
         await this.memory.appendToChat(sid, userMsg)
 
@@ -564,6 +645,7 @@ export class BaseChannel {
           content: assistantContent,
           role: 'assistant',
           text: fullAssistantReply || (reply?.aborted ? '⏹️ [用户已中止任务 / User aborted]' : ''),
+          time: Date.now(),
         }
 
         const updatedSession = await this.memory.appendToChat(sid, assistantMsg)

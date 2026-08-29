@@ -10,6 +10,7 @@
  */
 
 import skillService from '../lib/chat/llm/services/SkillService.js'
+import sessions from '../lib/server/socket.io/services/sessions.js'
 
 export function createEchoLlm({ prefix = '' } = {}) {
   return {
@@ -177,10 +178,15 @@ function assembleStructuredContent(chunks) {
 
   const flushReason = () => {
     if (currentReason && currentReason.trim()) {
+      const now = Date.now()
+      const start = reasonData?.startTime || (now - 1000)
+      const duration = reasonData?.duration || (now > start ? now - start : 1000)
+      const safeDuration = duration > 0 ? duration : 1000
       content.push({
         data: {
-          duration: reasonData?.duration ?? 0,
-          startTime: reasonData?.startTime || Date.now(),
+          duration: safeDuration,
+          endTime: start + safeDuration,
+          startTime: start,
           text: currentReason,
         },
         type: 'reason',
@@ -458,7 +464,9 @@ export function createBackendLlm(opts = {}) {
       log.info?.(`[${ctx.channel?.channelType || 'channel'}] 🧩 消息链拼装完成: 总消息数=${messages.length} (System段数=${systemSections.length}, 历史轮数=${chatHistoryCount}, 注入工具数=${finalTools.length}, 思考强度=${savedEffort}, 当前输入="${ctx.text.slice(0, 30)}")`)
       log.info?.(`[${ctx.channel?.channelType || 'channel'}] 🧠 记忆载入详情: Soul=${ctx.soul ? '已设定' : '无'}, GlobalMem=${ctx.globalMem ? `${ctx.globalMem.length}字` : '无'}, Crystal=${ctx.crystal ? `${ctx.crystal.length}字` : '无'}`)
 
+      let lastActionData = null
       let latestCrystal = null
+      let currentReasoningStartTime = null
       const abortCallbacks = []
       const event = {
         body: {
@@ -498,7 +506,16 @@ export function createBackendLlm(opts = {}) {
           removeListener: () => {},
           sendOpenaiMessage: () => {},
         },
-        emitInteraction: () => true,
+        interactions: new Map(),
+        emitInteraction: (interactionId, data) => {
+          const cb = event.interactions.get(interactionId)
+          if (cb) {
+            event.interactions.delete(interactionId)
+            cb(data)
+            return true
+          }
+          return false
+        },
         error: (err) => {
           streamError = err
         },
@@ -522,29 +539,120 @@ export function createBackendLlm(opts = {}) {
         },
         pending: () => {},
         registerInteraction: async (interactionId, callback) => {
-          if (ctx.channel && typeof ctx.channel.requestUserConfirmation === 'function') {
-            try {
-              const approved = await ctx.channel.requestUserConfirmation({
-                contextToken: ctx.contextToken,
-                description: `LLM 正在申请执行命令，是否授权？`,
-                from: ctx.from,
-                title: '终端/敏感命令执行审批',
-              })
-              callback({ approved })
-            } catch (err) {
-              callback({ approved: false, reason: err.message })
-            }
+          event.interactions.set(interactionId, callback)
+
+          if (ctx.isWeb && ctx.webClient && ctx.messageId) {
+            // 1. 来自 Web 客户端：注册到 webClient 活跃事件集，由前端通过 Socket.IO 就地弹窗与 tool:interact 交互
+            ctx.webClient.pushEvent(ctx.messageId, event)
           } else {
-            callback({ approved: true })
+            // 2. 来自渠道端（微信长轮询等）：向第三方渠道推送文本确认卡片并通过消息回复进行交互
+            const reqFn = ctx.channel?.requestConfirmation || ctx.channel?.requestUserConfirmation
+            if (ctx.channel && typeof reqFn === 'function') {
+              try {
+                const meta = lastActionData?.meta || {}
+                const prompt = lastActionData?.prompt || 'LLM 正在申请执行敏感操作，是否授权？'
+                let title = '安全操作二次确认'
+                const details = []
+
+                if (meta.type === 'global_memory' || meta.fact || meta.content) {
+                  title = '全局长期记忆更新审批'
+                  const contentText = meta.content || meta.fact || ''
+                  if (contentText) details.push(`📝 记忆内容：${contentText}`)
+                  if (meta.category) details.push(`📁 记忆分类：${meta.category}`)
+                  if (meta.action) details.push(`⚙️ 操作类型：${meta.action === 'add' ? '新增' : meta.action === 'update' ? '更新' : meta.action === 'delete' ? '删除' : meta.action}`)
+                  if (meta.target) details.push(`🎯 记忆目标：${meta.target}`)
+                } else if (meta.command) {
+                  title = meta.highRisk ? '⚠️ 高危 Shell 命令授权' : '💻 Shell 命令授权'
+                  details.push(`💻 待执行命令：\`${meta.command}\``)
+                  if (meta.cwd) details.push(`📂 工作目录：${meta.cwd}`)
+                } else if (meta.params) {
+                  title = '⚙️ 系统配置修改审批'
+                  const paramsStr = typeof meta.params === 'object' ? JSON.stringify(meta.params, null, 2) : String(meta.params)
+                  details.push(`⚙️ 修改内容：\n${paramsStr}`)
+                } else if (meta.key && meta.value !== undefined) {
+                  title = '⚙️ 配置修改审批'
+                  details.push(`⚙️ 修改项：${meta.key} -> ${JSON.stringify(meta.value)}`)
+                }
+
+                const description = details.length > 0
+                  ? `${prompt}\n\n${details.join('\n')}`
+                  : prompt
+
+                const res = await reqFn.call(ctx.channel, {
+                  contextToken: ctx.contextToken,
+                  description,
+                  from: ctx.from,
+                  title,
+                }, ctx)
+                event.emitInteraction(interactionId, typeof res === 'object' ? res : { approved: Boolean(res) })
+              } catch (err) {
+                event.emitInteraction(interactionId, { approved: false, reason: err.message })
+              }
+            } else {
+              event.emitInteraction(interactionId, { approved: true })
+            }
           }
         },
         reply: () => {},
         requestId: `${ctx.channel?.channelType || 'channel'}_${ctx.sessionId || Date.now()}_${Date.now()}`,
-        unregisterInteraction: () => true,
+        unregisterInteraction: (interactionId) => {
+          return event.interactions.delete(interactionId)
+        },
         update: async (data) => {
           if (!data) return
           // 收集全量流式 chunk 用于完美组装结构化落盘数据
           collectedChunks.push(data)
+          if (data.type === 'action' && data.content) {
+            lastActionData = data.content
+          }
+
+          // 若存在 Web 实时客户端连接，向客户端推流（支持微信与 Web 同时在线时的实时镜像推流）
+          const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
+          const resolvedContactorId = ctx.channelId || ctx.agentId || ctx.channel?.id || ctx.channel?.channelId || ctx.memory?.agentId || null
+          if (targetWebClients.length > 0 && ctx.messageId) {
+            let finalData = data
+            if (data.type === 'reasoningContent') {
+              if (!currentReasoningStartTime) {
+                currentReasoningStartTime = Date.now()
+              }
+              finalData = {
+                data: {
+                  duration: 0,
+                  startTime: currentReasoningStartTime,
+                  text: data.content || data.data?.text || '',
+                },
+                type: 'reason',
+              }
+            } else if (data.type === 'reason') {
+              if (!data.data && typeof data.content === 'string') {
+                if (!currentReasoningStartTime) {
+                  currentReasoningStartTime = Date.now()
+                }
+                finalData = {
+                  data: {
+                    duration: data.duration || 0,
+                    startTime: data.startTime || currentReasoningStartTime,
+                    text: data.content,
+                  },
+                  type: 'reason',
+                }
+              }
+            } else if (data.type === 'content' || data.type === 'toolCall') {
+              currentReasoningStartTime = null
+            }
+
+            const dataWithMeta = {
+              ...finalData,
+              metaData: {
+                contactorId: resolvedContactorId,
+                messageId: ctx.messageId,
+                ...(data.metaData || {}),
+              },
+            }
+            for (const client of targetWebClients) {
+              client.sendOpenaiMessage('update', dataWithMeta, ctx.messageId)
+            }
+          }
 
           if (data.type === 'crystallize') {
             if (data.content?.status === 'finished' && data.content?.summary) {
@@ -651,6 +759,19 @@ export function createBackendLlm(opts = {}) {
               await flushTextBlock()
             }
             currentBlockType = 'idle'
+            const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
+            const resolvedContactorId = ctx.channelId || ctx.agentId || ctx.channel?.id || ctx.channel?.channelId || ctx.memory?.agentId || null
+            if (targetWebClients.length > 0 && ctx.messageId) {
+              for (const client of targetWebClients) {
+                client.popEvent?.(ctx.messageId)
+                client.sendOpenaiMessage('complete', {
+                  metaData: {
+                    contactorId: resolvedContactorId,
+                    messageId: ctx.messageId,
+                  },
+                }, ctx.messageId)
+              }
+            }
             resolve()
           } catch (e) {
             reject(e)
@@ -661,6 +782,20 @@ export function createBackendLlm(opts = {}) {
           if (isDone) return
           isDone = true
           streamError = err
+          const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
+          const resolvedContactorId = ctx.channelId || ctx.agentId || ctx.channel?.id || ctx.channel?.channelId || ctx.memory?.agentId || null
+          if (targetWebClients.length > 0 && ctx.messageId) {
+            for (const client of targetWebClients) {
+              client.popEvent?.(ctx.messageId)
+              client.sendOpenaiMessage('failed', {
+                message: err?.message || String(err),
+                metaData: {
+                  contactorId: resolvedContactorId,
+                  messageId: ctx.messageId,
+                },
+              }, ctx.messageId)
+            }
+          }
           reject(err)
         }
 

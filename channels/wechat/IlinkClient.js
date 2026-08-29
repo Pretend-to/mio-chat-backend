@@ -370,12 +370,14 @@ export class IlinkClient {
     // 微信 CDN 成功后会在 Header 中返回 x-encrypted-param
     const downloadParam = uploadRes.headers.get('x-encrypted-param') || uploadParam || ''
 
+    // 微信官方协议要求：sendmessage 中 CDNMedia.aes_key 必须采用 base64(32位hex字符) 格式
     return {
-      aes_key: aesKey.toString('base64'),
+      aes_key: Buffer.from(aesKeyHex, 'utf-8').toString('base64'),
       encrypt_query_param: downloadParam,
       encrypt_type: 1,
       file_size_ciphertext: fileSizeCiphertext,
       full_url: uploadFullUrl || '',
+      raw_file_md5: rawFileMd5,
       raw_size: rawSize,
     }
   }

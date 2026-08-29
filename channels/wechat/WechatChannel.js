@@ -93,37 +93,58 @@ export class WechatChannel extends BaseChannel {
       try {
         // 注意：IlinkClient.getUpdates 签名为 (buff, { timeoutMs, signal })，
         // 第一参数是字符串游标，不可传对象，否则 get_updates_buf 非法导致服务端 ret=-12
-        const res = await this.client.getUpdates(this._buf, { timeoutMs: LONG_POLL_MS })
+        const res = await this.client.getUpdates(this._buf, {
+          signal: this._abort?.signal,
+          timeoutMs: LONG_POLL_MS,
+        })
         if (!this.running) break
 
         // iLink 空轮询超时响应可能不带 ret 字段（如空 body → {}），缺省视为成功；
         // 旧版 _loop 从不检查 ret，仅此处的 -14/-12 等显式错误码需要处理
         const ret = res?.ret ?? 0
         if (ret === 0) {
+          this.connected = true
+          this.lastPollSuccess = Date.now()
+          this.lastError = null
           if (res.get_updates_buf != null) {
             this._buf = res.get_updates_buf
           }
           const msgs = res.msgs || []
           for (const msg of msgs) {
-            await this.handleIncomingMessage(msg)
+            this.lastActive = Date.now()
+            this.onActivity?.()
+            this.handleIncomingMessage(msg).catch((err) => {
+              this.log?.error?.('[WechatChannel] 处理入站消息异常:', err)
+            })
           }
         } else if (ret === -14) {
+          this.connected = false
+          this.lastError = '微信会话已过期 (ret=-14)，需要重新扫码'
           this.log?.error?.('[WechatChannel] 微信会话已过期 (ret=-14)，需要重新扫码')
           this.stop()
           break
         } else {
+          this.connected = false
+          this.lastError = `微信接口返回异常 (ret=${ret})`
           this.log?.warn?.(`[WechatChannel] getUpdates 返回异常: ret=${ret}`)
           await sleep(RETRY_DELAY_MS)
         }
       } catch (err) {
         if (!this.running) break
-        if (err?.name === 'TimeoutError' || err?.message?.includes('timeout') || err?.code === 20) {
+        if (err?.name === 'TimeoutError' || err?.message?.includes('timeout') || err?.code === 20 || err?.name === 'AbortError') {
+          if (err?.name !== 'AbortError') {
+            this.connected = true
+            this.lastPollSuccess = Date.now()
+          }
           continue
         }
+        this.connected = false
+        this.lastError = err?.message || '轮询网络异常'
         this.log?.error?.('[WechatChannel] 轮询异常:', err?.message)
         await sleep(RETRY_DELAY_MS)
       }
     }
+    this.connected = false
   }
 
   async handleIncomingMessage(msg) {
@@ -138,9 +159,10 @@ export class WechatChannel extends BaseChannel {
     if (contextToken) {
       this.latestContextToken = contextToken
       if (this.memory) {
-        this.memory.setAgentMeta('latestContextToken', contextToken).catch(() => {})
+        await this.memory.setAgentMeta('latestContextToken', contextToken).catch(() => {})
       }
     }
+    await this.keepAlive.recordActivity(contextToken || this.latestContextToken || null)
 
     const rawImages = extractImages(msg)
     const rawFiles = extractFiles(msg)
@@ -196,8 +218,7 @@ export class WechatChannel extends BaseChannel {
             if (typeof this.bufferToImageUrl === 'function') {
               localUrl = await this.bufferToImageUrl(buffer)
             } else if (buffer) {
-              const stored = await storageService.upload(buffer, `wechat_${Date.now()}.png`, 'image', { contentType: 'image/png' })
-              localUrl = bufferToImageUrl(buffer, 'image/png') || stored.url
+              localUrl = await bufferToImageUrl(this.baseUrl || '', buffer)
             }
             if (localUrl) {
               buf.images.push(localUrl)
@@ -208,7 +229,9 @@ export class WechatChannel extends BaseChannel {
             buf.pendingCount = Math.max(0, buf.pendingCount - 1)
           }
         }
-      })()
+      })().catch((e) => {
+        this.log?.error?.(`[WechatChannel] 图片处理异常: ${e.message}`)
+      })
     }
 
     // 5. 文件解密与转存
@@ -224,7 +247,7 @@ export class WechatChannel extends BaseChannel {
               fileUrl = await this.uploadFile(buffer, f.file_name)
             } else if (buffer) {
               const stored = await storageService.upload(buffer, f.file_name, 'file', { contentType: 'application/octet-stream' })
-              fileUrl = stored.url
+              fileUrl = stored?.url
             }
             if (fileUrl) {
               buf.files.push({ name: f.file_name, url: fileUrl })
@@ -235,7 +258,9 @@ export class WechatChannel extends BaseChannel {
             buf.pendingCount = Math.max(0, buf.pendingCount - 1)
           }
         }
-      })()
+      })().catch((e) => {
+        this.log?.error?.(`[WechatChannel] 文件处理异常: ${e.message}`)
+      })
     }
 
     // 6. 防抖触发
@@ -354,12 +379,8 @@ export class WechatChannel extends BaseChannel {
 
   /**
    * 微信原生文件发送实现 (FILE=3)
-   * ⚠️ 2026-08-28 实测禁用：文件消息直传整条链路发送失败（服务端拒绝）。
-   * 现直接抛错走 BaseChannel 的 catch 分支，降级为「下载链接」文本通知。恢复原生直传时解开下方注释即可。
    */
   async doSendFile({ to, contextToken, buffer, url, localPath, fileName }) {
-    throw new Error('微信原生文件消息发送失败，降级为下载链接发送')
-    /*
     if (contextToken) {
       this._recordTokenUsage(contextToken)
     }
@@ -381,7 +402,6 @@ export class WechatChannel extends BaseChannel {
     const sendRes = await this.client.sendMessage(fileMsg)
     this.log?.info?.(`[WechatChannel] 📤 原生文件消息发送结果 (${finalFileName}): ${JSON.stringify(sendRes)}`)
     return sendRes
-    */
   }
 
   /**

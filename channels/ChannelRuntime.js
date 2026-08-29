@@ -48,6 +48,8 @@ export class ChannelRuntime {
     const savedModel = await memory.getAgentMeta('model', channel.model || null)
 
     const chn = new WechatChannel({ 
+      channelId,
+      id: channelId,
       client, 
       memory, 
       masterId: channel.userId, 
