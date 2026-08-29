@@ -113,7 +113,9 @@ export class WechatChannel extends BaseChannel {
           for (const msg of msgs) {
             this.lastActive = Date.now()
             this.onActivity?.()
-            await this.handleIncomingMessage(msg)
+            this.handleIncomingMessage(msg).catch((err) => {
+              this.log?.error?.('[WechatChannel] 处理入站消息异常:', err)
+            })
           }
         } else if (ret === -14) {
           this.connected = false
