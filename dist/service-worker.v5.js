@@ -1,6 +1,6 @@
 const CACHE_DATABASE_NAME = "my-cache-db";
 const CACHE_OBJECT_STORE_NAME = "responses";
-const CACHE_VERSION = 18; // 每次修改 Service Worker 文件时，更新此版本号！
+const CACHE_VERSION = 19; // 每次修改 Service Worker 文件时，更新此版本号！
 const MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 天的缓存有效期 (毫秒)
 const CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // 每天清理一次 (毫秒)
 let db;
@@ -458,28 +458,36 @@ self.addEventListener("message", (event) => {
 // Web Push & PWA Notification Handlers
 // ==========================================
 self.addEventListener("push", (event) => {
-  let data = {};
-  try {
-    data = event.data ? event.data.json() : {};
-  } catch {
-    data = { title: "Mio-Chat 提醒", body: event.data ? event.data.text() : "" };
+  let title = "Mio-Chat 提醒";
+  let body = "您有新的消息或任务进展";
+  let url = "/";
+
+  if (event.data) {
+    try {
+      const payload = event.data.json();
+      if (payload) {
+        if (payload.title) title = String(payload.title);
+        if (payload.body) body = String(payload.body);
+        if (payload.url) url = String(payload.url);
+      }
+    } catch {
+      try {
+        const text = event.data.text();
+        if (text) body = text;
+      } catch {}
+    }
   }
 
-  const title = data.title || "Mio-Chat 提醒";
   const options = {
-    body: data.body || "您有新的消息或任务进展",
-    icon: data.icon || "/static/icons/192x192.png",
-    badge: data.badge || "/static/icons/192x192.png",
-    data: {
-      url: data.url || (data.contactorId ? `/?contactorId=${data.contactorId}` : "/"),
-      contactorId: data.contactorId,
-      timestamp: data.timestamp || Date.now(),
-    },
-    tag: data.contactorId ? `tag_${data.contactorId}` : "mio_chat_notify",
-    renotify: true,
+    body: body,
+    data: { url: url },
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(
+    self.registration.showNotification(title, options).catch((err) => {
+      console.error("[SW] showNotification error:", err);
+    })
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {
