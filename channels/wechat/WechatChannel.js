@@ -159,7 +159,7 @@ export class WechatChannel extends BaseChannel {
     if (contextToken) {
       this.latestContextToken = contextToken
       if (this.memory) {
-        this.memory.setAgentMeta('latestContextToken', contextToken).catch(() => {})
+        await this.memory.setAgentMeta('latestContextToken', contextToken).catch(() => {})
       }
     }
     await this.keepAlive.recordActivity(contextToken || this.latestContextToken || null)
