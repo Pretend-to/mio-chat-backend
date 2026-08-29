@@ -10,6 +10,7 @@
  */
 
 import skillService from '../lib/chat/llm/services/SkillService.js'
+import sessions from '../lib/server/socket.io/services/sessions.js'
 
 export function createEchoLlm({ prefix = '' } = {}) {
   return {
@@ -602,8 +603,9 @@ export function createBackendLlm(opts = {}) {
             lastActionData = data.content
           }
 
-          // 若存在 Web 实时客户端连接，直接向客户端推流
-          if (ctx.isWeb && ctx.webClient && ctx.messageId) {
+          // 若存在 Web 实时客户端连接，向客户端推流（支持微信与 Web 同时在线时的实时镜像推流）
+          const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
+          if (targetWebClients.length > 0 && ctx.messageId) {
             let finalData = data
             if (data.type === 'reasoningContent') {
               if (!currentReasoningStartTime) {
@@ -643,7 +645,9 @@ export function createBackendLlm(opts = {}) {
                 ...(data.metaData || {}),
               },
             }
-            ctx.webClient.sendOpenaiMessage('update', dataWithMeta, ctx.messageId)
+            for (const client of targetWebClients) {
+              client.sendOpenaiMessage('update', dataWithMeta, ctx.messageId)
+            }
           }
 
           if (data.type === 'crystallize') {
@@ -751,14 +755,17 @@ export function createBackendLlm(opts = {}) {
               await flushTextBlock()
             }
             currentBlockType = 'idle'
-            if (ctx.isWeb && ctx.webClient && ctx.messageId) {
-              ctx.webClient.popEvent(ctx.messageId)
-              ctx.webClient.sendOpenaiMessage('complete', {
-                metaData: {
-                  contactorId: ctx.channelId,
-                  messageId: ctx.messageId,
-                },
-              }, ctx.messageId)
+            const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
+            if (targetWebClients.length > 0 && ctx.messageId) {
+              for (const client of targetWebClients) {
+                client.popEvent?.(ctx.messageId)
+                client.sendOpenaiMessage('complete', {
+                  metaData: {
+                    contactorId: ctx.channelId,
+                    messageId: ctx.messageId,
+                  },
+                }, ctx.messageId)
+              }
             }
             resolve()
           } catch (e) {
@@ -770,15 +777,18 @@ export function createBackendLlm(opts = {}) {
           if (isDone) return
           isDone = true
           streamError = err
-          if (ctx.isWeb && ctx.webClient && ctx.messageId) {
-            ctx.webClient.popEvent(ctx.messageId)
-            ctx.webClient.sendOpenaiMessage('failed', {
-              message: err?.message || String(err),
-              metaData: {
-                contactorId: ctx.channelId,
-                messageId: ctx.messageId,
-              },
-            }, ctx.messageId)
+          const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
+          if (targetWebClients.length > 0 && ctx.messageId) {
+            for (const client of targetWebClients) {
+              client.popEvent?.(ctx.messageId)
+              client.sendOpenaiMessage('failed', {
+                message: err?.message || String(err),
+                metaData: {
+                  contactorId: ctx.channelId,
+                  messageId: ctx.messageId,
+                },
+              }, ctx.messageId)
+            }
           }
           reject(err)
         }

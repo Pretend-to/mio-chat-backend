@@ -14,6 +14,7 @@ import { SlashHandler } from './SlashHandler.js'
 import { ConfirmationManager } from './ConfirmationManager.js'
 import { KeepAliveManager } from './KeepAliveManager.js'
 import { MediaResolver } from './MediaResolver.js'
+import sessions from '../../lib/server/socket.io/services/sessions.js'
 
 export class BaseChannel {
   /**
@@ -311,6 +312,48 @@ export class BaseChannel {
     const crystal = await this.memory.getCrystal(sid)
     const session = await this.memory.getSession(sid)
     const chat = session?.chat || []
+
+    ctx.channelId = ctx.channelId || this.id
+
+    // 当消息来自第三方渠道（!ctx.isWeb）时，若 Web 客户端在线，向其广播用户消息并建立 Blank 占位
+    if (!ctx.isWeb) {
+      const userMsgId = ctx.userMessageId || `msg_u_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+      const assistantMsgId = ctx.messageId || `msg_a_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+      ctx.messageId = assistantMsgId
+
+      const onlineWebClients = sessions.getAllAdminClients()
+      if (onlineWebClients && onlineWebClients.length > 0) {
+        const userMsgContent = [{ data: { text }, type: 'text' }]
+        const imgList = ctx.rawMsg?.images || ctx.images || null
+        if (Array.isArray(imgList)) {
+          for (const img of imgList) {
+            userMsgContent.push({ data: { file: img }, type: 'image' })
+          }
+        }
+        if (Array.isArray(ctx.files)) {
+          for (const f of ctx.files) {
+            userMsgContent.push({ data: { file: f.url, name: f.name }, type: 'file' })
+          }
+        }
+        for (const client of onlineWebClients) {
+          client.send({
+            data: {
+              assistantMessageId: assistantMsgId,
+              contactorId: this.id,
+              userMessage: {
+                content: userMsgContent,
+                id: userMsgId,
+                role: 'user',
+                text,
+                time: Date.now(),
+              },
+            },
+            protocol: 'channel',
+            type: 'channel_user_message',
+          })
+        }
+      }
+    }
 
     const emittedBlocks = []
     const activeJobObj = {
