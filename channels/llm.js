@@ -608,6 +608,7 @@ export function createBackendLlm(opts = {}) {
 
           // 若存在 Web 实时客户端连接，向客户端推流（支持微信与 Web 同时在线时的实时镜像推流）
           const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
+          const resolvedContactorId = ctx.channelId || ctx.agentId || ctx.channel?.id || ctx.channel?.channelId || ctx.memory?.agentId || null
           if (targetWebClients.length > 0 && ctx.messageId) {
             let finalData = data
             if (data.type === 'reasoningContent') {
@@ -643,7 +644,7 @@ export function createBackendLlm(opts = {}) {
             const dataWithMeta = {
               ...finalData,
               metaData: {
-                contactorId: ctx.channelId,
+                contactorId: resolvedContactorId,
                 messageId: ctx.messageId,
                 ...(data.metaData || {}),
               },
@@ -759,12 +760,13 @@ export function createBackendLlm(opts = {}) {
             }
             currentBlockType = 'idle'
             const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
+            const resolvedContactorId = ctx.channelId || ctx.agentId || ctx.channel?.id || ctx.channel?.channelId || ctx.memory?.agentId || null
             if (targetWebClients.length > 0 && ctx.messageId) {
               for (const client of targetWebClients) {
                 client.popEvent?.(ctx.messageId)
                 client.sendOpenaiMessage('complete', {
                   metaData: {
-                    contactorId: ctx.channelId,
+                    contactorId: resolvedContactorId,
                     messageId: ctx.messageId,
                   },
                 }, ctx.messageId)
@@ -781,13 +783,14 @@ export function createBackendLlm(opts = {}) {
           isDone = true
           streamError = err
           const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
+          const resolvedContactorId = ctx.channelId || ctx.agentId || ctx.channel?.id || ctx.channel?.channelId || ctx.memory?.agentId || null
           if (targetWebClients.length > 0 && ctx.messageId) {
             for (const client of targetWebClients) {
               client.popEvent?.(ctx.messageId)
               client.sendOpenaiMessage('failed', {
                 message: err?.message || String(err),
                 metaData: {
-                  contactorId: ctx.channelId,
+                  contactorId: resolvedContactorId,
                   messageId: ctx.messageId,
                 },
               }, ctx.messageId)

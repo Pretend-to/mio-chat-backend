@@ -43,10 +43,14 @@ export class BaseChannel {
     keepAlive = {},
     logger = console,
     onActivity = null,
+    id = null,
+    channelId = null,
   }) {
     if (!client || !memory || !masterId) {
       throw new Error(`[${this.constructor.name}] requires client, memory, and masterId`)
     }
+    this.id = id || channelId || (memory && memory.agentId) || channelType
+    this.channelId = this.id
     this.client = client
     this.memory = memory
     this.masterId = masterId
@@ -320,7 +324,7 @@ export class BaseChannel {
     const session = await this.memory.getSession(sid)
     const chat = session?.chat || []
 
-    ctx.channelId = ctx.channelId || this.id
+    ctx.channelId = ctx.channelId || this.channelId || this.id || this.memory?.agentId
 
     // 当消息来自第三方渠道（!ctx.isWeb）时，若 Web 客户端在线，向其广播用户消息并建立 Blank 占位
     if (!ctx.isWeb) {
@@ -346,7 +350,7 @@ export class BaseChannel {
           client.send({
             data: {
               assistantMessageId: assistantMsgId,
-              contactorId: this.id,
+              contactorId: ctx.channelId,
               userMessage: {
                 content: userMsgContent,
                 id: userMsgId,
