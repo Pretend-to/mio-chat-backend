@@ -11,6 +11,7 @@
 
 import skillService from '../lib/chat/llm/services/SkillService.js'
 import sessions from '../lib/server/socket.io/services/sessions.js'
+import streamCache from '../lib/server/socket.io/services/streamCache.js'
 
 export function createEchoLlm({ prefix = '' } = {}) {
   return {
@@ -606,10 +607,9 @@ export function createBackendLlm(opts = {}) {
             lastActionData = data.content
           }
 
-          // 若存在 Web 实时客户端连接，向客户端推流（支持微信与 Web 同时在线时的实时镜像推流）
-          const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
+          // 无论 Web 客户端是否在线，流式 Chunks 异步沉淀至 streamCache（完全不阻塞微信下发）
           const resolvedContactorId = ctx.channelId || ctx.agentId || ctx.channel?.id || ctx.channel?.channelId || ctx.memory?.agentId || null
-          if (targetWebClients.length > 0 && ctx.messageId) {
+          if (resolvedContactorId && ctx.messageId) {
             let finalData = data
             if (data.type === 'reasoningContent') {
               if (!currentReasoningStartTime) {
@@ -645,12 +645,24 @@ export function createBackendLlm(opts = {}) {
               ...finalData,
               metaData: {
                 contactorId: resolvedContactorId,
+                isTask: Boolean(ctx.isTask),
                 messageId: ctx.messageId,
+                triggerType: ctx.isTask ? 'task' : 'chat',
                 ...(data.metaData || {}),
               },
             }
-            for (const client of targetWebClients) {
-              client.sendOpenaiMessage('update', dataWithMeta, ctx.messageId)
+
+            // 1. 并发写入 streamCache，支撑离线回放
+            try {
+              streamCache.push('admin', resolvedContactorId, ctx.messageId, finalData, dataWithMeta.metaData)
+            } catch {}
+
+            // 2. 若存在在线 Web 客户端，实时推送镜像流
+            const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
+            if (targetWebClients.length > 0) {
+              for (const client of targetWebClients) {
+                client.sendOpenaiMessage('update', dataWithMeta, ctx.messageId)
+              }
             }
           }
 
@@ -759,8 +771,13 @@ export function createBackendLlm(opts = {}) {
               await flushTextBlock()
             }
             currentBlockType = 'idle'
-            const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
             const resolvedContactorId = ctx.channelId || ctx.agentId || ctx.channel?.id || ctx.channel?.channelId || ctx.memory?.agentId || null
+            if (resolvedContactorId && ctx.messageId) {
+              try {
+                streamCache.complete('admin', resolvedContactorId, ctx.messageId)
+              } catch {}
+            }
+            const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
             if (targetWebClients.length > 0 && ctx.messageId) {
               for (const client of targetWebClients) {
                 client.popEvent?.(ctx.messageId)
@@ -782,8 +799,13 @@ export function createBackendLlm(opts = {}) {
           if (isDone) return
           isDone = true
           streamError = err
-          const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
           const resolvedContactorId = ctx.channelId || ctx.agentId || ctx.channel?.id || ctx.channel?.channelId || ctx.memory?.agentId || null
+          if (resolvedContactorId && ctx.messageId) {
+            try {
+              streamCache.fail('admin', resolvedContactorId, ctx.messageId, err?.message || String(err))
+            } catch {}
+          }
+          const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
           if (targetWebClients.length > 0 && ctx.messageId) {
             for (const client of targetWebClients) {
               client.popEvent?.(ctx.messageId)
