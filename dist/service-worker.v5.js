@@ -453,3 +453,56 @@ self.addEventListener("message", (event) => {
     console.log("Service Worker: Dev mode set to", isDevMode);
   }
 });
+
+// ==========================================
+// Web Push & PWA Notification Handlers
+// ==========================================
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { title: "Mio-Chat 提醒", body: event.data ? event.data.text() : "" };
+  }
+
+  const title = data.title || "Mio-Chat 提醒";
+  const options = {
+    body: data.body || "您有新的消息或任务进展",
+    icon: data.icon || "/static/icons/192x192.png",
+    badge: data.badge || "/static/icons/192x192.png",
+    data: {
+      url: data.url || (data.contactorId ? `/?contactorId=${data.contactorId}` : "/"),
+      contactorId: data.contactorId,
+      timestamp: data.timestamp || Date.now(),
+    },
+    tag: data.contactorId ? `tag_${data.contactorId}` : "mio_chat_notify",
+    renotify: true,
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || "/";
+
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      // 1. 如果已有打开的窗口，聚焦并导航
+      for (const client of clientList) {
+        if ("focus" in client) {
+          client.focus();
+          if ("navigate" in client && targetUrl) {
+            client.navigate(targetUrl);
+          }
+          return;
+        }
+      }
+      // 2. 如果没有窗口，新开窗口
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    }),
+  );
+});
+
