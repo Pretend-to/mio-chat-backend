@@ -196,8 +196,7 @@ export class WechatChannel extends BaseChannel {
             if (typeof this.bufferToImageUrl === 'function') {
               localUrl = await this.bufferToImageUrl(buffer)
             } else if (buffer) {
-              const stored = await storageService.upload(buffer, `wechat_${Date.now()}.png`, 'image', { contentType: 'image/png' })
-              localUrl = stored?.url || await bufferToImageUrl(buffer)
+              localUrl = await bufferToImageUrl(this.baseUrl || '', buffer)
             }
             if (localUrl) {
               buf.images.push(localUrl)

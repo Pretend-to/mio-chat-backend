@@ -29,9 +29,12 @@ export function extractImages(msg) {
   const images = []
   for (const it of items) {
     if (it.image_item || it.type === 2) {
-      const media = it.image_item?.media
+      const media = it.image_item?.media || {}
       const aesKey = media?.aes_key || it.image_item?.aeskey || ''
-      const fullUrl = media?.full_url || ''
+      const fullUrl = media.full_url?.trim()
+        || (media.encrypt_query_param
+          ? `https://novac2c.cdn.weixin.qq.com/c2c/download?encrypted_query_param=${encodeURIComponent(media.encrypt_query_param)}`
+          : '')
       if (fullUrl && aesKey) {
         images.push({ full_url: fullUrl, aes_key: aesKey })
       }
@@ -46,9 +49,12 @@ export function extractFiles(msg) {
   const files = []
   for (const it of items) {
     if (it.file_item || it.type === 4) {
-      const media = it.file_item?.media
+      const media = it.file_item?.media || {}
       const aesKey = media?.aes_key || it.file_item?.aeskey || ''
-      const fullUrl = media?.full_url || ''
+      const fullUrl = media.full_url?.trim()
+        || (media.encrypt_query_param
+          ? `https://novac2c.cdn.weixin.qq.com/c2c/download?encrypted_query_param=${encodeURIComponent(media.encrypt_query_param)}`
+          : '')
       const fileName = it.file_item?.file_name || 'file'
       if (fullUrl && aesKey) {
         files.push({ full_url: fullUrl, aes_key: aesKey, file_name: fileName })
