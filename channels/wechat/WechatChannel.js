@@ -197,7 +197,7 @@ export class WechatChannel extends BaseChannel {
               localUrl = await this.bufferToImageUrl(buffer)
             } else if (buffer) {
               const stored = await storageService.upload(buffer, `wechat_${Date.now()}.png`, 'image', { contentType: 'image/png' })
-              localUrl = bufferToImageUrl(buffer, 'image/png') || stored.url
+              localUrl = stored?.url || await bufferToImageUrl(buffer)
             }
             if (localUrl) {
               buf.images.push(localUrl)
@@ -208,7 +208,9 @@ export class WechatChannel extends BaseChannel {
             buf.pendingCount = Math.max(0, buf.pendingCount - 1)
           }
         }
-      })()
+      })().catch((e) => {
+        this.log?.error?.(`[WechatChannel] 图片处理异常: ${e.message}`)
+      })
     }
 
     // 5. 文件解密与转存
@@ -224,7 +226,7 @@ export class WechatChannel extends BaseChannel {
               fileUrl = await this.uploadFile(buffer, f.file_name)
             } else if (buffer) {
               const stored = await storageService.upload(buffer, f.file_name, 'file', { contentType: 'application/octet-stream' })
-              fileUrl = stored.url
+              fileUrl = stored?.url
             }
             if (fileUrl) {
               buf.files.push({ name: f.file_name, url: fileUrl })
@@ -235,7 +237,9 @@ export class WechatChannel extends BaseChannel {
             buf.pendingCount = Math.max(0, buf.pendingCount - 1)
           }
         }
-      })()
+      })().catch((e) => {
+        this.log?.error?.(`[WechatChannel] 文件处理异常: ${e.message}`)
+      })
     }
 
     // 6. 防抖触发

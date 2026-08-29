@@ -83,6 +83,15 @@ async function base64ToImageUrl(baseUrl, base64String) {
 }
 
 async function bufferToImageUrl(baseUrl, buffer) {
+  // 容错处理：如果第1个参数传入了 Buffer/Uint8Array
+  if (Buffer.isBuffer(baseUrl) || baseUrl instanceof Uint8Array) {
+    buffer = baseUrl
+    baseUrl = ''
+  }
+  if (!buffer || (!Buffer.isBuffer(buffer) && !(buffer instanceof Uint8Array))) {
+    throw new TypeError('Expected buffer to be of type Buffer or Uint8Array')
+  }
+
   // 生成唯一的文件名
   const filename = await getBufferName(buffer)
   

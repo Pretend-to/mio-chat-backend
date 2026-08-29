@@ -182,16 +182,13 @@ describe('Channel Multi-Modal & ExtraRender Pipeline Test', () => {
 
     await channel._route(ctx.text, ctx)
 
-    // 原生文件链路已禁用（2026-08-28 实测发送失败）：不应有 type 4 消息、不应上传 CDN
+    // 原生文件直传：应包含 type 4 消息且正确调用 uploadMedia (mediaType=3)
     const fileMsg = sentMessages.find(m => m.item_list?.some(it => it.type === 4))
-    assert.ok(!fileMsg, 'Should NOT contain a native type 4 (FILE) message')
+    assert.ok(fileMsg, 'Should contain a native type 4 (FILE) message')
     const fileUpload = uploadedMedia.find(u => u.opts.mediaType === 3)
-    assert.ok(!fileUpload, 'Should NOT upload to WeChat CDN with mediaType 3 (FILE)')
-
-    // 应降级为下载链接文本通知
-    const linkNotice = sentMessages.find(m => m.item_list?.some(it => it.text_item?.text?.includes('下载链接')))
-    assert.ok(linkNotice, 'Should degrade to a download-link text notice')
-    assert.ok(linkNotice.item_list[0].text_item.text.includes('财务季度报告.pdf'), 'Notice should mention the file name')
+    assert.ok(fileUpload, 'Should upload to WeChat CDN with mediaType 3 (FILE)')
+    const fileItem = fileMsg.item_list.find(it => it.type === 4)?.file_item
+    assert.strictEqual(fileItem?.file_name, '财务季度报告.pdf')
 
     // Cleanup
     await memory.deleteSession(session.id)
