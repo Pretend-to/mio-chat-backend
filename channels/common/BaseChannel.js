@@ -212,7 +212,22 @@ export class BaseChannel {
     if (text.trim().startsWith('/')) {
       const slashRes = await this.slashHandler.handle(text.trim(), ctx)
       if (slashRes?.text) {
-        await this._safeSend(ctx.from, ctx.contextToken, slashRes.text)
+        if (ctx.isWeb && ctx.webClient && ctx.messageId) {
+          const metaData = {
+            contactorId: ctx.channelId,
+            messageId: ctx.messageId,
+          }
+          ctx.webClient.sendOpenaiMessage('update', {
+            content: slashRes.text,
+            metaData,
+            type: 'content',
+          }, ctx.messageId)
+          ctx.webClient.sendOpenaiMessage('complete', {
+            metaData,
+          }, ctx.messageId)
+        } else {
+          await this._safeSend(ctx.from, ctx.contextToken, slashRes.text)
+        }
       }
       return slashRes
     }
@@ -315,16 +330,22 @@ export class BaseChannel {
 
     let typingTimer = null
     try {
-      this.doSendTyping(ctx, 1).catch(() => {})
-      typingTimer = setInterval(() => {
+      if (!ctx.isWeb) {
         this.doSendTyping(ctx, 1).catch(() => {})
-      }, 4000)
+        typingTimer = setInterval(() => {
+          this.doSendTyping(ctx, 1).catch(() => {})
+        }, 4000)
+      }
 
       let sendQueue = Promise.resolve()
       let lastSendTimeMs = 0
 
       // 流式分发回调：检测到完整文本块或多模态 extraRender 时进入串行发送流水线
       const onEmitTextBlock = (textBlock, meta = {}) => {
+        if (ctx.isWeb) {
+          // Web 客户端已通过 Socket 实时流推送，无需向第三方 IM 网关重复发送
+          return Promise.resolve()
+        }
         sendQueue = sendQueue.then(async () => {
           // 1. 原生图片下发 (Image)
           if (meta.image || meta.extraRender?.type === 'image' || meta.extraRender?.imageUrl) {
@@ -492,6 +513,7 @@ export class BaseChannel {
       const reply = await this.llm.process({
         agentId: this.memory.agentId,
         channel: this,
+        channelId: ctx.channelId,
         chat,
         contextToken: ctx.contextToken,
         crystal: crystal || '',
@@ -499,7 +521,9 @@ export class BaseChannel {
         globalMem: globalMem || '',
         guidance: !soul,
         images: ctx.rawMsg?.images || ctx.images || null,
+        isWeb: ctx.isWeb,
         memory: this.memory,
+        messageId: ctx.messageId,
         model: this.model,
         onEmitTextBlock,
         onRegisterAbort: (abortFn) => { activeJobObj._abortLlm = abortFn },
@@ -507,6 +531,7 @@ export class BaseChannel {
         sessionId: sid,
         soul: soul || '',
         text,
+        webClient: ctx.webClient,
       })
 
       // 兼容传统同步返回
@@ -533,11 +558,13 @@ export class BaseChannel {
           }
         }
 
+        const now = Date.now()
         const userMsg = {
           content: [{ data: { text: finalUserText }, type: 'text' }],
           from_user_id: ctx.from,
           role: 'user',
           text: finalUserText,
+          time: ctx.time || ctx.rawMsg?.time || now,
         }
         await this.memory.appendToChat(sid, userMsg)
 
@@ -564,6 +591,7 @@ export class BaseChannel {
           content: assistantContent,
           role: 'assistant',
           text: fullAssistantReply || (reply?.aborted ? '⏹️ [用户已中止任务 / User aborted]' : ''),
+          time: Date.now(),
         }
 
         const updatedSession = await this.memory.appendToChat(sid, assistantMsg)

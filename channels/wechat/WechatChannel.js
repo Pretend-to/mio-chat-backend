@@ -93,37 +93,56 @@ export class WechatChannel extends BaseChannel {
       try {
         // 注意：IlinkClient.getUpdates 签名为 (buff, { timeoutMs, signal })，
         // 第一参数是字符串游标，不可传对象，否则 get_updates_buf 非法导致服务端 ret=-12
-        const res = await this.client.getUpdates(this._buf, { timeoutMs: LONG_POLL_MS })
+        const res = await this.client.getUpdates(this._buf, {
+          signal: this._abort?.signal,
+          timeoutMs: LONG_POLL_MS,
+        })
         if (!this.running) break
 
         // iLink 空轮询超时响应可能不带 ret 字段（如空 body → {}），缺省视为成功；
         // 旧版 _loop 从不检查 ret，仅此处的 -14/-12 等显式错误码需要处理
         const ret = res?.ret ?? 0
         if (ret === 0) {
+          this.connected = true
+          this.lastPollSuccess = Date.now()
+          this.lastError = null
           if (res.get_updates_buf != null) {
             this._buf = res.get_updates_buf
           }
           const msgs = res.msgs || []
           for (const msg of msgs) {
+            this.lastActive = Date.now()
+            this.onActivity?.()
             await this.handleIncomingMessage(msg)
           }
         } else if (ret === -14) {
+          this.connected = false
+          this.lastError = '微信会话已过期 (ret=-14)，需要重新扫码'
           this.log?.error?.('[WechatChannel] 微信会话已过期 (ret=-14)，需要重新扫码')
           this.stop()
           break
         } else {
+          this.connected = false
+          this.lastError = `微信接口返回异常 (ret=${ret})`
           this.log?.warn?.(`[WechatChannel] getUpdates 返回异常: ret=${ret}`)
           await sleep(RETRY_DELAY_MS)
         }
       } catch (err) {
         if (!this.running) break
-        if (err?.name === 'TimeoutError' || err?.message?.includes('timeout') || err?.code === 20) {
+        if (err?.name === 'TimeoutError' || err?.message?.includes('timeout') || err?.code === 20 || err?.name === 'AbortError') {
+          if (err?.name !== 'AbortError') {
+            this.connected = true
+            this.lastPollSuccess = Date.now()
+          }
           continue
         }
+        this.connected = false
+        this.lastError = err?.message || '轮询网络异常'
         this.log?.error?.('[WechatChannel] 轮询异常:', err?.message)
         await sleep(RETRY_DELAY_MS)
       }
     }
+    this.connected = false
   }
 
   async handleIncomingMessage(msg) {
@@ -141,6 +160,7 @@ export class WechatChannel extends BaseChannel {
         this.memory.setAgentMeta('latestContextToken', contextToken).catch(() => {})
       }
     }
+    await this.keepAlive.recordActivity(contextToken || this.latestContextToken || null)
 
     const rawImages = extractImages(msg)
     const rawFiles = extractFiles(msg)

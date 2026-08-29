@@ -208,6 +208,9 @@ export class MemoryStore {
   async appendToChat(id, msg) {
     const session = (await this.getSession(id)) || (await this.createSession({ id }))
     session.chat = session.chat || []
+    if (!msg.time) {
+      msg.time = Date.now()
+    }
     session.chat.push(msg)
     await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
     return session
