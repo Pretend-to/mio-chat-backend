@@ -110,3 +110,33 @@ test('streamCache fallback: 管理员连接未命中独立 client.id 时能够�
   assert.equal(cachedList[0].chunks[0].type, 'reason')
   assert.equal(cachedList[0].chunks[1].type, 'content')
 })
+
+test('completeToolHashes: 存量未带哈希的工具名自动补全与迁移', async () => {
+  const { completeToolHashes } = await import('../../channels/llm.js')
+
+  const fakeSystemTools = [
+    'memory_mid_88f98d',
+    'search_mid_c89694',
+    'draw_mid_ab12cd',
+    'bash_mid_eef123',
+    'Skill_mid_99aa88',
+  ]
+
+  // 1. 存量无哈希工具名
+  const legacyTools = ['memory', 'search', 'already_hashed_mid_111', 'bash']
+  const result = completeToolHashes(legacyTools, fakeSystemTools)
+
+  assert.equal(result.migrated, true, '应当识别并完成迁移')
+  assert.deepEqual(result.tools, [
+    'memory_mid_88f98d',
+    'search_mid_c89694',
+    'already_hashed_mid_111',
+    'bash_mid_eef123',
+  ], '短名应被精确补全为对应系统带哈希工具名，已有哈希的保持不变')
+
+  // 2. 纯全量已带哈希工具名无需重复迁移
+  const modernTools = ['memory_mid_88f98d', 'search_mid_c89694']
+  const modernResult = completeToolHashes(modernTools, fakeSystemTools)
+  assert.equal(modernResult.migrated, false)
+  assert.deepEqual(modernResult.tools, modernTools)
+})

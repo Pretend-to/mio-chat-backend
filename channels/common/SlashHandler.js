@@ -17,6 +17,9 @@
  *   - /context 当前话题记忆结晶查看
  *   - /delete 删除会话
  */
+import { getRegisteredSystemToolNames } from '../llm.js'
+import { getTriggerService } from '../../lib/triggers/index.js'
+
 export class SlashHandler {
   /**
    * @param {object} opts
@@ -101,12 +104,7 @@ export class SlashHandler {
       }
 
       case 'tools': {
-        const defaultChannelTools = [
-          'memory', 'search', 'draw', 'vision', 'parse', 'cron', 'toolsmanager', 'share',
-          'Skill', 'reload_skills',
-          'bash', 'bash_input', 'read_screen', 'wait', 'shell_policy',
-          'channel_profile', 'channel_session', 'channel_model',
-        ]
+        const defaultChannelTools = getRegisteredSystemToolNames()
         const currentTools = (await this.memory.getAgentMeta('tools', null)) || defaultChannelTools
         const enabledSet = new Set(currentTools)
 
@@ -135,7 +133,14 @@ export class SlashHandler {
         if (subCmd === 'on' || subCmd === 'enable') {
           if (!toolStr) return wrap('用法：/tools on <工具名1,工具名2>')
           const targets = toolStr.split(/[,，\s]+/).filter(Boolean)
-          targets.forEach(t => enabledSet.add(t))
+          for (const target of targets) {
+            const matched = defaultChannelTools.filter(t => t === target || t.split('_mid_')[0] === target)
+            if (matched.length > 0) {
+              matched.forEach(m => enabledSet.add(m))
+            } else {
+              enabledSet.add(target)
+            }
+          }
           const newList = Array.from(enabledSet)
           await this.memory.setAgentMeta('tools', newList)
           return wrap(`已开启工具 [${targets.join(', ')}]，当前激活工具总计 ${newList.length} 个 ✅`)
@@ -144,13 +149,86 @@ export class SlashHandler {
         if (subCmd === 'off' || subCmd === 'disable') {
           if (!toolStr) return wrap('用法：/tools off <工具名1,工具名2>')
           const targets = toolStr.split(/[,，\s]+/).filter(Boolean)
-          targets.forEach(t => enabledSet.delete(t))
+          for (const target of targets) {
+            for (const t of Array.from(enabledSet)) {
+              if (t === target || t.split('_mid_')[0] === target) {
+                enabledSet.delete(t)
+              }
+            }
+          }
           const newList = Array.from(enabledSet)
           await this.memory.setAgentMeta('tools', newList)
           return wrap(`已禁用工具 [${targets.join(', ')}]，当前激活工具总计 ${newList.length} 个 🚫`)
         }
 
         return wrap('未知指令，请使用 /tools ls, /tools on <工具名>, /tools off <工具名> 或 /tools reset')
+      }
+
+      case 'trigger':
+      case 'triggers': {
+        const service = getTriggerService()
+        const registry = service.registry
+        const agentId = this.memory?.agentId || 'wechat-master'
+
+        if (!arg || arg === 'ls' || arg === 'list') {
+          const list = await registry.list({ agentId })
+          if (list.length === 0) {
+            return wrap('【触发器管理】当前未配置任何后台触发器与哨兵。\n\n提示：可以让助手通过 trigger_manage 自主编写并创建哨兵任务。')
+          }
+          const lines = ['【后台触发器与哨兵管理】', `已登记触发器 (${list.length} 个):`]
+          for (const t of list) {
+            const status = t.enabled ? '🟢 [运行中]' : '⚪ [已禁用]'
+            const modeTag = t.mode === 'once' ? '⚡一次性' : '🔄持续'
+            const fires = `触发/唤醒: ${t.fireCount || 0}/${t.wakeCount || 0}`
+            lines.push(`  ${status} [${modeTag}] ${t.id} (${t.type}) - ${fires}`)
+            if (t.lastFiredAt) {
+              lines.push(`    ↳ 最近唤醒: ${new Date(t.lastFiredAt).toLocaleTimeString()}`)
+            }
+          }
+          lines.push('\n指令用法：')
+          lines.push('  • /triggers on <id> 启用触发器')
+          lines.push('  • /triggers off <id> 禁用触发器')
+          lines.push('  • /triggers rm <id> 删除触发器')
+          lines.push('  • /triggers run <id> 调试试跑一次哨兵脚本')
+          return wrap(lines.join('\n'))
+        }
+
+        const [subCmd, targetId] = arg.split(/\s+/)
+        if (!targetId && subCmd !== 'ls') {
+          return wrap('用法：/triggers [on/off/rm/run] <触发器ID>')
+        }
+
+        if (subCmd === 'on' || subCmd === 'enable') {
+          const updated = await registry.update(targetId, { enabled: true })
+          return wrap(updated ? `触发器 "${targetId}" 已成功启用 🟢` : `未找到触发器 "${targetId}" ❌`)
+        }
+
+        if (subCmd === 'off' || subCmd === 'disable') {
+          const updated = await registry.update(targetId, { enabled: false })
+          return wrap(updated ? `触发器 "${targetId}" 已成功禁用 ⚪` : `未找到触发器 "${targetId}" ❌`)
+        }
+
+        if (subCmd === 'rm' || subCmd === 'delete' || subCmd === 'remove') {
+          const ok = await registry.remove(targetId)
+          return wrap(ok ? `触发器 "${targetId}" 及关联脚本已成功删除 🗑️` : `未找到触发器 "${targetId}" ❌`)
+        }
+
+        if (subCmd === 'run' || subCmd === 'test') {
+          try {
+            const res = await service.runOnce(targetId, { forceWake: false })
+            if (res.wake) {
+              return wrap(`🧪 哨兵 "${targetId}" 试跑成功，发出唤醒契约行！\n原因: ${res.reason || 'WAKE'}\n耗时: ${res.durationMs}ms`)
+            }
+            if (res.error) {
+              return wrap(`⚠️ 哨兵 "${targetId}" 试跑异常: ${res.error}\n耗时: ${res.durationMs}ms`)
+            }
+            return wrap(`✅ 哨兵 "${targetId}" 试跑完毕，当前未满足唤醒条件。\n耗时: ${res.durationMs}ms`)
+          } catch (e) {
+            return wrap(`❌ 执行试跑失败: ${e.message}`)
+          }
+        }
+
+        return wrap('未知指令，请使用 /triggers ls, /triggers on <id>, /triggers off <id>, /triggers rm <id> 或 /triggers run <id>')
       }
 
       case 'think':

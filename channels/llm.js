@@ -13,6 +13,64 @@ import skillService from '../lib/chat/llm/services/SkillService.js'
 import sessions from '../lib/server/socket.io/services/sessions.js'
 import streamCache from '../lib/server/socket.io/services/streamCache.js'
 
+/**
+ * 动态获取当前系统已加载的所有可用工具完整名称（带 _mid_ 实例哈希）
+ * 与前端及系统全局 Preset 规范保持 100% 一致，杜绝硬编码
+ */
+export function getRegisteredSystemToolNames() {
+  const plugins = global.middleware?.plugins || []
+  const toolNames = []
+  for (const plugin of plugins) {
+    if (typeof plugin.getTools !== 'function') continue
+    const toolsMap = plugin.getTools()
+    if (toolsMap && typeof toolsMap.values === 'function') {
+      for (const toolsArray of toolsMap.values()) {
+        if (Array.isArray(toolsArray)) {
+          for (const t of toolsArray) {
+            if (t.name && !toolNames.includes(t.name)) {
+              toolNames.push(t.name)
+            }
+          }
+        }
+      }
+    }
+  }
+  return toolNames
+}
+
+/**
+ * 自动识别并补全存量 meta.json 中没有哈希的短工具名（如 'search', 'memory' -> 'search_mid_xxx'）
+ * @param {Array<string>} tools
+ * @param {Array<string>} [allSystemTools]
+ * @returns {{ migrated: boolean, tools: Array<string> }}
+ */
+export function completeToolHashes(tools, allSystemTools = []) {
+  if (!Array.isArray(tools) || tools.length === 0) {
+    return { migrated: false, tools: tools || [] }
+  }
+  const systemTools = (Array.isArray(allSystemTools) && allSystemTools.length > 0)
+    ? allSystemTools
+    : getRegisteredSystemToolNames()
+
+  let migrated = false
+  const completed = tools.map((t) => {
+    if (typeof t !== 'string') return t
+    if (t.includes('_mid_')) {
+      return t
+    }
+    const matched = systemTools.find(
+      (st) => st === t || st.split('_mid_')[0] === t || st.startsWith(`${t}_mid_`)
+    )
+    if (matched) {
+      migrated = true
+      return matched
+    }
+    return t
+  })
+
+  return { migrated, tools: completed }
+}
+
 export function createEchoLlm({ prefix = '' } = {}) {
   return {
     getModels: () => ({ default: 'echo', models: { echo: ['echo-default'] } }),
@@ -444,19 +502,18 @@ export function createBackendLlm(opts = {}) {
         }
       }
 
-      const defaultChannelTools = [
-        // ai-plugin
-        'memory', 'search', 'draw', 'vision', 'parse', 'cron', 'toolsmanager', 'share',
-        // skill-plugin
-        'Skill', 'reload_skills',
-        // terminal-pty
-        'bash', 'bash_input', 'read_screen', 'wait', 'shell_policy',
-        // channel-manager-plugin
-        'channel_profile', 'channel_session', 'channel_model',
-      ]
-
-      const savedTools = ctx.memory ? await ctx.memory.getAgentMeta('tools', null) : null
-      const finalTools = (Array.isArray(savedTools) && savedTools.length > 0) ? savedTools : defaultChannelTools
+      const defaultChannelTools = getRegisteredSystemToolNames()
+      let savedTools = ctx.memory ? await ctx.memory.getAgentMeta('tools', null) : null
+      if (Array.isArray(savedTools)) {
+        const { migrated, tools: completedTools } = completeToolHashes(savedTools, defaultChannelTools)
+        if (migrated) {
+          savedTools = completedTools
+          ctx.memory.setAgentMeta('tools', completedTools).catch(() => {})
+        }
+      }
+      const finalTools = (Array.isArray(savedTools) && savedTools.length > 0)
+        ? savedTools
+        : (defaultChannelTools.length > 0 ? defaultChannelTools : [])
       const savedEffort = ctx.memory ? await ctx.memory.getAgentMeta('reasoning_effort', 0) : 0
       const chatParams = (typeof savedEffort === 'number' && savedEffort > 0) ? { reasoning_effort: savedEffort } : {}
 
