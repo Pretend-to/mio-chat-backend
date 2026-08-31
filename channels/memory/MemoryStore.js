@@ -261,6 +261,59 @@ export class MemoryStore {
     session.chat = []
     await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
     return true
+  }_sessionArchiveDir(id) {
+    return path.join(this._agentDir(), 'archives', this._safeSegment(id))
+  }
+
+  /**
+   * 上下文压缩后的「归档 + 裁剪」闭环（仿前端：压缩节点索引更新）
+   *
+   * 压缩结晶落盘后调用：把当前聊天记录完整复制归档到 archives/<sessionId>/<时间戳>.json，
+   * 然后仅保留最近 keepTurns 轮交互（轮 = 以 role==='user' 为起点，与前端 scanFrontendTurns 语义一致），
+   * 其余历史全部清空，实现会话 chat 的索引更新与裁剪。
+   *
+   * @param {string} id 会话 ID
+   * @param {number} [keepTurns=1] 保留最近几轮交互（默认 1 轮 = 最近一轮 user+assistant）
+   * @returns {Promise<object>} { rotated, archivePath?, removedCount?, keptCount? }
+   */
+  async rotateChat(id, keepTurns = 1) {
+    const session = await this.getSession(id)
+    if (!session || !Array.isArray(session.chat) || session.chat.length === 0) {
+      return { rotated: false, reason: 'empty' }
+    }
+    const chat = session.chat
+    // 计算保留起点：从尾部倒扫 user 轮次（与 scanFrontendTurns 同语义）
+    let keepFrom = 0
+    let turns = 0
+    for (let i = chat.length - 1; i >= 0; i--) {
+      if (chat[i]?.role === 'user') {
+        turns++
+        if (turns >= keepTurns) {
+          keepFrom = i
+          break
+        }
+      }
+    }
+    if (keepFrom <= 0) {
+      // 没有足够的轮次要裁剪，跳过（保持原样）
+      return { rotated: false, reason: 'too-short' }
+    }
+    const removed = chat.slice(0, keepFrom)
+    const kept = chat.slice(keepFrom)
+    // 1. 归档：完整复制被裁剪的历史到独立归档文件
+    await this._ensureAgentDir()
+    const dir = this._sessionArchiveDir(id)
+    await fs.promises.mkdir(dir, { recursive: true })
+    const archivedAt = Date.now()
+    const archivePath = path.join(dir, `${archivedAt}.json`)
+    await this._writeFile(
+      archivePath,
+      JSON.stringify({ archivedAt, sessionId: id, chat: removed }, null, 2),
+    )
+    // 2. 裁剪：仅保留最近 N 轮写回
+    session.chat = kept
+    await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
+    return { rotated: true, archivePath, removedCount: removed.length, keptCount: kept.length }
   }
 
   // ===============================================================

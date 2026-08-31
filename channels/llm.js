@@ -736,6 +736,20 @@ export function createBackendLlm(opts = {}) {
                   if (typeof ctx.memory.clearPendingMemories === 'function') {
                     ctx.memory.clearPendingMemories(ctx.sessionId).catch(() => {})
                   }
+                  // 上下文压缩闭环：归档 + 裁剪会话历史（仿前端压缩节点索引），仅保留最近 N 轮交互
+                  if (typeof ctx.memory.rotateChat === 'function') {
+                    const keepTurns = Number(event.body?.settings?.crystallization_keep_turns) || 1
+                    try {
+                      const rotateRes = await ctx.memory.rotateChat(ctx.sessionId, keepTurns)
+                      if (rotateRes?.rotated) {
+                        ctx.channel?.log?.info?.(
+                          `[${ctx.channel?.channelType || 'channel'}] 🗜️ 会话历史已归档并裁剪 | 归档: ${rotateRes.archivePath} | 裁剪 ${rotateRes.removedCount} 条, 保留 ${rotateRes.keptCount} 条`
+                        )
+                      }
+                    } catch (err) {
+                      ctx.channel?.log?.error?.(`[${ctx.channel?.channelType || 'channel'}] 会话历史归档/裁剪失败:`, err)
+                    }
+                  }
                 }
               }
             }
