@@ -163,6 +163,18 @@ git clone https://github.com/Pretend-to/mio-chat-frontend.git
 cd mio-chat-frontend && pnpm install && pnpm dev
 ```
 
+## 测试
+
+日常开发请运行不依赖外部服务的单元测试：
+
+```bash
+pnpm test:unit
+```
+
+`pnpm test` 运行 OneBot API 集成测试。执行前需要先启动 MioChat 后端（默认地址为
+`http://localhost:3080`），并确保 OneBot 相关配置可用。测试其他实例时，可通过
+`BASE_URL` 和 `ADMIN_CODE` 环境变量指定服务地址和管理员访问码。
+
 ## 文档
 
 | 分类 | 内容大纲 |

@@ -149,7 +149,7 @@ test('Crystallization - Memory Tool integration', async (t) => {
     };
     await assert.rejects(
       async () => { await tool.recordMemory(event); },
-      /记忆管理工具仅在开启记忆结晶功能时可用/
+      /本地会话记忆结晶工具仅在开启结晶功能时可用/
     );
   });
 
@@ -226,4 +226,3 @@ test('Crystallization - compress process', async (t) => {
     assert.strictEqual(updates[0].content.summary, '<long_term_profile>\nUser likes JavaScript\n</long_term_profile>');
   });
 });
-

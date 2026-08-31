@@ -65,6 +65,7 @@ User likes Javascript.
 
   await t.test('buildXmlFromZones should correctly construct xml from object', () => {
     const zones = {
+      behavioral_guidelines: '',
       constraints: 'No external dependencies.',
       current_plan: 'Phase 3 testing.',
       file_architecture_delta: 'Add test files.',

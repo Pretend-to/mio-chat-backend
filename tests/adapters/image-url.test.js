@@ -64,7 +64,7 @@ test('Image URL pre-processing and data wrapping', async (t) => {
     assert.strictEqual(content[1].image_url.url, base64Data);
   });
 
-  await t.test('GeminiAdapter: should handle raw base64 string by auto-wrapping it', async () => {
+  await t.test('GeminiAdapter: should preserve raw base64 payload for inline data conversion', async () => {
     const rawBase64 = 'iVBORw0KGgoAAAANS';
     const rawMessages = [
       {
@@ -76,6 +76,6 @@ test('Image URL pre-processing and data wrapping', async (t) => {
     ];
     const adapter = new GeminiAdapter({ api_key: 'test', base_url: 'http://localhost' });
     const processed = await adapter._processMessages(rawMessages);
-    assert.strictEqual(processed[0].content[0].image_url.url, `data:image/png;base64,${rawBase64}`);
+    assert.strictEqual(processed[0].content[0].image_url.url, rawBase64);
   });
 });

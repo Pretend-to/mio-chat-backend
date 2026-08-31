@@ -12,7 +12,7 @@ test('DeepSeek Adapter - Chat Body Preparation', async (_t) => {
 
   const adapter = new DeepSeekAdapter(config);
 
-  // 测试 1: 当 reasoning_effort 开启为 2 (映射为 max) 时
+  // 测试 1: 当 reasoning_effort 开启为 2 (Low，兼容映射为 high) 时
   const bodyWithReasoning = {
     messages: [{ content: 'Hello', role: 'user' }],
     settings: {
@@ -26,7 +26,7 @@ test('DeepSeek Adapter - Chat Body Preparation', async (_t) => {
   assert.deepStrictEqual(resultWithReasoning.extra_body, {
     thinking: { type: 'enabled' }
   });
-  assert.strictEqual(resultWithReasoning.reasoning_effort, 'max');
+  assert.strictEqual(resultWithReasoning.reasoning_effort, 'high');
 
   // 测试 2: 当 reasoning_effort 关闭（为 0）时
   const bodyWithoutReasoning = {

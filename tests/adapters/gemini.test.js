@@ -158,11 +158,15 @@ test('Gemini Adapter', async (t) => {
     try {
       await adapter._executeChatRequest(mockEvent.body, mockEvent);
       
-      // Verify updates received both reasoningContent and content
-      assert.deepStrictEqual(updates, [
+      // Verify the content updates, followed by the standardized usage summary.
+      assert.deepStrictEqual(updates.slice(0, 2), [
         { content: 'Thinking hard...', type: 'reasoningContent' },
         { content: 'Final answer', type: 'content' }
       ]);
+      assert.strictEqual(updates.length, 3);
+      assert.strictEqual(updates[2].type, 'usage');
+      assert.strictEqual(updates[2].content.provider, 'Gemini');
+      assert.strictEqual(updates[2].content.model, 'gemini-2.0-flash');
     } finally {
       globalThis.fetch = originalFetch;
     }

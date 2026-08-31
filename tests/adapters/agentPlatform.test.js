@@ -54,11 +54,18 @@ test('Agent Platform - block_express behavior', async (t) => {
     const {core} = adapter
     assert.strictEqual(core.block_express, true)
 
+    // Do not depend on whether the developer/CI host happens to have ADC configured.
+    core._googleAuth = {
+      async getClient() {
+        throw new Error('mock ADC unavailable')
+      },
+    }
+
     // URL 中不应有 key=
     const url = core._getRequestUrl('gemini-1.5-pro', true)
     assert.ok(!url.includes('key='), 'Should NOT append api_key to URL in non-express mode')
 
-    // _getAuthHeaders 应抛出 ADC 未配置的错误
+    // _getAuthHeaders 应将底层认证失败包装为可操作的 ADC 错误
     await assert.rejects(
       () => core._getAuthHeaders(),
       { message: /Vertex AI ADC 认证失败/ },
