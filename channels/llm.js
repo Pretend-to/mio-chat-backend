@@ -481,6 +481,7 @@ export function createBackendLlm(opts = {}) {
             chatParams,
             crystallization: { enabled: true },
             crystallization_token_watermark: 'auto',
+            pending_memory_events: ctx.pendingMemories || [],
             previous_summary: ctx.crystal || '',
             provider: targetProvider,
             toolCallSettings: {
@@ -675,6 +676,9 @@ export function createBackendLlm(opts = {}) {
                   ctx.memory.setCrystal(ctx.sessionId, summaryXml).catch(err => {
                     ctx.channel?.log?.error?.(`[${ctx.channel?.channelType || 'channel'}] 记忆结晶落盘失败:`, err)
                   })
+                  if (typeof ctx.memory.clearPendingMemories === 'function') {
+                    ctx.memory.clearPendingMemories(ctx.sessionId).catch(() => {})
+                  }
                 }
               }
             }

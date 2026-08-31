@@ -64,6 +64,7 @@ export class BaseChannel {
     this.log = logger
     this.onActivity = onActivity
     this.activeJobs = new Map() // sessionId -> { startTime, text, currentTool, toolCount, lastProgressText }
+    this._sessionQueues = new Map() // sessionId -> Promise chain (FIFO 互斥队列)
 
     this.running = false
     this._abort = null
@@ -244,15 +245,60 @@ export class BaseChannel {
       return slashRes
     }
 
-    // 3. 检查当前会话是否已有正在运行的 LLM 任务（插话机制）
+    // 3. 检查当前会话是否已有正在运行的 LLM 任务（插话机制 vs 任务排队）
     const sid = ctx.sid || (await this.memory.getActiveSession())
-    if (sid && this.activeJobs.has(sid)) {
+    if (sid && this.activeJobs.has(sid) && !ctx.isTask && !ctx.isWake && !ctx.forceQueue) {
       const activeJob = this.activeJobs.get(sid)
       return this._handleTransientFollowup(text, activeJob, ctx)
     }
 
-    // 4. 正常发起 LLM 对话处理
-    return this._processChat(text.trim(), ctx)
+    // 4. 正常发起 LLM 对话处理（进入 Session FIFO 互斥队列排队）
+    return this._enqueueSession(sid, () => this._processChat(text.trim(), ctx))
+  }
+
+  /**
+   * 针对指定 sessionId 的主会话 FIFO 互斥执行队列
+   * 确保同一个 session 的主会话（写入历史、更新记忆）串行安全执行，旁对话无需进队列
+   */
+  async _enqueueSession(sid, fn) {
+    if (!sid) return await fn()
+    if (!this._sessionQueues) {
+      this._sessionQueues = new Map()
+    }
+    const prevPromise = this._sessionQueues.get(sid) || Promise.resolve()
+    const nextPromise = (async () => {
+      try {
+        await prevPromise
+      } catch {}
+      return await fn()
+    })()
+    const cleanPromise = nextPromise.catch(() => {}).finally(() => {
+      if (this._sessionQueues.get(sid) === cleanPromise) {
+        this._sessionQueues.delete(sid)
+      }
+    })
+    this._sessionQueues.set(sid, cleanPromise)
+    return await nextPromise
+  }
+
+  /**
+   * 向指定 session 追加一条 user 消息并触发完整处理管线（支持 Cron、Trigger、外部调用）
+   * @param {string} sessionId - 目标会话 ID
+   * @param {string} text - 消息正文
+   * @param {object} [options] - 附加选项 (isTask, isWake, from, triggerId 等)
+   */
+  async appendUserMessage(sessionId, text, options = {}) {
+    const targetSid = sessionId || (await this.memory.getActiveSession())
+    const ctx = {
+      channelId: this.id || this.channelId,
+      from: options.from || 'system_trigger',
+      isTask: Boolean(options.isTask || options.isWake),
+      isWake: Boolean(options.isWake),
+      sid: targetSid,
+      triggerId: options.triggerId || null,
+      ...options,
+    }
+    return this._enqueueSession(targetSid, () => this._processChat(text.trim(), ctx))
   }
 
   /** 处理任务执行中途的用户即时插话 */
@@ -321,6 +367,9 @@ export class BaseChannel {
       sid = s.id
     }
     const crystal = await this.memory.getCrystal(sid)
+    const pendingMemories = (typeof this.memory.getPendingMemories === 'function')
+      ? await this.memory.getPendingMemories(sid)
+      : []
     const session = await this.memory.getSession(sid)
     const chat = session?.chat || []
 
@@ -581,6 +630,7 @@ export class BaseChannel {
         model: this.model,
         onEmitTextBlock,
         onRegisterAbort: (abortFn) => { activeJobObj._abortLlm = abortFn },
+        pendingMemories,
         provider: this.provider,
         sessionId: sid,
         soul: soul || '',

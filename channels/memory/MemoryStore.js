@@ -230,6 +230,31 @@ export class MemoryStore {
     const s = await this.getSession(id)
     return s?.crystal || ''
   }
+  /** 追加一条待压缩归档的记忆事件（保护日常对话 Prefix Cache） */
+  async appendPendingMemory(id, event) {
+    const session = (await this.getSession(id)) || (await this.createSession({ id }))
+    session.pending_memories = Array.isArray(session.pending_memories) ? session.pending_memories : []
+    session.pending_memories.push({
+      ...event,
+      timestamp: Date.now(),
+    })
+    await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
+    return session.pending_memories
+  }
+  /** 获取当前会话积累的待压缩记忆事件 */
+  async getPendingMemories(id) {
+    const s = await this.getSession(id)
+    return Array.isArray(s?.pending_memories) ? s.pending_memories : []
+  }
+  /** 压缩完成后清空已固化的待压缩记忆 */
+  async clearPendingMemories(id) {
+    const session = await this.getSession(id)
+    if (session) {
+      session.pending_memories = []
+      await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
+    }
+    return true
+  }
   /** 清空会话聊天（保留人格注入用不到的 history 之外——这里只清 chat，保留 crystal） */
   async clearChat(id) {
     const session = (await this.getSession(id)) || (await this.createSession({ id }))
