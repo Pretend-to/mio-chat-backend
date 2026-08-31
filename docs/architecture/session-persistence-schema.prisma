@@ -1,0 +1,259 @@
+// Session persistence / trigger storage schema spike.
+//
+// This file is intentionally not the production Prisma entry point. It is kept
+// beside the architecture document so the proposed model can be validated with:
+//   pnpm exec prisma validate --schema docs/architecture/session-persistence-schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Agent {
+  id              String   @id
+  soul            String?
+  activeSessionId String?  @map("active_session_id")
+  provider        String?
+  model           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  metas    AgentMeta[]
+  channels Channel[]
+  sessions Session[]
+  memories GlobalMemory[]
+  triggers Trigger[]
+
+  @@map("agents")
+}
+
+model AgentMeta {
+  agentId String @map("agent_id")
+  key     String
+  value   String
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@id([agentId, key])
+  @@map("agent_meta")
+}
+
+model Channel {
+  id         String    @id
+  agentId    String    @map("agent_id")
+  type       String
+  name       String?
+  tokenEnc   String?   @map("token_enc")
+  botId      String?   @map("bot_id")
+  userId     String?   @map("user_id")
+  avatar     String?
+  status     String    @default("unbound")
+  lastActive DateTime? @map("last_active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  agent    Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  triggers Trigger[]
+
+  @@index([agentId, type])
+  @@map("channels")
+}
+
+model Session {
+  id        String   @id
+  agentId   String   @map("agent_id")
+  title     String?
+  nextSeq   Int      @default(0) @map("next_seq")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  agent           Agent           @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  messages        Message[]
+  crystals        Crystal[]
+  pendingMemories PendingMemory[]
+  triggers        Trigger[]
+
+  @@index([agentId, updatedAt])
+  @@map("sessions")
+}
+
+// One row is one logical frontend-format message. `content` is the canonical,
+// lossless JSON snapshot; `text` is a derived search/prompt convenience field.
+model Message {
+  id           String    @id
+  sessionId    String    @map("session_id")
+  seq          Int
+  role         String
+  status       String    @default("final")
+  revision     Int       @default(0)
+  text         String?
+  content      String
+  fromUserId   String?   @map("from_user_id")
+  businessTime DateTime  @map("business_time")
+  archivedAt   DateTime? @map("archived_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  session   Session        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  toolCalls ToolCall[]
+  chunks    MessageChunk[]
+
+  @@unique([sessionId, seq])
+  @@index([sessionId, status])
+  @@index([sessionId, archivedAt, seq])
+  @@index([sessionId, businessTime])
+  @@map("messages")
+}
+
+// Append-only recovery/replay events for a streaming assistant message.
+model MessageChunk {
+  id        String   @id
+  messageId String   @map("message_id")
+  seq       Int
+  kind      String
+  payload   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, seq])
+  @@index([messageId, createdAt])
+  @@map("message_chunks")
+}
+
+// Queryable projection of tool_call blocks. Message.content remains canonical.
+model ToolCall {
+  id         String   @id
+  messageId  String   @map("message_id")
+  seq        Int
+  toolName   String   @map("tool_name")
+  argsJson   String   @map("args_json")
+  resultJson String?  @map("result_json")
+  status     String   @default("running")
+  durationMs Int?     @map("duration_ms")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, seq])
+  @@index([toolName, createdAt])
+  @@map("tool_calls")
+}
+
+model Crystal {
+  id               String   @id
+  sessionId        String   @map("session_id")
+  content          String
+  source           String   @default("auto")
+  coversThroughSeq Int?     @map("covers_through_seq")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@map("crystals")
+}
+
+model PendingMemory {
+  id        String   @id
+  sessionId String   @map("session_id")
+  payload   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@map("pending_memories")
+}
+
+model GlobalMemory {
+  id        String   @id
+  agentId   String   @map("agent_id")
+  category  String
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, category, updatedAt])
+  @@map("global_memories")
+}
+
+model Trigger {
+  id                String    @id
+  agentId           String    @map("agent_id")
+  channelId         String?   @map("channel_id")
+  sessionId         String?   @map("session_id")
+  type              String
+  mode              String    @default("persistent")
+  cronExpr          String?   @map("cron_expr")
+  scriptPath        String?   @map("script_path")
+  webhookSecretHash String?   @map("webhook_secret_hash")
+  promptTemplate    String    @map("prompt_template")
+  params            String?
+  cooldownSec       Int       @default(1800) @map("cooldown_sec")
+  maxFiresPerDay    Int       @default(5) @map("max_fires_per_day")
+  enabled           Boolean   @default(true)
+  lastFiredAt       DateTime? @map("last_fired_at")
+  fireCount         Int       @default(0) @map("fire_count")
+  wakeCount         Int       @default(0) @map("wake_count")
+  deletedAt         DateTime? @map("deleted_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  agent      Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  channel    Channel?           @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  session    Session?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  executions TriggerExecution[]
+
+  @@index([agentId, enabled, deletedAt])
+  @@index([type, enabled])
+  @@map("triggers")
+}
+
+// triggerId is nullable so audit survives hard deletion. Normal once-trigger
+// lifecycle should still use Trigger.deletedAt (soft delete).
+model TriggerExecution {
+  id         String   @id
+  triggerId  String?  @map("trigger_id")
+  triggerKey String   @map("trigger_key")
+  wake       Boolean
+  reason     String?
+  dataJson   String?  @map("data_json")
+  sessionId  String?  @map("session_id")
+  messageId  String?  @map("message_id")
+  durationMs Int?     @map("duration_ms")
+  status     String   @default("ok")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  trigger Trigger? @relation(fields: [triggerId], references: [id], onDelete: SetNull)
+
+  @@index([triggerKey, createdAt])
+  @@index([status, createdAt])
+  @@map("trigger_executions")
+}
+
+// Per-source migration ledger. A single agent-wide boolean cannot safely
+// distinguish partial imports from complete imports.
+model LegacyMigration {
+  id          String    @id
+  sourcePath  String    @unique @map("source_path")
+  sourceHash  String    @map("source_hash")
+  agentId     String?   @map("agent_id")
+  sessionId   String?   @map("session_id")
+  status      String    @default("pending")
+  recordCount Int       @default(0) @map("record_count")
+  error       String?
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([agentId, status])
+  @@map("legacy_migrations")
+}
