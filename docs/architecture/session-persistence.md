@@ -259,12 +259,24 @@ await prisma.$transaction(async tx => {
 - `database-shadow`：DB 主写，同时生成可回滚的 JSON 镜像；
 - `database`：DB 单独主写。
 
-当前运行时开关是环境变量 `MIO_CHANNEL_PERSISTENCE_MODE`，未设置时固定为
-`legacy`。允许值只有上述四项，非法值会在 Channel 启动时直接报错。Channel 停止时
+当前运行时开关是环境变量 `MIO_CHANNEL_PERSISTENCE_MODE`。新实例和完成自动迁移的
+存量实例默认使用 `database`。允许值只有上述四项，
+非法值会在 Channel 启动时直接报错。Channel 停止时
 使用的 HTTP/Socket 管理接口和 Channel 工具也必须经过同一个存储工厂，不能绕过
 开关直接实例化 `MemoryStore`。
 
-迁移运行手册（命令均在实例后端根目录执行）：
+正常升级不需要单独执行迁移命令。应用重启时，init 会在 Channel、Trigger 和 HTTP
+服务启动前盘点旧数据，为当前迁移版本创建一次本地快照，生成或读取实例加密密钥，
+完成导入并复验，然后直接切到 `database` 单线运行。完成标记写入 `SystemSetting`，
+后续重启直接跳过。任一步失败都会阻止
+本次启动，旧数据不会被改名或删除。快照和实例密钥分别保存在
+`prisma/data/backups/channel-storage/` 与 `prisma/data/channel-storage.key`，均位于 Git
+忽略的运行时数据目录。
+
+已经人工导入过数据库、但尚未写入上述 init 完成标记的过渡实例，不属于首次自动迁移
+对象；应先人工确认数据库与旧 JSON 的基准状态并补齐标记，不能直接重复导入。
+
+以下命令保留用于只读诊断和人工复验（均在实例后端根目录执行）：
 
 ```bash
 # 1. 只读盘点；输出 manifestHash，不写 DB 和旧文件
