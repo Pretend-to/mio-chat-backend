@@ -63,6 +63,9 @@ JSON。结晶、pending memory 和裁剪也会重写同一个文件，因此既�
 `content` 保存现有前端格式块数组的 JSON，包括 text、reason、tool_call、图片、
 文件及结晶事件。`text` 仅保存可搜索、可快速注入的纯文本投影。
 
+旧消息缺少 `content` 时，数据库 `content` 写入 JSON 字面量 `null`，并在
+`legacyJson` 中保留“字段缺失”这一事实；不得擅自改造成空数组。
+
 ### 3.2 MessageChunk
 
 Chunk 是 append-only 事件，不是另一份聊天历史。每个 assistant message 内使用
@@ -173,52 +176,124 @@ await prisma.$transaction(async tx => {
 
 ## 7. 迁移与切换
 
-### 7.1 迁移对象
+### 7.1 全量覆盖合同
 
-第一批迁移：
+“迁移完成”表示以下所有存量均已进入 DB 并通过逐源校验，而不只是当前 session：
 
-- session 基本信息和 `chat[]`
-- 当前 `crystal`
-- `pending_memories`
-- active session
-- agent meta
+- `memory/agents/<agentId>/`：即使只有 meta、soul 或空目录，也创建 Agent；
+- `soul.md`：按 UTF-8 原文完整保存；
+- `global/*.md`：每个 category 保存为一份完整 Markdown 文档，不按行拆事实；
+- `meta.json`：每个 key 的 JSON 类型和值保持不变；
+- `active`：保留 active session 指针并验证归属；
+- `sessions/*.json`：session 字段、当前 chat、crystal、pending memories；
+- `archives/<sessionId>/*.json`：归档批次、归档时间和全部历史消息；
+- `channels-data/channels.json`：Channel 全字段，包括 provider/model 和凭据；
+- `channels-data/triggers/triggers.json`、`executions.json`：包括已无 Trigger 主记录的
+  孤儿 Execution；
+- `channels-data/triggers/scripts/`：脚本仍保留为文件，但进入迁移 manifest，校验
+  path、hash、权限和 Trigger 引用。
 
-原 `archives/` 作为冷备保留，不在首批重新展开导入；新产生的归档通过
-`Message.archivedAt` 表示。`soul.md` 和 `global/*.md` 保持原读写，待 session 迁移
-稳定后单独切换，避免一次改变所有记忆语义。
+存储根目录内出现无法识别的文件、损坏 JSON 或不支持的字段形态时，不允许静默
+跳过；该源标记 `blocked`，整个实例不能进入数据库主写模式。
 
-### 7.2 幂等算法
+### 7.2 已确认的旧格式兼容
 
-每个源文件：
+2026-09-01 对实际服务器做过只读结构盘点，迁移器必须至少兼容：
 
-1. 读取并计算内容 hash；
-2. upsert `LegacyMigration(sourcePath, sourceHash, status=running)`；
-3. 在单事务中 upsert Agent/Session，并按稳定规则导入 Message、Crystal、
-   PendingMemory；
-4. 校验消息数、角色顺序、首尾业务时间及内容 hash；
-5. 标记该源为 completed，保存导入数量；
-6. 失败则回滚该文件事务并记录 error，下次可重试。
+- user、assistant、system 三种 role；
+- 消息缺少 `time`、`content` 或 `from_user_id`；
+- `content` 为数组或缺失；
+- text、reason、tool_call、crystallize_event 块及其不同历史字段组合；
+- 单条 assistant 消息包含数千个 content block；
+- archive 与当前 session 分开保存；
+- Trigger 列表为空但 Execution 仍存在；
+- meta 值包含 number、boolean、string 和 array。
 
-旧消息没有 id 时，使用 `sourcePath + chatIndex + contentHash` 生成确定性 id，禁止用
-本次执行时间生成 id。
+缺失 `time` 在 DB 中保持 NULL，不能用迁移时间伪造。每条旧 Message 保存原始
+`legacyJson` 和唯一 `legacySource=<相对路径>#<数组索引>`，确保未知字段可回放。
 
-### 7.3 灰度阶段
+### 7.3 Archive 重建
 
-通过配置控制存储模式：
+每个 session 的 seq 空间按以下顺序重建：
 
-- `legacy`：只读写 JSON；
-- `shadow`：JSON 为主，DB 异步镜像并持续比对；
-- `database`：DB 为主，JSON 只读回退；
+1. archive 文件按 `archivedAt`、文件名稳定排序；
+2. 每个 archive 内保持 chat 原始数组顺序；
+3. 最后追加当前 session 的 chat；
+4. 当前 session 消息保持 `archivedAt=NULL`，归档消息关联 `SessionArchive` 并保存
+   对应 archivedAt。
 
-至少完成一轮真实会话的 shadow 比对后才能切到 database。首版切换不重命名、
-不删除旧 JSON；确认经过回滚窗口后再提供独立归档命令。
+不得按内容 hash 全局去重，因为用户可能合法发送完全相同的消息。若旧版本 archive
+是累计快照，只有检测到“前一批完整后缀 = 后一批完整前缀”的连续边界重叠时才可
+消除重叠，并把规则和数量写入 verificationJson；非连续重叠直接阻断自动迁移。
+
+### 7.4 凭据迁移
+
+旧 `channels.json` 中的 token 是明文。迁移时必须使用 `MIOCHAT_ENC_KEY` 加密为
+`tokenEnc`，并执行一次解密回读比对。存在非空 token 但没有有效加密密钥时，预检
+失败，不允许降级为丢弃 token 或继续明文入库。旧文件在回滚窗口内保持原样，并按
+现有文件权限保护。
+
+### 7.5 幂等与完整性算法
+
+迁移开始先生成不可变 manifest：相对路径、sourceKind、字节数、SHA-256、权限和
+解析器版本。每个源文件：
+
+1. upsert `LegacyMigration` 并记录 manifest 信息；
+2. 使用 `sourcePath + sourceIndex` 生成确定性记录 id；
+3. 在事务内导入该源及关联投影；
+4. 从 DB 反向重建该源的规范表示；
+5. 比较记录数量、字段类型、角色/块顺序和 canonical JSON hash；文本文件比较原始
+   UTF-8 bytes；凭据比较解密结果；
+6. 把校验统计写入 `verificationJson`，成功后标记 completed；
+7. 失败则回滚该源并记录 error，可使用同一 manifest 重跑。
+
+完成门槛是 `manifest discovered == completed` 且 blocked/failed 均为 0。单一
+`legacy_migrated=true` 不构成完成证据。
+
+### 7.6 在线切换与回滚
+
+通过配置控制四种模式：
+
+- `legacy`：JSON 主写；
+- `shadow`：JSON 主写，DB 镜像并持续逐源比对；
+- `database-shadow`：DB 主写，同时生成可回滚的 JSON 镜像；
+- `database`：DB 单独主写。
+
+当前运行时开关是环境变量 `MIO_CHANNEL_PERSISTENCE_MODE`，未设置时固定为
+`legacy`。允许值只有上述四项，非法值会在 Channel 启动时直接报错。Channel 停止时
+使用的 HTTP/Socket 管理接口和 Channel 工具也必须经过同一个存储工厂，不能绕过
+开关直接实例化 `MemoryStore`。
+
+迁移运行手册（命令均在实例后端根目录执行）：
+
+```bash
+# 1. 只读盘点；输出 manifestHash，不写 DB 和旧文件
+pnpm db:migrate:channel-storage
+
+# 2. 使用盘点输出的精确 hash 执行；有 Channel token 时必须提供 32-byte key
+MIOCHAT_ENC_KEY='<64 hex or canonical base64>' \
+  pnpm db:migrate:channel-storage --apply --manifest '<manifestHash>'
+
+# 3. 独立复验
+MIOCHAT_ENC_KEY='<same key>' pnpm db:migrate:channel-storage --verify
+```
+
+`--apply` 没有精确匹配当前盘点 hash 时会拒绝执行。迁移器和四模式运行时均不会
+自动删除、改名或清空旧文件。
+
+最终切换需要一个短暂维护窗口：暂停 Channel/Trigger 新写入，重新计算 manifest
+hash，导入 shadow 期间的增量，执行全量验证后再切到 `database-shadow`。回滚窗口
+内 DB 新消息必须同步回旧格式，不能只把旧 JSON 当静态只读备份。稳定运行并完成
+一次反向导出恢复演练后，才能进入 `database`。
+
+任何阶段都不自动重命名或删除旧文件。清理是迁移完成后的独立人工操作。
 
 ## 8. Schema 与删除策略
 
 可执行设计见 `session-persistence-schema.prisma`。关键删除规则：
 
 - 删除 Agent：级联其 session/message/memory；这是显式管理操作；
-- 删除 Session：级联 message/chunk/tool/crystal/pending memory；
+- 删除 Session：级联 archive/message/chunk/tool/crystal/pending memory；
 - 删除 Message：级联 chunk 和 tool projection；
 - Channel 或 Session 删除：Trigger 的目标外键置空并由服务自动 disable；
 - once Trigger 使用 `deletedAt` 软删除；
@@ -236,15 +311,19 @@ await prisma.$transaction(async tx => {
 - tool_call 参数、结果和顺序往返无损；
 - crystallize 后活跃 prompt 与迁移前一致，归档历史仍可回溯；
 - 同一旧文件连续导入两次不产生重复数据；
-- shadow 模式逐 session 对比消息数、角色、文本和 content hash；
-- database 模式失败时可切回 legacy，旧文件未被修改。
+- manifest 中每个 agent/channel/session/archive/global/meta/trigger/execution/script 源均有
+  completed 记录，blocked/failed 为 0；
+- 旧消息的 role、缺失字段、content block 顺序和原始 JSON 可逐条反向重建；
+- soul/global 文本 byte-for-byte 一致，Channel token 解密回读一致；
+- archive 批次边界、archivedAt 和历史顺序可重建；
+- shadow 模式逐源比较记录数、字段类型和 canonical hash；
+- database-shadow 模式新增数据可反向导出，并完成一次切回 legacy 演练；
+- 旧文件未被迁移器修改或删除。
 
 ## 10. 暂不包含
 
 - 全文检索与统计看板；
 - webhook；
-- soul/global memory 的数据库切换；
-- 对冷备 `archives/*.json` 的历史重建；
 - Prefix Cache 与 `mio_meta` 工具路由。
 
 这些项目不应阻塞 Session Persistence 的独立上线和回滚。

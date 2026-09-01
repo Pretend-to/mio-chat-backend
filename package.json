@@ -14,6 +14,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
+    "db:migrate:channel-storage": "node scripts/migrate-channel-storage.js",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
     "lint": "oxlint",

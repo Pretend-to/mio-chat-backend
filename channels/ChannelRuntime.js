@@ -1,5 +1,5 @@
 import { IlinkClient } from './wechat/IlinkClient.js'
-import { MemoryStore } from './memory/index.js'
+import { createSessionPersistence } from '../lib/chat/persistence/createSessionPersistence.js'
 import { WechatChannel } from './wechat/WechatChannel.js'
 import { createBackendLlm } from './wechat/llm.js'
 
@@ -18,13 +18,41 @@ export class ChannelRuntime {
    * @param {string} [opts.memoryBase] memory 根目录（默认 'memory'）
    * @param {(channel)=>object} [opts.clientFactory] 自定义 client 工厂（测试注入 mock）
    */
-  constructor({ channelStore, llm, memoryBase = 'memory', clientFactory } = {}) {
+  constructor({
+    channelStore,
+    clientFactory,
+    llm,
+    memoryBase = 'memory',
+    persistenceFactory = createSessionPersistence,
+    persistenceMode = process.env.MIO_CHANNEL_PERSISTENCE_MODE || 'legacy',
+    prisma = null,
+  } = {}) {
     if (!channelStore) throw new Error('ChannelRuntime requires channelStore')
     this.channelStore = channelStore
     this.llm = llm || createBackendLlm()
     this.memoryBase = memoryBase
     this.clientFactory = clientFactory
+    this.persistenceFactory = persistenceFactory
+    this.persistenceMode = persistenceMode
+    this.prisma = prisma
     this.running = new Map() // channelId -> { channel, chn, memory }
+  }
+
+  async createMemory(agentId, { recover = false } = {}) {
+    const memory = await this.persistenceFactory({
+      agentId,
+      baseDir: this.memoryBase,
+      mode: this.persistenceMode,
+      prisma: this.prisma,
+    })
+    await memory.ensure()
+    if (recover) {
+      const recovered = await memory.recoverInterruptedMessages()
+      if (recovered > 0) {
+        console.warn(`[ChannelRuntime] recovered ${recovered} interrupted message(s) for ${agentId}`)
+      }
+    }
+    return memory
   }
 
   /** 启动一个已绑定渠道 */
@@ -35,8 +63,7 @@ export class ChannelRuntime {
     if (this.running.has(channelId)) return this.running.get(channelId).chn
 
     const agentId = channel.agentId || 'wechat-master'
-    const memory = new MemoryStore({ agentId, baseDir: this.memoryBase })
-    await memory.ensure()
+    const memory = await this.createMemory(agentId, { recover: true })
     const client = this.clientFactory
       ? this.clientFactory(channel)
       : (() => {

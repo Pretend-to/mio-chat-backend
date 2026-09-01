@@ -416,6 +416,40 @@ export class BaseChannel {
     }
 
     const emittedBlocks = []
+    let didEmitTextBlock = false
+    const supportsPersistenceLifecycle = typeof this.memory.beginAssistantMessage === 'function'
+      && typeof this.memory.finalizeAssistantMessage === 'function'
+    let assistantPersistenceId = null
+    let persistenceQueue = Promise.resolve()
+    let userPersistedBeforeLlm = false
+
+    if (supportsPersistenceLifecycle) {
+      let finalUserText = text
+      const imageList = ctx.rawMsg?.images || ctx.images || null
+      if (Array.isArray(imageList) && imageList.length > 0) {
+        for (const image of imageList) {
+          if (!finalUserText.includes(`![图片](${image})`)) finalUserText += `\n![图片](${image})`
+        }
+      }
+      const persistUser = typeof this.memory.appendUserMessage === 'function'
+        ? this.memory.appendUserMessage.bind(this.memory)
+        : this.memory.appendToChat.bind(this.memory)
+      await persistUser(sid, {
+        content: [{ data: { text: finalUserText }, type: 'text' }],
+        from_user_id: ctx.from,
+        role: 'user',
+        text: finalUserText,
+        time: ctx.time || ctx.rawMsg?.time || Date.now(),
+      })
+      userPersistedBeforeLlm = true
+      assistantPersistenceId = await this.memory.beginAssistantMessage(sid, {
+        content: [],
+        id: ctx.messageId,
+        role: 'assistant',
+        text: '',
+        time: Date.now(),
+      })
+    }
     const activeJobObj = {
       _abortLlm: null,
       abort: () => {
@@ -445,6 +479,23 @@ export class BaseChannel {
 
       // 流式分发回调：检测到完整文本块或多模态 extraRender 时进入串行发送流水线
       const onEmitTextBlock = (textBlock, meta = {}) => {
+        didEmitTextBlock = true
+        if (assistantPersistenceId && typeof this.memory.appendAssistantChunk === 'function') {
+          const render = meta.extraRender || {}
+          persistenceQueue = persistenceQueue
+            .then(() => this.memory.appendAssistantChunk(assistantPersistenceId, 'semantic_block', {
+              render: {
+                fileName: render.fileName || render.name || null,
+                localPath: render.localPath || null,
+                type: render.type || null,
+                url: render.imageUrl || render.audioUrl || render.fileUrl || render.videoUrl || render.url || null,
+              },
+              text: textBlock || '',
+            }))
+            .catch((error) => {
+              this.log?.error?.(`[${this.channelType}] 流式语义块持久化失败: ${error.message}`)
+            })
+        }
         if (ctx.isWeb) {
           // Web 客户端已通过 Socket 实时流推送，无需向第三方 IM 网关重复发送
           return Promise.resolve()
@@ -639,7 +690,7 @@ export class BaseChannel {
       })
 
       // 兼容传统同步返回
-      if (emittedBlocks.length === 0 && reply?.text?.trim()) {
+      if (!didEmitTextBlock && reply?.text?.trim()) {
         const replyText = reply.text.trim()
         if (reply?.soulDraft) {
           await this.memory.writeSoul(reply.soulDraft)
@@ -670,7 +721,7 @@ export class BaseChannel {
           text: finalUserText,
           time: ctx.time || ctx.rawMsg?.time || now,
         }
-        await this.memory.appendToChat(sid, userMsg)
+        if (!userPersistedBeforeLlm) await this.memory.appendToChat(sid, userMsg)
 
         const assistantContent = (Array.isArray(reply?.content) && reply.content.length > 0)
           ? [...reply.content]
@@ -698,7 +749,19 @@ export class BaseChannel {
           time: Date.now(),
         }
 
-        const updatedSession = await this.memory.appendToChat(sid, assistantMsg)
+        let updatedSession
+        if (assistantPersistenceId) {
+          await persistenceQueue
+          await this.memory.finalizeAssistantMessage(
+            assistantPersistenceId,
+            assistantMsg,
+            reply?.aborted ? 'aborted' : 'final',
+          )
+          updatedSession = await this.memory.getSession(sid)
+          assistantPersistenceId = null
+        } else {
+          updatedSession = await this.memory.appendToChat(sid, assistantMsg)
+        }
         const currentCount = updatedSession?.chat?.length || 0
         const toolCallCount = assistantContent.filter((c) => c.type === 'tool_call').length
         this.log?.info?.(`[${this.channelType}] 💾 会话历史已成功落盘 | 会话: ${sid} | 本轮交互已追加 (含 ${toolCallCount} 个 ToolCalls${reply?.aborted ? ', 用户中止' : ''}) | 累计条数: ${currentCount} 条`)
@@ -708,7 +771,34 @@ export class BaseChannel {
         }
       }
 
+      if (assistantPersistenceId) {
+        await persistenceQueue
+        await this.memory.finalizeAssistantMessage(assistantPersistenceId, {
+          content: [],
+          role: 'assistant',
+          text: '',
+          time: Date.now(),
+        })
+        assistantPersistenceId = null
+      }
       return null
+    } catch (error) {
+      if (assistantPersistenceId) {
+        await persistenceQueue
+        const partialText = emittedBlocks.join('\n\n')
+        await this.memory.finalizeAssistantMessage(assistantPersistenceId, {
+          content: partialText
+            ? [{ data: { text: partialText }, type: 'text' }]
+            : [],
+          role: 'assistant',
+          text: partialText,
+          time: Date.now(),
+        }, 'failed').catch(finalizeError => {
+          this.log?.error?.(`[${this.channelType}] 失败消息收口异常: ${finalizeError.message}`)
+        })
+        assistantPersistenceId = null
+      }
+      throw error
     } finally {
       this.activeJobs.delete(sid)
       if (typingTimer) clearInterval(typingTimer)

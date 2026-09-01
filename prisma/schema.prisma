@@ -16,8 +16,8 @@ model Preset {
   type        String   @default("custom") // 'built-in' | 'custom'
   category    String   @default("common") // 'common' | 'recommended' | 'hidden'
   history     String // JSON 格式存储对话历史
-  opening  String @default("")
-  tools    String @default("[]") // JSON 格式存储工具列表
+  opening     String   @default("")
+  tools       String   @default("[]") // JSON 格式存储工具列表
   provider    String   @default("") // LLM 渠道名（displayName），空则使用系统默认
   model       String   @default("") // 模型名，空则使用渠道默认
   recommended Boolean  @default(false)
@@ -120,26 +120,26 @@ model LogStat {
 
 // 定时任务表
 model Task {
-  id           String    @id // 任务唯一 ID (taskId)
-  name         String?
-  cron         String // Cron 表达式，或者 "once"
-  runAt        DateTime? @map("run_at") // 指定运行时间（用于一次性延迟任务）
-  preset       String // 绑定的 Agent 预设名
-  systemPrompt String?   @map("system_prompt") // 可选的系统提示词覆盖
-  tools        String?   @default("[]") // 可选的工具列表覆盖 (JSON)
+  id            String    @id // 任务唯一 ID (taskId)
+  name          String?
+  cron          String // Cron 表达式，或者 "once"
+  runAt         DateTime? @map("run_at") // 指定运行时间（用于一次性延迟任务）
+  preset        String // 绑定的 Agent 预设名
+  systemPrompt  String?   @map("system_prompt") // 可选的系统提示词覆盖
+  tools         String?   @default("[]") // 可选的工具列表覆盖 (JSON)
   triggerPrompt String?   @default("") @map("prompt") // 任务唤起/触发提示词
-  userId       String?   @map("user_id") // 结果推送的目标用户
-  contactorId  String?   @map("contactor_id") // 前端对话框 ID
-  provider     String? // LLM 渠道 (快照)
-  model        String? // 模型名称 (快照)
-  status       String    @default("active") // 'active' | 'disabled' | 'finished'
-  history      String?   @default("[]") // 存储任务运行的连续前端格式对话历史
-  shWhitelist  String?   @default("")   // 自定义命令白名单，换行或逗号分隔
-  lastRunAt    DateTime? @map("last_run_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  userId        String?   @map("user_id") // 结果推送的目标用户
+  contactorId   String?   @map("contactor_id") // 前端对话框 ID
+  provider      String? // LLM 渠道 (快照)
+  model         String? // 模型名称 (快照)
+  status        String    @default("active") // 'active' | 'disabled' | 'finished'
+  history       String?   @default("[]") // 存储任务运行的连续前端格式对话历史
+  shWhitelist   String?   @default("") // 自定义命令白名单，换行或逗号分隔
+  lastRunAt     DateTime? @map("last_run_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  executions   TaskExecution[]
+  executions TaskExecution[]
 
   @@index([userId])
   @@index([status])
@@ -165,7 +165,7 @@ model TaskExecution {
   finishedAt        DateTime? @map("finished_at")
   errorMessage      String?   @map("error_message")
 
-              task              Task      @relation(fields: [taskId], references: [id])
+  task Task @relation(fields: [taskId], references: [id])
 
   @@index([taskId])
   @@index([taskId, round])
@@ -249,21 +249,296 @@ model SearchAdapter {
   @@map("search_adapters")
 }
 
-
-
-
 // Shell 自动审批规则表（后端权威名单，替代前端 localStorage 名单）
 // allow=白名单放行 / deny=高危黑名单必须人工介入；cwd 可选：目录前缀绑定（null=全局生效）
 model ShellAutoApproveRule {
-  id        Int      @id @default(autoincrement())
-  matchType String   @map("match_type") // 'command' 全等 | 'prefix' 前缀
-  match     String
-  cwd       String? // 可选工作区目录前缀，null=全局
-  deny      Boolean  @default(false) // false=放行, true=高危黑名单(deny)
-  rememberable Boolean @default(false) // deny 高危细分：false=绝对危险(禁记住/强制人工), true=一般高危(可记住/限工作区)
-  enabled   Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id           Int      @id @default(autoincrement())
+  matchType    String   @map("match_type") // 'command' 全等 | 'prefix' 前缀
+  match        String
+  cwd          String? // 可选工作区目录前缀，null=全局
+  deny         Boolean  @default(false) // false=放行, true=高危黑名单(deny)
+  rememberable Boolean  @default(false) // deny 高危细分：false=绝对危险(禁记住/强制人工), true=一般高危(可记住/限工作区)
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
   @@index([enabled])
   @@map("shell_auto_approve_rules")
+}
+
+// Channel agent and persistence models. See
+// docs/architecture/session-persistence.md for lifecycle and migration rules.
+model Agent {
+  id              String   @id
+  soul            String?
+  activeSessionId String?  @map("active_session_id")
+  provider        String?
+  model           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  metas    AgentMeta[]
+  channels Channel[]
+  sessions Session[]
+  memories GlobalMemory[]
+  triggers Trigger[]
+
+  @@map("agents")
+}
+
+model AgentMeta {
+  agentId String @map("agent_id")
+  key     String
+  value   String
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@id([agentId, key])
+  @@map("agent_meta")
+}
+
+model Channel {
+  id         String    @id
+  agentId    String    @map("agent_id")
+  type       String
+  name       String?
+  tokenEnc   String?   @map("token_enc")
+  botId      String?   @map("bot_id")
+  userId     String?   @map("user_id")
+  avatar     String?
+  provider   String?
+  model      String?
+  status     String    @default("unbound")
+  lastActive DateTime? @map("last_active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  legacyJson String?   @map("legacy_json")
+
+  agent    Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  triggers Trigger[]
+
+  @@index([agentId, type])
+  @@map("channels")
+}
+
+model Session {
+  id             String   @id
+  agentId        String   @map("agent_id")
+  title          String?
+  nextSeq        Int      @default(0) @map("next_seq")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  legacyMetadata String?  @map("legacy_metadata")
+
+  agent           Agent            @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  messages        Message[]
+  crystals        Crystal[]
+  archives        SessionArchive[]
+  pendingMemories PendingMemory[]
+  triggers        Trigger[]
+
+  @@index([agentId, updatedAt])
+  @@map("sessions")
+}
+
+model Message {
+  id           String    @id
+  sessionId    String    @map("session_id")
+  seq          Int
+  role         String
+  status       String    @default("final")
+  revision     Int       @default(0)
+  text         String?
+  content      String
+  fromUserId   String?   @map("from_user_id")
+  businessTime DateTime? @map("business_time")
+  archivedAt   DateTime? @map("archived_at")
+  archiveId    String?   @map("archive_id")
+  legacySource String?   @unique @map("legacy_source")
+  legacyJson   String?   @map("legacy_json")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  session   Session         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  archive   SessionArchive? @relation(fields: [archiveId], references: [id], onDelete: SetNull)
+  toolCalls ToolCall[]
+  chunks    MessageChunk[]
+
+  @@unique([sessionId, seq])
+  @@index([sessionId, status])
+  @@index([sessionId, archivedAt, seq])
+  @@index([sessionId, businessTime])
+  @@map("messages")
+}
+
+model SessionArchive {
+  id             String   @id
+  sessionId      String   @map("session_id")
+  sourcePath     String   @unique @map("source_path")
+  sourceHash     String   @map("source_hash")
+  archivedAt     DateTime @map("archived_at")
+  legacyMetadata String?  @map("legacy_metadata")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  session  Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([sessionId, archivedAt])
+  @@map("session_archives")
+}
+
+model MessageChunk {
+  id        String   @id
+  messageId String   @map("message_id")
+  seq       Int
+  kind      String
+  payload   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, seq])
+  @@index([messageId, createdAt])
+  @@map("message_chunks")
+}
+
+model ToolCall {
+  id         String   @id
+  messageId  String   @map("message_id")
+  seq        Int
+  toolName   String   @map("tool_name")
+  argsJson   String   @map("args_json")
+  resultJson String?  @map("result_json")
+  status     String   @default("running")
+  durationMs Int?     @map("duration_ms")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, seq])
+  @@index([toolName, createdAt])
+  @@map("tool_calls")
+}
+
+model Crystal {
+  id               String   @id
+  sessionId        String   @map("session_id")
+  content          String
+  source           String   @default("auto")
+  coversThroughSeq Int?     @map("covers_through_seq")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@map("crystals")
+}
+
+model PendingMemory {
+  id        String   @id
+  sessionId String   @map("session_id")
+  seq       Int
+  payload   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, seq])
+  @@index([sessionId, createdAt])
+  @@map("pending_memories")
+}
+
+// One row preserves one complete global/<category>.md document.
+model GlobalMemory {
+  id         String   @id
+  agentId    String   @map("agent_id")
+  category   String
+  content    String
+  sourceHash String?  @map("source_hash")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, category])
+  @@index([agentId, category, updatedAt])
+  @@map("global_memories")
+}
+
+model Trigger {
+  id                String    @id
+  agentId           String    @map("agent_id")
+  channelId         String?   @map("channel_id")
+  sessionId         String?   @map("session_id")
+  type              String
+  mode              String    @default("persistent")
+  cronExpr          String?   @map("cron_expr")
+  scriptPath        String?   @map("script_path")
+  webhookSecretHash String?   @map("webhook_secret_hash")
+  promptTemplate    String    @map("prompt_template")
+  params            String?
+  cooldownSec       Int       @default(1800) @map("cooldown_sec")
+  maxFiresPerDay    Int       @default(5) @map("max_fires_per_day")
+  enabled           Boolean   @default(true)
+  lastFiredAt       DateTime? @map("last_fired_at")
+  fireCount         Int       @default(0) @map("fire_count")
+  wakeCount         Int       @default(0) @map("wake_count")
+  deletedAt         DateTime? @map("deleted_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  legacyJson        String?   @map("legacy_json")
+
+  agent      Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  channel    Channel?           @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  session    Session?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  executions TriggerExecution[]
+
+  @@index([agentId, enabled, deletedAt])
+  @@index([type, enabled])
+  @@map("triggers")
+}
+
+model TriggerExecution {
+  id         String    @id
+  triggerId  String?   @map("trigger_id")
+  triggerKey String    @map("trigger_key")
+  wake       Boolean
+  reason     String?
+  dataJson   String?   @map("data_json")
+  sessionId  String?   @map("session_id")
+  messageId  String?   @map("message_id")
+  durationMs Int?      @map("duration_ms")
+  error      String?
+  status     String    @default("ok")
+  firedAt    DateTime? @map("fired_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  legacyJson String?   @map("legacy_json")
+
+  trigger Trigger? @relation(fields: [triggerId], references: [id], onDelete: SetNull)
+
+  @@index([triggerKey, createdAt])
+  @@index([status, createdAt])
+  @@map("trigger_executions")
+}
+
+model LegacyMigration {
+  id               String    @id
+  sourcePath       String    @unique @map("source_path")
+  sourceHash       String    @map("source_hash")
+  sourceKind       String    @map("source_kind")
+  sizeBytes        Int       @map("size_bytes")
+  agentId          String?   @map("agent_id")
+  sessionId        String?   @map("session_id")
+  status           String    @default("pending")
+  recordCount      Int       @default(0) @map("record_count")
+  error            String?
+  verificationJson String?   @map("verification_json")
+  startedAt        DateTime? @map("started_at")
+  completedAt      DateTime? @map("completed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([agentId, status])
+  @@map("legacy_migrations")
 }

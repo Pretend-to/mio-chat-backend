@@ -103,7 +103,7 @@ export class MemoryStore {
     const dir = path.join(this._agentDir(), 'global')
     try {
       const files = await fs.promises.readdir(dir)
-      return files.filter((f) => f.endsWith('.md')).map((f) => f.slice(0, -3))
+      return files.filter((f) => f.endsWith('.md')).map((f) => f.slice(0, -3)).toSorted()
     } catch {
       return []
     }
@@ -119,6 +119,11 @@ export class MemoryStore {
       if (body) blocks.push(`## ${c}\n${body}`)
     }
     return blocks.join('\n\n')
+  }
+  /** 整体替换一个分类文档（与数据库兼容层共用的管理 API） */
+  async writeGlobal(category, content) {
+    await this._writeFile(this._globalFile(category), String(content ?? ''))
+    return true
   }
   /** add：追加一条事实 */
   async addGlobal(category, content) {
@@ -181,11 +186,15 @@ export class MemoryStore {
     const raw = await this._readFile(this._sessionFile(id), null)
     return raw ? JSON.parse(raw) : null
   }
-  async createSession({ id = `s_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, title = '' } = {}) {
+  async createSession({
+    createdAt = Date.now(),
+    id = `s_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+    title = '',
+  } = {}) {
     await this._ensureAgentDir()
     const session = {
       chat: [],
-      created_at: Date.now(),
+      created_at: createdAt,
       crystal: '', // <memory_crystal> / previous_summary
       id: this._safeSegment(id),
       title,

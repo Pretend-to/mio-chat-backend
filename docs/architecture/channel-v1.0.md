@@ -68,9 +68,10 @@ WAL 与 busy timeout 已由现有 PrismaManager 配置，只负责锁竞争。�
 
 ### A.5 迁移与回滚
 
-切换按 `legacy → shadow → database` 三阶段进行。迁移以源文件为单位记录 hash、
-状态和导入数量；首版不得重命名或删除旧 JSON。`soul.md`、`global/*.md` 与冷备
-archives 不和 session 首批切换绑定。
+切换按 `legacy → shadow → database-shadow → database` 进行。所有 Agent、Channel、
+session、archive、soul、global memory、meta、Trigger、Execution 和脚本引用都必须
+进入 manifest 并逐源校验；任一源 blocked/failed 时不得切主。迁移器不重命名或
+删除旧文件，回滚窗口内 DB 新写入同步生成旧格式镜像。
 
 ---
 
@@ -192,4 +193,4 @@ Schema 可随版本部署，但 Session、Trigger 和 Prefix Cache 分别由独�
 | D5 | 会话消息 Prisma/SQLite 块级 | 8/31 |
 | D6 | 稳定核心工具集 + mio_meta 先走 allowlist A/B 实验 | 8/31 |
 | D7 | 工具可见性需要独立的 webOnly/channelOnly 双向执行校验 | 8/31 |
-| D8 | soul/global memory 不与 session 首批迁移绑定 | 8/31 |
+| D8 | 所有存量实例全量迁移并逐源验证，不遗留文件态孤岛 | 9/1 |

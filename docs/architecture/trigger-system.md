@@ -147,7 +147,10 @@ POST /channels/:channelId/triggers/:triggerId/hook
 - params/data 规范化为 JSON string；
 - 旧 webhookSecret 明文不得直接写入新表，应 hash 后导入；
 - 缺 channelId 的记录导入为 disabled；
-- Execution 写 triggerKey，即使对应 Trigger 已不存在也可导入；
+- Execution 写 triggerKey 和原始 legacyJson，即使对应 Trigger 已不存在也可作为
+  `triggerId=NULL` 的孤儿审计导入；
+- `scripts/` 下的脚本进入 manifest 并校验 hash、权限、realpath 和 Trigger 引用，
+  脚本正文继续由文件系统承载；
 - 迁移账本复用 `LegacyMigration`，逐文件记录 hash 和状态；
 - shadow 期间文件版为主、DB 镜像比对，切换后旧文件只读保留。
 

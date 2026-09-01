@@ -50,10 +50,13 @@ model Channel {
   botId      String?   @map("bot_id")
   userId     String?   @map("user_id")
   avatar     String?
+  provider   String?
+  model      String?
   status     String    @default("unbound")
   lastActive DateTime? @map("last_active")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
+  legacyJson String?   @map("legacy_json")
 
   agent    Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
   triggers Trigger[]
@@ -63,16 +66,18 @@ model Channel {
 }
 
 model Session {
-  id        String   @id
-  agentId   String   @map("agent_id")
-  title     String?
-  nextSeq   Int      @default(0) @map("next_seq")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id             String   @id
+  agentId        String   @map("agent_id")
+  title          String?
+  nextSeq        Int      @default(0) @map("next_seq")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  legacyMetadata String?  @map("legacy_metadata")
 
-  agent           Agent           @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  agent           Agent            @relation(fields: [agentId], references: [id], onDelete: Cascade)
   messages        Message[]
   crystals        Crystal[]
+  archives        SessionArchive[]
   pendingMemories PendingMemory[]
   triggers        Trigger[]
 
@@ -92,12 +97,16 @@ model Message {
   text         String?
   content      String
   fromUserId   String?   @map("from_user_id")
-  businessTime DateTime  @map("business_time")
+  businessTime DateTime? @map("business_time")
   archivedAt   DateTime? @map("archived_at")
+  archiveId    String?   @map("archive_id")
+  legacySource String?   @unique @map("legacy_source")
+  legacyJson   String?   @map("legacy_json")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  session   Session        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session   Session         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  archive   SessionArchive? @relation(fields: [archiveId], references: [id], onDelete: SetNull)
   toolCalls ToolCall[]
   chunks    MessageChunk[]
 
@@ -106,6 +115,24 @@ model Message {
   @@index([sessionId, archivedAt, seq])
   @@index([sessionId, businessTime])
   @@map("messages")
+}
+
+// Preserves legacy archive batch boundaries and source hashes. Archived messages
+// still live in Message and are ordered in the same session seq space.
+model SessionArchive {
+  id             String   @id
+  sessionId      String   @map("session_id")
+  sourcePath     String   @unique @map("source_path")
+  sourceHash     String   @map("source_hash")
+  archivedAt     DateTime @map("archived_at")
+  legacyMetadata String?  @map("legacy_metadata")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  session  Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([sessionId, archivedAt])
+  @@map("session_archives")
 }
 
 // Append-only recovery/replay events for a streaming assistant message.
@@ -161,25 +188,31 @@ model Crystal {
 model PendingMemory {
   id        String   @id
   sessionId String   @map("session_id")
+  seq       Int
   payload   String
   createdAt DateTime @default(now()) @map("created_at")
 
   session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
+  @@unique([sessionId, seq])
   @@index([sessionId, createdAt])
   @@map("pending_memories")
 }
 
+// One row preserves one complete legacy global/<category>.md document. A future
+// fact-level index must be a derived table and must not replace this source text.
 model GlobalMemory {
-  id        String   @id
-  agentId   String   @map("agent_id")
-  category  String
-  content   String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id         String   @id
+  agentId    String   @map("agent_id")
+  category   String
+  content    String
+  sourceHash String?  @map("source_hash")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
+  @@unique([agentId, category])
   @@index([agentId, category, updatedAt])
   @@map("global_memories")
 }
@@ -205,6 +238,7 @@ model Trigger {
   deletedAt         DateTime? @map("deleted_at")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
+  legacyJson        String?   @map("legacy_json")
 
   agent      Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
   channel    Channel?           @relation(fields: [channelId], references: [id], onDelete: SetNull)
@@ -219,17 +253,20 @@ model Trigger {
 // triggerId is nullable so audit survives hard deletion. Normal once-trigger
 // lifecycle should still use Trigger.deletedAt (soft delete).
 model TriggerExecution {
-  id         String   @id
-  triggerId  String?  @map("trigger_id")
-  triggerKey String   @map("trigger_key")
+  id         String    @id
+  triggerId  String?   @map("trigger_id")
+  triggerKey String    @map("trigger_key")
   wake       Boolean
   reason     String?
-  dataJson   String?  @map("data_json")
-  sessionId  String?  @map("session_id")
-  messageId  String?  @map("message_id")
-  durationMs Int?     @map("duration_ms")
-  status     String   @default("ok")
-  createdAt  DateTime @default(now()) @map("created_at")
+  dataJson   String?   @map("data_json")
+  sessionId  String?   @map("session_id")
+  messageId  String?   @map("message_id")
+  durationMs Int?      @map("duration_ms")
+  error      String?
+  status     String    @default("ok")
+  firedAt    DateTime? @map("fired_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  legacyJson String?   @map("legacy_json")
 
   trigger Trigger? @relation(fields: [triggerId], references: [id], onDelete: SetNull)
 
@@ -241,18 +278,21 @@ model TriggerExecution {
 // Per-source migration ledger. A single agent-wide boolean cannot safely
 // distinguish partial imports from complete imports.
 model LegacyMigration {
-  id          String    @id
-  sourcePath  String    @unique @map("source_path")
-  sourceHash  String    @map("source_hash")
-  agentId     String?   @map("agent_id")
-  sessionId   String?   @map("session_id")
-  status      String    @default("pending")
-  recordCount Int       @default(0) @map("record_count")
-  error       String?
-  startedAt   DateTime? @map("started_at")
-  completedAt DateTime? @map("completed_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  id               String    @id
+  sourcePath       String    @unique @map("source_path")
+  sourceHash       String    @map("source_hash")
+  sourceKind       String    @map("source_kind")
+  sizeBytes        Int       @map("size_bytes")
+  agentId          String?   @map("agent_id")
+  sessionId        String?   @map("session_id")
+  status           String    @default("pending")
+  recordCount      Int       @default(0) @map("record_count")
+  error            String?
+  verificationJson String?   @map("verification_json")
+  startedAt        DateTime? @map("started_at")
+  completedAt      DateTime? @map("completed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   @@index([agentId, status])
   @@map("legacy_migrations")
