@@ -107,7 +107,14 @@ test('LegacyMigrationService imports and verifies a complete legacy instance ide
     updatedAt: 2000,
     userId: 'u1',
   }])
-  await write(root, 'channels-data/triggers/triggers.json', [])
+  await write(root, 'channels-data/triggers/triggers.json', [{
+    agentId,
+    enabled: true,
+    id: 'trg_without_channel',
+    scriptPath: 'channels-data/triggers/scripts/orphan.js',
+    sessionId,
+    type: 'script',
+  }])
   await write(root, 'channels-data/triggers/executions.json', [{
     data: { price: 1 },
     durationMs: 10,
@@ -154,5 +161,6 @@ test('LegacyMigrationService imports and verifies a complete legacy instance ide
   const execution = await prisma.triggerExecution.findUnique({ where: { id: 'exec_orphan' } })
   assert.equal(execution.triggerId, null)
   assert.equal(execution.triggerKey, 'missing-trigger')
+  assert.equal((await prisma.trigger.findUnique({ where: { id: 'trg_without_channel' } })).enabled, true)
   assert.equal(await prisma.legacyMigration.count({ where: { status: 'completed' } }), 10)
 })

@@ -1,6 +1,6 @@
 # MioChat Session Persistence Architecture v0.4
 
-> 状态：schema spike 已完成，待实现
+> 状态：database-only 实现与自动迁移已完成，待合并
 > 日期：2026-08-31
 > 范围：Channel 会话、流式回复、结晶和旧 JSON 数据迁移
 > 可执行 schema：[`session-persistence-schema.prisma`](./session-persistence-schema.prisma)
@@ -252,7 +252,7 @@ await prisma.$transaction(async tx => {
 
 ### 7.6 在线切换与回滚
 
-通过配置控制四种模式：
+Channel 与 Session 兼容层仍保留四种显式诊断模式：
 
 - `legacy`：JSON 主写；
 - `shadow`：JSON 主写，DB 镜像并持续逐源比对；
@@ -260,21 +260,25 @@ await prisma.$transaction(async tx => {
 - `database`：DB 单独主写。
 
 当前运行时开关是环境变量 `MIO_CHANNEL_PERSISTENCE_MODE`。新实例和完成自动迁移的
-存量实例默认使用 `database`。允许值只有上述四项，
+存量实例默认使用 `database`，生产正常运行不进入 shadow 模式。允许值只有上述四项，
 非法值会在 Channel 启动时直接报错。Channel 停止时
 使用的 HTTP/Socket 管理接口和 Channel 工具也必须经过同一个存储工厂，不能绕过
 开关直接实例化 `MemoryStore`。
 
 正常升级不需要单独执行迁移命令。应用重启时，init 会在 Channel、Trigger 和 HTTP
 服务启动前盘点旧数据，为当前迁移版本创建一次本地快照，生成或读取实例加密密钥，
-完成导入并复验，然后直接切到 `database` 单线运行。完成标记写入 `SystemSetting`，
-后续重启直接跳过。任一步失败都会阻止
+完成导入并复验，然后直接切到 `database` 单线运行。无旧数据的新实例也会写入同一
+完成标记，避免后续把运行时生成的文件误判成待迁移输入。完成标记写入 `SystemSetting`，
+后续重启直接跳过。Trigger 元数据和执行审计同样以 Prisma 为唯一权威来源；只有 Trigger
+脚本本体继续保存在 `channels-data/triggers/scripts/`。任一步失败都会阻止
 本次启动，旧数据不会被改名或删除。快照和实例密钥分别保存在
 `prisma/data/backups/channel-storage/` 与 `prisma/data/channel-storage.key`，均位于 Git
 忽略的运行时数据目录。
 
 已经人工导入过数据库、但尚未写入上述 init 完成标记的过渡实例，不属于首次自动迁移
-对象；应先人工确认数据库与旧 JSON 的基准状态并补齐标记，不能直接重复导入。
+对象。init 会检测已占用的持久化表并明确拒绝重复导入；应先人工确认数据库与旧 JSON
+的基准状态并补齐标记。完成标记存在时，实例密钥缺失或与 `MIOCHAT_ENC_KEY` 不一致也会
+阻止启动，绝不会自动轮换密钥。
 
 以下命令保留用于只读诊断和人工复验（均在实例后端根目录执行）：
 
@@ -293,10 +297,9 @@ MIOCHAT_ENC_KEY='<same key>' pnpm db:migrate:channel-storage --verify
 `--apply` 没有精确匹配当前盘点 hash 时会拒绝执行。迁移器和四模式运行时均不会
 自动删除、改名或清空旧文件。
 
-最终切换需要一个短暂维护窗口：暂停 Channel/Trigger 新写入，重新计算 manifest
-hash，导入 shadow 期间的增量，执行全量验证后再切到 `database-shadow`。回滚窗口
-内 DB 新消息必须同步回旧格式，不能只把旧 JSON 当静态只读备份。稳定运行并完成
-一次反向导出恢复演练后，才能进入 `database`。
+升级通过应用重启提供的维护窗口完成。init 成功返回前不会启动 Channel、Trigger 或
+HTTP 服务；导入事务和逐源验证完成后直接进入 `database`。若失败，服务保持停止并
+输出可操作错误，修复原因后再重启。
 
 任何阶段都不自动重命名或删除旧文件。清理是迁移完成后的独立人工操作。
 
@@ -328,8 +331,8 @@ hash，导入 shadow 期间的增量，执行全量验证后再切到 `database-
 - 旧消息的 role、缺失字段、content block 顺序和原始 JSON 可逐条反向重建；
 - soul/global 文本 byte-for-byte 一致，Channel token 解密回读一致；
 - archive 批次边界、archivedAt 和历史顺序可重建；
-- shadow 模式逐源比较记录数、字段类型和 canonical hash；
-- database-shadow 模式新增数据可反向导出，并完成一次切回 legacy 演练；
+- 自动迁移发现 DB 已有运行态数据但缺少完成标记时 fail-fast，不重复导入；
+- 完成标记存在但实例密钥缺失或不匹配时 fail-fast，不生成替代密钥；
 - 旧文件未被迁移器修改或删除。
 
 ## 10. 暂不包含

@@ -345,21 +345,8 @@ async function startApp() {
     // 自动恢复上次 running 状态的渠道（持久化开关）
     const channelRuntime = getChannelRuntime()
     try {
-      const allChannels = await channelRuntime.channelStore._load()
-      const toRestore = allChannels.filter(c => c.status === 'running' && c.token && c.userId)
-      if (toRestore.length > 0) {
-        logger.info(`[ChannelRuntime] 自动恢复 ${toRestore.length} 个运行中渠道...`)
-        for (const ch of toRestore) {
-          try {
-            await channelRuntime.start(ch.id)
-            logger.info(`[ChannelRuntime] 渠道 "${ch.name}" (${ch.id}) 已恢复运行`)
-          } catch (e) {
-            logger.warn(`[ChannelRuntime] 渠道 "${ch.name}" (${ch.id}) 恢复失败: ${e.message}`)
-            // 恢复失败时把状态标回 stopped，避免下次继续尝试
-            await channelRuntime.channelStore.update(ch.id, { status: 'stopped' })
-          }
-        }
-      }
+      const { restoreRunningChannels } = await import('./channels/restoreRunningChannels.js')
+      await restoreRunningChannels(channelRuntime, logger)
     } catch (e) {
       logger.warn('[ChannelRuntime] 自动恢复渠道时出错:', e.message)
     }

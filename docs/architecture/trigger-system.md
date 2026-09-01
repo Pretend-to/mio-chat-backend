@@ -1,6 +1,6 @@
 # MioChat Trigger Architecture v0.4
 
-> 状态：P1 文件版已实现；数据库化与安全收口待实施
+> 状态：Registry 数据库化已实现；路由与脚本安全收口待实施
 > 日期：2026-08-31
 > 依赖：[`session-persistence.md`](./session-persistence.md)
 > 可执行 schema：[`session-persistence-schema.prisma`](./session-persistence-schema.prisma)
@@ -13,7 +13,7 @@ Trigger 把“事件 → 唤醒指定 Channel 会话”定义为系统原语，�
 
 当前已实现：
 
-- `TriggerRegistry` 文件版 CRUD 与审计；
+- `TriggerRegistry` Prisma CRUD、软删除与执行审计；
 - `TriggerRunner` 子进程执行和 stdout `@WAKE@` 协议；
 - `WakeInjector` 冷却、日限额和会话注入；
 - `trigger_manage` 与 `/triggers`；
@@ -21,7 +21,6 @@ Trigger 把“事件 → 唤醒指定 Channel 会话”定义为系统原语，�
 
 仍待实现：
 
-- Trigger/TriggerExecution 数据库化；
 - 精确 channel 路由；
 - payload 白名单、长度上限和全局熔断；
 - 脚本环境变量白名单与更强隔离；
@@ -42,7 +41,8 @@ lib/chat/persistence/
   SessionPersistence.js
 ```
 
-`TriggerRegistry` 数据库化后保持现有公开方法，避免同时重写工具层和 SlashHandler。
+`TriggerRegistry` 保持现有公开方法，因此工具层和 SlashHandler 无需感知存储切换。
+正常 `database` 模式只写 Prisma；脚本正文仍是文件资产。
 
 ## 3. Schema 与删除语义
 
@@ -146,13 +146,14 @@ POST /channels/:channelId/triggers/:triggerId/hook
 - 使用稳定 id 保持 Trigger 主键；
 - params/data 规范化为 JSON string；
 - 旧 webhookSecret 明文不得直接写入新表，应 hash 后导入；
-- 缺 channelId 的记录导入为 disabled；
+- 缺 channelId 的旧记录仍按 agent/session 路由语义保留 enabled 状态；精确 channel
+  路由实施后再要求重新绑定；
 - Execution 写 triggerKey 和原始 legacyJson，即使对应 Trigger 已不存在也可作为
   `triggerId=NULL` 的孤儿审计导入；
 - `scripts/` 下的脚本进入 manifest 并校验 hash、权限、realpath 和 Trigger 引用，
   脚本正文继续由文件系统承载；
 - 迁移账本复用 `LegacyMigration`，逐文件记录 hash 和状态；
-- shadow 期间文件版为主、DB 镜像比对，切换后旧文件只读保留。
+- 自动迁移验证完成后直接使用 DB 权威数据，旧 JSON 只读保留。
 
 ## 10. 与 Session Persistence 的关系
 
@@ -174,7 +175,7 @@ TriggerExecution 与 Message 不建立强外键。审计记录保存 `sessionId`
 
 ## 12. 分期
 
-- P1.1：Registry DB adapter、迁移、软删除与精确路由；
+- P1.1：Registry DB adapter、迁移与软删除（已完成）；精确路由待收口；
 - P1.2：payload/环境/路径/并发安全收口；
 - P2：webhook；
 - P3：管理面板和统计。

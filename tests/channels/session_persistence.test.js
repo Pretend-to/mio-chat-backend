@@ -9,6 +9,8 @@ import test from 'node:test'
 import { BaseChannel } from '../../channels/common/BaseChannel.js'
 import { ChannelStore } from '../../channels/ChannelStore.js'
 import { MemoryStore } from '../../channels/memory/MemoryStore.js'
+import { restoreRunningChannels } from '../../channels/restoreRunningChannels.js'
+import { TriggerRegistry } from '../../lib/triggers/TriggerRegistry.js'
 import {
   DatabaseMemoryStore,
   PersistenceMirrorError,
@@ -284,4 +286,67 @@ test('ChannelStore mirrors configuration without retaining plaintext tokens in d
   await databaseShadow.update(created.id, { model: 'new-model' })
   const legacy = JSON.parse(await fs.promises.readFile(file, 'utf8'))
   assert.equal(legacy[0].model, 'new-model')
+})
+
+test('database startup restores running channels from the database rather than stale legacy JSON', async t => {
+  const { prisma, root } = await createFixture(t)
+  const file = path.join(root, 'channels-data/channels.json')
+  await fs.promises.mkdir(path.dirname(file), { recursive: true })
+  await fs.promises.writeFile(file, JSON.stringify([{
+    agentId: 'agent-restore',
+    id: 'stale-json-channel',
+    status: 'running',
+    token: 'stale',
+    userId: 'stale-user',
+  }]))
+
+  const store = new ChannelStore({ encryptionKey: '55'.repeat(32), file, mode: 'database', prisma })
+  const created = await store.create({
+    agentId: 'agent-restore',
+    name: 'Database channel',
+    status: 'running',
+    token: 'database-token',
+    userId: 'database-user',
+  })
+  const started = []
+  const result = await restoreRunningChannels({
+    channelStore: store,
+    start: async id => started.push(id),
+  }, { info() {}, warn() {} })
+
+  assert.deepEqual(started, [created.id])
+  assert.equal(result.discovered, 1)
+  assert.equal(result.restored, 1)
+})
+
+test('database TriggerRegistry keeps metadata and execution audit in Prisma while scripts stay as files', async t => {
+  const { prisma, root } = await createFixture(t)
+  await prisma.agent.create({ data: { id: 'agent-trigger-db' } })
+  await prisma.session.create({ data: { agentId: 'agent-trigger-db', id: 'session-trigger-db' } })
+  const dataDir = path.join(root, 'channels-data/triggers')
+  const registry = new TriggerRegistry({ dataDir, mode: 'database', prisma })
+
+  const created = await registry.create({
+    agentId: 'agent-trigger-db',
+    id: 'trigger-db',
+    scriptCode: 'console.log("@WAKE@ {}")\n',
+    sessionId: 'session-trigger-db',
+    type: 'script',
+  })
+  assert.equal((await registry.list()).length, 1)
+  assert.equal(await prisma.trigger.count(), 1)
+  assert.equal(fs.existsSync(path.join(dataDir, 'triggers.json')), false)
+  assert.equal(fs.existsSync(created.scriptPath), true)
+
+  await registry.update(created.id, { fireCount: 2, lastFiredAt: 1234, wakeCount: 1 })
+  const updated = await registry.get(created.id)
+  assert.equal(updated.fireCount, 2)
+  assert.equal(updated.lastFiredAt, 1234)
+  await registry.recordExecution({ data: { ok: true }, triggerId: created.id, wake: true })
+  assert.deepEqual((await registry.listExecutions(created.id))[0].data, { ok: true })
+
+  assert.equal(await registry.remove(created.id), true)
+  assert.equal(await registry.get(created.id), null)
+  assert.equal(await prisma.triggerExecution.count(), 1)
+  assert.equal(fs.existsSync(created.scriptPath), false)
 })

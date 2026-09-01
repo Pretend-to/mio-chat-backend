@@ -165,10 +165,15 @@ export class ChannelStore {
     }
   }
 
-  async list() {
-    const list = this.mode === 'database' || this.mode === 'database-shadow'
+  /** Internal, non-redacted list used by ChannelRuntime during startup. */
+  async listInternal() {
+    return this.mode === 'database' || this.mode === 'database-shadow'
       ? await this._listDatabase()
       : await this._load()
+  }
+
+  async list() {
+    const list = await this.listInternal()
     return list.map((c) => this._public(c))
   }
   async get(id) {

@@ -8,6 +8,7 @@ import test from 'node:test'
 
 import {
   CHANNEL_STORAGE_MIGRATION_SETTING,
+  CHANNEL_STORAGE_MIGRATION_VERSION,
   runLegacyMigrationBootstrap,
 } from '../../lib/chat/persistence/index.js'
 
@@ -111,22 +112,110 @@ test('fresh clone without legacy files selects database mode and provisions a ke
   const previousMode = process.env.MIO_CHANNEL_PERSISTENCE_MODE
   delete process.env.MIOCHAT_ENC_KEY
   delete process.env.MIO_CHANNEL_PERSISTENCE_MODE
-  const root = await fs.promises.mkdtemp('/tmp/mio-fresh-bootstrap-')
+  const { databasePath, prisma, root } = await createFixture(t)
   t.after(async () => {
     if (previousKey === undefined) delete process.env.MIOCHAT_ENC_KEY
     else process.env.MIOCHAT_ENC_KEY = previousKey
     if (previousMode === undefined) delete process.env.MIO_CHANNEL_PERSISTENCE_MODE
     else process.env.MIO_CHANNEL_PERSISTENCE_MODE = previousMode
-    await fs.promises.rm(root, { force: true, recursive: true })
   })
 
   const result = await runLegacyMigrationBootstrap({
+    databasePath,
     logger: { info() {} },
-    prisma: { systemSetting: { findUnique: async () => null } },
+    prisma,
     rootDir: root,
   })
   assert.equal(result.reason, 'no-legacy-data')
   assert.equal(result.mode, 'database')
   assert.equal(process.env.MIO_CHANNEL_PERSISTENCE_MODE, 'database')
   assert.equal((await fs.promises.stat(path.join(root, 'prisma/data/channel-storage.key'))).mode & 0o777, 0o600)
+  assert.equal(result.state.source, 'fresh-instance')
+  const setting = await prisma.systemSetting.findUnique({
+    where: { key: CHANNEL_STORAGE_MIGRATION_SETTING },
+  })
+  assert.equal(JSON.parse(setting.value).version, CHANNEL_STORAGE_MIGRATION_VERSION)
+})
+
+test('restart init refuses to import legacy JSON into an already populated persistence database', async t => {
+  const previousKey = process.env.MIOCHAT_ENC_KEY
+  const previousMode = process.env.MIO_CHANNEL_PERSISTENCE_MODE
+  delete process.env.MIOCHAT_ENC_KEY
+  delete process.env.MIO_CHANNEL_PERSISTENCE_MODE
+  t.after(() => {
+    if (previousKey === undefined) delete process.env.MIOCHAT_ENC_KEY
+    else process.env.MIOCHAT_ENC_KEY = previousKey
+    if (previousMode === undefined) delete process.env.MIO_CHANNEL_PERSISTENCE_MODE
+    else process.env.MIO_CHANNEL_PERSISTENCE_MODE = previousMode
+  })
+
+  const { databasePath, prisma, root } = await createFixture(t)
+  await prisma.agent.create({ data: { id: 'already-imported' } })
+  await write(root, 'memory/agents/already-imported/soul.md', 'legacy soul\n')
+
+  await assert.rejects(
+    runLegacyMigrationBootstrap({ databasePath, prisma, rootDir: root }),
+    error => error.code === 'CHANNEL_STORAGE_DATABASE_ALREADY_POPULATED'
+      && error.message.includes('automatic re-import'),
+  )
+  assert.equal(await prisma.systemSetting.findUnique({
+    where: { key: CHANNEL_STORAGE_MIGRATION_SETTING },
+  }), null)
+})
+
+test('completed migration refuses to rotate a missing instance key', async t => {
+  const previousKey = process.env.MIOCHAT_ENC_KEY
+  const previousMode = process.env.MIO_CHANNEL_PERSISTENCE_MODE
+  delete process.env.MIOCHAT_ENC_KEY
+  delete process.env.MIO_CHANNEL_PERSISTENCE_MODE
+  t.after(() => {
+    if (previousKey === undefined) delete process.env.MIOCHAT_ENC_KEY
+    else process.env.MIOCHAT_ENC_KEY = previousKey
+    if (previousMode === undefined) delete process.env.MIO_CHANNEL_PERSISTENCE_MODE
+    else process.env.MIO_CHANNEL_PERSISTENCE_MODE = previousMode
+  })
+
+  const { databasePath, prisma, root } = await createFixture(t)
+  await prisma.systemSetting.create({
+    data: {
+      category: 'system',
+      key: CHANNEL_STORAGE_MIGRATION_SETTING,
+      value: JSON.stringify({ mode: 'database', version: CHANNEL_STORAGE_MIGRATION_VERSION }),
+    },
+  })
+
+  await assert.rejects(
+    runLegacyMigrationBootstrap({ databasePath, prisma, rootDir: root }),
+    error => error.code === 'CHANNEL_STORAGE_KEY_MISSING'
+      && error.message.includes('Restore the original key'),
+  )
+  assert.equal(fs.existsSync(path.join(root, 'prisma/data/channel-storage.key')), false)
+})
+
+test('completed migration rejects an environment key that differs from the persisted key', async t => {
+  const previousKey = process.env.MIOCHAT_ENC_KEY
+  const previousMode = process.env.MIO_CHANNEL_PERSISTENCE_MODE
+  process.env.MIOCHAT_ENC_KEY = '77'.repeat(32)
+  delete process.env.MIO_CHANNEL_PERSISTENCE_MODE
+  t.after(() => {
+    if (previousKey === undefined) delete process.env.MIOCHAT_ENC_KEY
+    else process.env.MIOCHAT_ENC_KEY = previousKey
+    if (previousMode === undefined) delete process.env.MIO_CHANNEL_PERSISTENCE_MODE
+    else process.env.MIO_CHANNEL_PERSISTENCE_MODE = previousMode
+  })
+
+  const { databasePath, prisma, root } = await createFixture(t)
+  await write(root, 'prisma/data/channel-storage.key', `${'88'.repeat(32)}\n`)
+  await prisma.systemSetting.create({
+    data: {
+      category: 'system',
+      key: CHANNEL_STORAGE_MIGRATION_SETTING,
+      value: JSON.stringify({ mode: 'database', version: CHANNEL_STORAGE_MIGRATION_VERSION }),
+    },
+  })
+
+  await assert.rejects(
+    runLegacyMigrationBootstrap({ databasePath, prisma, rootDir: root }),
+    /does not match the persisted instance key/,
+  )
 })

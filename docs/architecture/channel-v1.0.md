@@ -68,14 +68,15 @@ WAL 与 busy timeout 已由现有 PrismaManager 配置，只负责锁竞争。�
 
 ### A.5 迁移与回滚
 
-切换按 `legacy → shadow → database-shadow → database` 进行。所有 Agent、Channel、
+正常升级在重启 init 中从 `legacy` 直接切到 `database`；shadow 模式只保留作显式诊断。
+所有 Agent、Channel、
 session、archive、soul、global memory、meta、Trigger、Execution 和脚本引用都必须
 进入 manifest 并逐源校验；任一源 blocked/failed 时不得切主。迁移器不重命名或
-删除旧文件，回滚窗口内 DB 新写入同步生成旧格式镜像。
+删除旧文件；迁移前快照作为回滚输入保留。
 
 ---
 
-## B. Trigger 系统（文件版 P1 已实现）
+## B. Trigger 系统（Registry 数据库化已实现）
 
 > 本节引用 `lib/triggers/` 的已有实现，不重复设计。详细设计见 `docs/architecture/trigger-system.md`。
 
