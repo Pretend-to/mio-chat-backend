@@ -2,6 +2,13 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 
+import prismaManager from '../lib/database/prisma.js'
+import {
+  decryptToken,
+  encryptToken,
+  parseEncryptionKey,
+} from '../lib/chat/persistence/TokenCipher.js'
+
 /**
  * ChannelStore — 渠道配置持久化（管理面板后端的存储端）
  *
@@ -24,9 +31,34 @@ const UTF8 = 'utf-8'
 const DEFAULT_FILE = 'channels-data/channels.json'
 
 export class ChannelStore {
-  constructor({ file = DEFAULT_FILE } = {}) {
+  constructor({
+    encryptionKey = process.env.MIOCHAT_ENC_KEY,
+    file = DEFAULT_FILE,
+    logger = console,
+    mode = process.env.MIO_CHANNEL_PERSISTENCE_MODE || 'legacy',
+    prisma = null,
+  } = {}) {
+    if (!['legacy', 'shadow', 'database-shadow', 'database'].includes(mode)) {
+      throw new Error(`invalid channel persistence mode ${mode}`)
+    }
     this.file = file
+    this.encryptionKey = encryptionKey
+    this.logger = logger
+    this.mode = mode
+    this.prisma = prisma
     this._cache = null
+  }
+
+  async _database() {
+    if (!this.prisma) this.prisma = await prismaManager.initialize()
+    return this.prisma
+  }
+
+  _key(required = false) {
+    if (!required && !this.encryptionKey) return null
+    return Buffer.isBuffer(this.encryptionKey)
+      ? this.encryptionKey
+      : parseEncryptionKey(this.encryptionKey)
   }
 
   async _load() {
@@ -58,11 +90,91 @@ export class ChannelStore {
     return { ...rest, hasToken: !!token }
   }
 
+  _fromDatabase(row) {
+    return {
+      agentId: row.agentId,
+      avatar: row.avatar || '',
+      botId: row.botId || '',
+      createdAt: row.createdAt.getTime(),
+      id: row.id,
+      lastActive: row.lastActive?.getTime() || 0,
+      model: row.model || '',
+      name: row.name || '',
+      provider: row.provider || '',
+      status: row.status,
+      token: row.tokenEnc ? decryptToken(row.tokenEnc, this._key(true)) : '',
+      type: row.type,
+      updatedAt: row.updatedAt.getTime(),
+      userId: row.userId || '',
+    }
+  }
+
+  async _listDatabase() {
+    const prisma = await this._database()
+    const rows = await prisma.channel.findMany({ orderBy: { createdAt: 'asc' } })
+    return rows.map(row => this._fromDatabase(row))
+  }
+
+  async _getDatabase(id) {
+    const prisma = await this._database()
+    const row = await prisma.channel.findUnique({ where: { id } })
+    return row ? this._fromDatabase(row) : null
+  }
+
+  async _writeDatabase(channel) {
+    const prisma = await this._database()
+    const tokenEnc = channel.token ? encryptToken(channel.token, this._key(true)) : null
+    await prisma.agent.upsert({ create: { id: channel.agentId }, update: {}, where: { id: channel.agentId } })
+    const legacyJson = { ...channel }
+    delete legacyJson.token
+    const data = {
+      agentId: channel.agentId,
+      avatar: channel.avatar || null,
+      botId: channel.botId || null,
+      lastActive: channel.lastActive ? new Date(channel.lastActive) : null,
+      legacyJson: JSON.stringify(legacyJson),
+      model: channel.model || null,
+      name: channel.name || null,
+      provider: channel.provider || null,
+      status: channel.status || 'unbound',
+      tokenEnc,
+      type: channel.type || 'wechat',
+      updatedAt: new Date(channel.updatedAt),
+      userId: channel.userId || null,
+    }
+    await prisma.channel.upsert({
+      create: { ...data, createdAt: new Date(channel.createdAt), id: channel.id },
+      update: data,
+      where: { id: channel.id },
+    })
+    return channel
+  }
+
+  async _removeDatabase(id) {
+    const prisma = await this._database()
+    return (await prisma.channel.deleteMany({ where: { id } })).count > 0
+  }
+
+  async _mirror(method, action) {
+    try {
+      return await action()
+    } catch (error) {
+      this.logger?.error?.(`[ChannelStore] ${this.mode} ${method} mirror failed: ${error.message}`)
+      if (this.mode === 'database-shadow') throw error
+      return null
+    }
+  }
+
   async list() {
-    return (await this._load()).map((c) => this._public(c))
+    const list = this.mode === 'database' || this.mode === 'database-shadow'
+      ? await this._listDatabase()
+      : await this._load()
+    return list.map((c) => this._public(c))
   }
   async get(id) {
-    const found = (await this._load()).find((c) => c.id === id)
+    const found = this.mode === 'database' || this.mode === 'database-shadow'
+      ? await this._getDatabase(id)
+      : (await this._load()).find((c) => c.id === id)
     return found ? found : null
   }
   async getPublic(id) {
@@ -70,7 +182,9 @@ export class ChannelStore {
     return c ? this._public(c) : null
   }
   async create(data = {}) {
-    const list = await this._load()
+    const list = this.mode === 'database' || this.mode === 'database-shadow'
+      ? await this._listDatabase()
+      : await this._load()
     const now = Date.now()
     const channel = {
       agentId: 'wechat-master', // 默认归属
@@ -91,24 +205,46 @@ export class ChannelStore {
     }
     list.push(channel)
     this._cache = list
-    await this._save()
+    if (this.mode === 'database' || this.mode === 'database-shadow') {
+      await this._writeDatabase(channel)
+      if (this.mode === 'database-shadow') await this._mirror('create', () => this._save())
+    } else {
+      await this._save()
+      if (this.mode === 'shadow') await this._mirror('create', () => this._writeDatabase(channel))
+    }
     return this._public(channel)
   }
   async update(id, patch = {}) {
-    const list = await this._load()
+    const list = this.mode === 'database' || this.mode === 'database-shadow'
+      ? await this._listDatabase()
+      : await this._load()
     const ch = list.find((c) => c.id === id)
     if (!ch) return null
     Object.assign(ch, patch, { updatedAt: Date.now() })
     this._cache = list
-    await this._save()
+    if (this.mode === 'database' || this.mode === 'database-shadow') {
+      await this._writeDatabase(ch)
+      if (this.mode === 'database-shadow') await this._mirror('update', () => this._save())
+    } else {
+      await this._save()
+      if (this.mode === 'shadow') await this._mirror('update', () => this._writeDatabase(ch))
+    }
     return this._public(ch)
   }
   async remove(id) {
-    const list = await this._load()
+    const list = this.mode === 'database' || this.mode === 'database-shadow'
+      ? await this._listDatabase()
+      : await this._load()
     const next = list.filter((c) => c.id !== id)
     if (next.length === list.length) return false
     this._cache = next
-    await this._save()
+    if (this.mode === 'database' || this.mode === 'database-shadow') {
+      await this._removeDatabase(id)
+      if (this.mode === 'database-shadow') await this._mirror('remove', () => this._save())
+    } else {
+      await this._save()
+      if (this.mode === 'shadow') await this._mirror('remove', () => this._removeDatabase(id))
+    }
     return true
   }
 }

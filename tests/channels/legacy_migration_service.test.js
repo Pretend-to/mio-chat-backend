@@ -149,6 +149,7 @@ test('LegacyMigrationService imports and verifies a complete legacy instance ide
   assert.equal(channel.provider, 'provider-a')
   assert.equal(channel.model, 'model-a')
   assert.equal(decryptToken(channel.tokenEnc, encryptionKey), 'plain-secret')
+  assert.equal(JSON.parse(channel.legacyJson).token, undefined)
 
   const execution = await prisma.triggerExecution.findUnique({ where: { id: 'exec_orphan' } })
   assert.equal(execution.triggerId, null)

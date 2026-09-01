@@ -7,6 +7,7 @@ import path from 'node:path'
 import test from 'node:test'
 
 import { BaseChannel } from '../../channels/common/BaseChannel.js'
+import { ChannelStore } from '../../channels/ChannelStore.js'
 import { MemoryStore } from '../../channels/memory/MemoryStore.js'
 import {
   DatabaseMemoryStore,
@@ -262,4 +263,25 @@ test('mirror failure policy preserves legacy availability and stops database-sha
     databaseShadow.writeSoul('must alert'),
     error => error instanceof PersistenceMirrorError && error.method === 'writeSoul',
   )
+})
+
+test('ChannelStore mirrors configuration without retaining plaintext tokens in database legacy JSON', async t => {
+  const { prisma, root } = await createFixture(t)
+  const file = path.join(root, 'channels.json')
+  const encryptionKey = '44'.repeat(32)
+  const shadow = new ChannelStore({ encryptionKey, file, mode: 'shadow', prisma })
+
+  const created = await shadow.create({ agentId: 'agent-channel-store', name: 'Mirror', token: 'secret' })
+  await shadow.update(created.id, { status: 'running' })
+  const row = await prisma.channel.findUnique({ where: { id: created.id } })
+  assert.equal(JSON.parse(row.legacyJson).token, undefined)
+  assert.equal(row.status, 'running')
+
+  const database = new ChannelStore({ encryptionKey, file, mode: 'database', prisma })
+  assert.equal((await database.get(created.id)).token, 'secret')
+
+  const databaseShadow = new ChannelStore({ encryptionKey, file, mode: 'database-shadow', prisma })
+  await databaseShadow.update(created.id, { model: 'new-model' })
+  const legacy = JSON.parse(await fs.promises.readFile(file, 'utf8'))
+  assert.equal(legacy[0].model, 'new-model')
 })
