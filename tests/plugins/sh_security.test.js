@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import ShSecurityHook from '../../lib/plugins/terminal-pty/hooks/shSecurity.js'
 import { shellPolicyService } from '../../lib/database/services/ShellPolicyService.js'
 
-test('bash_input cannot use the compound read-only fast path and taints its PTY', async (t) => {
+test('bash_input cannot use either automatic allow path and taints its PTY', async (t) => {
   const originalEvaluate = shellPolicyService.evaluate
   let options
   shellPolicyService.evaluate = async (_command, _cwd, receivedOptions) => {
@@ -33,6 +33,7 @@ test('bash_input cannot use the compound read-only fast path and taints its PTY'
 
   assert.equal(allowed, false)
   assert.equal(approvalRequested, true)
+  assert.equal(options.allowPersistedAllow, false)
   assert.equal(options.allowSafeReadonly, false)
   assert.equal(session.safeReadonlyEligible, false)
 })

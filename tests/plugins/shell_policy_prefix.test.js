@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { ShellPolicyService } from '../../lib/database/services/ShellPolicyService.js'
 
-test('未知命令不能通过白名单前缀获得自动放行', () => {
+test('明确记住的未知单条命令仍可通过白名单放行', () => {
   const service = new ShellPolicyService()
 
   assert.equal(service.getCommandPrefix('okx list --limit 100'), 'okx')
@@ -22,7 +22,7 @@ test('未知命令不能通过白名单前缀获得自动放行', () => {
       matchType: 'prefix',
       match: 'okx list',
     }),
-    false,
+    true,
   )
   assert.equal(
     service._matchCommand('grep foo file', {
@@ -56,6 +56,13 @@ test('未知命令不能通过白名单前缀获得自动放行', () => {
     service._matchCommand('okx list "$(rm -rf /tmp/x)"', {
       matchType: 'prefix',
       match: 'okx list',
+    }),
+    false,
+  )
+  assert.equal(
+    service._matchCommand('/usr/local/bin/okx list', {
+      matchType: 'prefix',
+      match: '/usr/local/bin/okx list',
     }),
     false,
   )
@@ -133,7 +140,7 @@ test('Shell 包装器不允许进入前缀白名单自动放行', async () => {
   )
 })
 
-test('环境变量赋值不能借助持久白名单自动放行', async () => {
+test('持久 allow 仅放行单条静态命令，bash_input 可显式禁用它', async () => {
   const service = new ShellPolicyService()
   service._seeded = true
   service.prisma = {
@@ -157,6 +164,18 @@ test('环境变量赋值不能借助持久白名单自动放行', async () => {
   )
   assert.equal(
     (await service.evaluate('okx list --limit 100')).verdict,
+    'allow',
+  )
+  assert.equal(
+    (
+      await service.evaluate('okx list --limit 100', null, {
+        allowPersistedAllow: false,
+      })
+    ).verdict,
+    'unknown',
+  )
+  assert.equal(
+    (await service.evaluate('okx list && grep foo file')).verdict,
     'unknown',
   )
 })
