@@ -1,0 +1,38 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+
+import ShSecurityHook from '../../lib/plugins/terminal-pty/hooks/shSecurity.js'
+import { shellPolicyService } from '../../lib/database/services/ShellPolicyService.js'
+
+test('bash_input cannot use the compound read-only fast path and taints its PTY', async (t) => {
+  const originalEvaluate = shellPolicyService.evaluate
+  let options
+  shellPolicyService.evaluate = async (_command, _cwd, receivedOptions) => {
+    options = receivedOptions
+    return { verdict: 'unknown', reason: 'no-rule-hit' }
+  }
+  t.after(() => {
+    shellPolicyService.evaluate = originalEvaluate
+  })
+
+  const session = { cwd: '/workspace', safeReadonlyEligible: true }
+  let approvalRequested = false
+  const hook = new ShSecurityHook({ namespace: 'terminal-pty' })
+  const allowed = await hook.execute({
+    event: { body: { settings: {} }, metaData: {} },
+    params: { data: 'grep foo file | head -10', sessionId: 'term_1' },
+    tool: {
+      name: 'bash_input',
+      parentPlugin: { sessions: { get: () => session } },
+      requestUserApproval: async () => {
+        approvalRequested = true
+        return { approved: false }
+      },
+    },
+  })
+
+  assert.equal(allowed, false)
+  assert.equal(approvalRequested, true)
+  assert.equal(options.allowSafeReadonly, false)
+  assert.equal(session.safeReadonlyEligible, false)
+})
