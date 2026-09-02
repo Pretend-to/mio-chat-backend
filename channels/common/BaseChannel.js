@@ -195,8 +195,8 @@ export class BaseChannel {
   }
 
   /** 高危动作挂起确认代理 */
-  requestConfirmation({ description, title = '安全操作确认' }, ctx) {
-    return this.confirmations.request({ description, title }, ctx)
+  requestConfirmation({ description, title = '安全操作确认', ...options }, ctx) {
+    return this.confirmations.request({ description, title, ...options }, ctx)
   }
 
   /** 高危动作用户输入拦截检查代理 */

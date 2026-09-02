@@ -44,6 +44,47 @@ test('MioFunction - requestUserApproval', async (t) => {
     assert.strictEqual(result.approved, true)
     assert.strictEqual(result.reason, 'ok')
   })
+
+  await t.test('should expose only first two command words to approval UI', async () => {
+    let action
+    let callback
+    const event = {
+      registerInteraction(id, cb) { callback = cb; return id },
+      update(chunk) { action = chunk.content },
+    }
+
+    const approvalPromise = myFunc.requestUserApproval(event, '请确认命令', {
+      command: 'okx list --limit 100 --cursor dynamic-token',
+      rememberable: true,
+    })
+    assert.equal(action.meta.command, 'okx list')
+    assert.equal(action.meta.commandPreview, 'okx list')
+    assert.equal(action.meta.commandPrefix1, 'okx')
+    assert.equal(action.meta.commandPrefix2, 'okx list')
+    assert.doesNotMatch(JSON.stringify(action.meta), /dynamic-token/)
+    callback({ approved: true, rememberType: 'prefix2' })
+    const result = await approvalPromise
+    assert.equal(result.rememberType, 'prefix2')
+  })
+
+  await t.test('should expose the complete non-rememberable command to approval UI', async () => {
+    let action
+    let callback
+    const event = {
+      registerInteraction(id, cb) { callback = cb; return id },
+      update(chunk) { action = chunk.content },
+    }
+
+    const approvalPromise = myFunc.requestUserApproval(event, '请确认危险命令', {
+      command: 'okx list\nrm -rf /tmp/important',
+      rememberable: false,
+    })
+    assert.equal(action.meta.command, 'okx list\nrm -rf /tmp/important')
+    assert.equal(action.meta.commandPreview, 'okx list\nrm -rf /tmp/important')
+    assert.equal(action.meta.commandPrefix1, undefined)
+    callback({ approved: true })
+    assert.equal((await approvalPromise).approved, true)
+  })
 })
 
 test('LLMMessageEvent - update caching rules', async (_t) => {
