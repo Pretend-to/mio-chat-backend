@@ -622,7 +622,10 @@ export function createBackendLlm(opts = {}) {
                   if (meta.target) details.push(`🎯 记忆目标：${meta.target}`)
                 } else if (meta.command) {
                   title = meta.highRisk ? '⚠️ 高危 Shell 命令授权' : '💻 Shell 命令授权'
-                  details.push(`💻 待执行命令：\`${meta.command}\``)
+                  const commandPreview = meta.commandPreview || meta.command
+                  details.push(meta.rememberable === false
+                    ? `💻 待执行命令：\n${commandPreview}`
+                    : `💻 待执行命令：\`${commandPreview}\``)
                   if (meta.cwd) details.push(`📂 工作目录：${meta.cwd}`)
                 } else if (meta.params) {
                   title = '⚙️ 系统配置修改审批'
@@ -639,8 +642,12 @@ export function createBackendLlm(opts = {}) {
 
                 const res = await reqFn.call(ctx.channel, {
                   contextToken: ctx.contextToken,
+                  command: meta.command,
+                  commandPrefix1: meta.commandPrefix1,
+                  commandPrefix2: meta.commandPrefix2,
                   description,
                   from: ctx.from,
+                  rememberable: meta.rememberable === true,
                   title,
                 }, ctx)
                 event.emitInteraction(interactionId, typeof res === 'object' ? res : { approved: Boolean(res) })
@@ -699,6 +706,7 @@ export function createBackendLlm(opts = {}) {
               currentReasoningStartTime = null
             }
 
+            const isChannelApproval = !ctx.isWeb && data.type === 'action' && data.content?.actionType === 'REQUEST_APPROVAL'
             const dataWithMeta = {
               ...finalData,
               metaData: {
@@ -706,17 +714,23 @@ export function createBackendLlm(opts = {}) {
                 isTask: Boolean(ctx.isTask),
                 messageId: ctx.messageId,
                 triggerType: ctx.isTask ? 'task' : 'chat',
-                ...(data.metaData || {}),
+                ...(data.metaData),
               },
             }
 
-            // 1. 并发写入 streamCache，支撑离线回放
-            try {
-              streamCache.push('admin', resolvedContactorId, ctx.messageId, finalData, dataWithMeta.metaData)
-            } catch {}
+            // 渠道侧的审批卡片只能由渠道文本确认，不能写入/广播为 Web 可交互 action，
+            // 否则 Web 会出现看得见但找不到 activeEvent 的“幽灵”确认框。
+            if (!isChannelApproval) {
+              // 1. 并发写入 streamCache，支撑离线回放
+              try {
+                streamCache.push('admin', resolvedContactorId, ctx.messageId, finalData, dataWithMeta.metaData)
+              } catch {}
+            }
 
             // 2. 若存在在线 Web 客户端，实时推送镜像流
-            const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
+            const targetWebClients = isChannelApproval
+              ? []
+              : ((ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || []))
             if (targetWebClients.length > 0) {
               for (const client of targetWebClients) {
                 client.sendOpenaiMessage('update', dataWithMeta, ctx.messageId)
@@ -924,4 +938,3 @@ export function createBackendLlm(opts = {}) {
 }
 
 export default { createBackendLlm, createEchoLlm }
-

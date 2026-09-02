@@ -179,3 +179,45 @@ test('集成测试 2：高危操作/全局记忆审批挂起与微信端【确�
     fs.rmSync(baseDir, { force: true, recursive: true })
   }
 })
+
+test('集成测试 3：不可记住的 Shell 审批在渠道端展示完整命令 payload', async () => {
+  const baseDir = path.join(os.tmpdir(), `mio-approval-command-test-${Date.now()}_${Math.random().toString(36).slice(2, 7)}`)
+  const memory = new MemoryStore({ agentId: 'ch_approval_300', baseDir })
+  const client = createMockClient()
+  const chn = new WechatChannel({
+    channelId: 'ch_approval_300',
+    client,
+    id: 'ch_approval_300',
+    llm: { process: async () => ({ text: 'ok' }) },
+    masterId: MASTER,
+    memory,
+    typing: false,
+  })
+
+  try {
+    const command = 'okx list\nrm -rf /tmp/important'
+    const pending = chn.requestConfirmation({
+      command,
+      description: `请确认\n${command}`,
+      rememberable: false,
+      title: '高危 Shell 命令授权',
+    }, { from: MASTER, contextToken: 'CTX_COMMAND' })
+
+    await new Promise(resolve => setTimeout(resolve, 20))
+    const cardText = client.sent[0].item_list[0].text
+    assert.ok(cardText.includes('rm -rf /tmp/important'))
+    assert.ok(cardText.includes('回复【确认】'))
+    assert.doesNotMatch(cardText, /执行并记住/)
+
+    await chn.handleIncomingMessage({
+      context_token: 'CTX_COMMAND_REPLY',
+      from_user_id: MASTER,
+      item_list: [{ text: '确认', type: 1 }],
+      message_id: 103,
+      message_type: 1,
+    })
+    assert.equal((await pending).approved, true)
+  } finally {
+    fs.rmSync(baseDir, { force: true, recursive: true })
+  }
+})
