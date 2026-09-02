@@ -526,10 +526,21 @@ export function createBackendLlm(opts = {}) {
       let latestCrystal = null
       let currentReasoningStartTime = null
       const abortCallbacks = []
+      let sessionYolo = false
+      try {
+        sessionYolo = ctx.channel?.isSessionYoloEnabled
+          ? await ctx.channel.isSessionYoloEnabled(ctx.sessionId)
+          : false
+      } catch {
+        // A metadata read failure must not break an otherwise valid chat; the
+        // shell hook independently fails closed when it cannot read YOLO.
+        sessionYolo = false
+      }
       const event = {
         body: {
           channel: ctx.channel?.channelType || 'channel',
           messages,
+          sessionId: ctx.sessionId || null,
           settings: {
             base: {
               model: targetModel,
@@ -541,12 +552,14 @@ export function createBackendLlm(opts = {}) {
             pending_memory_events: ctx.pendingMemories || [],
             previous_summary: ctx.crystal || '',
             provider: targetProvider,
+            yolo: sessionYolo,
             toolCallSettings: {
               mode: 'AUTO',
               tools: finalTools,
             },
           },
         },
+        sessionId: ctx.sessionId || null,
         channel: ctx.channel || {
           agentId: ctx.agentId || 'channel-master',
           memory: ctx.memory,

@@ -6,6 +6,8 @@
  *   - /abort /crush /stop /cancel /interrupt /cut /break 任务中止与强插开启新对话
  *   - /tools 工具查看、开启、禁用、重置
  *   - /think /reasoning 思考推理强度调节
+ *   - /yolo Shell 审批跳过开关（按当前会话）
+ *   - /status 当前会话与执行状态
  *   - /model 模型查看、列表检索、实时切换、重置
  *   - /sessions /ls 历史话题查看
  *   - /new 新建并切换会话
@@ -19,6 +21,7 @@
  */
 import { getRegisteredSystemToolNames } from '../llm.js'
 import { getTriggerService } from '../../lib/triggers/index.js'
+import { getSessionYolo, setSessionYolo } from '../../lib/chat/sessionExecutionState.js'
 
 export class SlashHandler {
   /**
@@ -49,6 +52,8 @@ export class SlashHandler {
             '  • /model [ls/名称/reset] 查看或切换模型',
             '  • /think [0-4/off/low/med/high/max] 调整思考推理强度',
             '  • /tools [ls/on/off/reset] 查看与开启/禁用工具',
+            '  • /yolo [on/off] 当前会话跳过 Shell 审批（谨慎使用）',
+            '  • /status 查看当前会话与执行状态',
             '',
             '【会话与话题管理】',
             '  • /sessions 列出所有会话',
@@ -277,6 +282,53 @@ export class SlashHandler {
         }
 
         return wrap(`未知档位 "${arg}"，有效档位: 0(off), 1(low), 2(medium), 3(high), 4(max)`)
+      }
+
+      case 'yolo': {
+        const sid = await active()
+        if (!sid) return wrap('当前无激活会话，无法设置会话级 YOLO。请先使用 /new 创建会话。')
+
+        const normalized = arg.toLowerCase()
+        if (!arg || normalized === 'status' || normalized === 'ls') {
+          const enabled = this.channel?.isSessionYoloEnabled
+            ? await this.channel.isSessionYoloEnabled(sid)
+            : await getSessionYolo(this.memory, sid)
+          return wrap(`当前会话 YOLO 模式：${enabled ? '已开启 ⚠️' : '已关闭 ✅'}\n设置用法：/yolo on 或 /yolo off`)
+        }
+        if (normalized !== 'on' && normalized !== 'off') {
+          return wrap('用法：/yolo on|off（仅影响当前会话的所有 Shell 执行入口）')
+        }
+
+        const enabled = normalized === 'on'
+        if (this.channel?.setSessionYolo) await this.channel.setSessionYolo(sid, enabled)
+        else await setSessionYolo(this.memory, sid, enabled)
+        return wrap(`当前会话 YOLO 模式已${enabled ? '开启 ⚠️（Shell 执行将跳过审批）' : '关闭 ✅（Shell 执行恢复审批策略）'}`)
+      }
+
+      case 'status': {
+        const sid = await active()
+        const session = sid ? await this.memory.getSession(sid) : null
+        const yolo = sid
+          ? (this.channel?.isSessionYoloEnabled
+              ? await this.channel.isSessionYoloEnabled(sid)
+              : await getSessionYolo(this.memory, sid))
+          : false
+        const tools = (await this.memory.getAgentMeta('tools', null)) || getRegisteredSystemToolNames()
+        const effort = await this.memory.getAgentMeta('reasoning_effort', 0)
+        const provider = this.channel?.provider || '默认'
+        const model = this.channel?.model || '默认'
+        const activeJobs = this.channel?.activeJobs?.size || 0
+        const pendingApprovals = this.channel?.pendingConfirmations?.size || 0
+        return wrap([
+          '【当前状态】',
+          `会话: ${sid || '无'}${session?.title ? `「${session.title}」` : ''}`,
+          `YOLO: ${yolo ? '开启 ⚠️' : '关闭 ✅'}`,
+          `模型: ${provider}/${model}`,
+          `思考强度: ${effort}`,
+          `工具: ${Array.isArray(tools) ? tools.length : 0} 个`,
+          `运行中任务: ${activeJobs} 个`,
+          `待确认操作: ${pendingApprovals} 个`,
+        ].join('\n'))
       }
 
       case 'model': {

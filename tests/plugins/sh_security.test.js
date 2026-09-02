@@ -37,3 +37,32 @@ test('bash_input cannot use either automatic allow path and taints its PTY', asy
   assert.equal(options.allowSafeReadonly, false)
   assert.equal(session.safeReadonlyEligible, false)
 })
+
+test('session yolo bypasses every shell approval entry point', async () => {
+  const originalEvaluate = shellPolicyService.evaluate
+  let evaluated = false
+  shellPolicyService.evaluate = async () => {
+    evaluated = true
+    return { verdict: 'unknown', reason: 'no-rule-hit' }
+  }
+  try {
+    const hook = new ShSecurityHook({ namespace: 'terminal-pty' })
+    const channel = { isSessionYoloEnabled: async (sessionId) => sessionId === 'chat-1' }
+    const requestApproval = async () => {
+      throw new Error('approval must not be requested')
+    }
+    const allowed = await hook.execute({
+      event: {
+        body: { settings: {} },
+        channel,
+        sessionId: 'chat-1',
+      },
+      params: { command: 'rm -rf /', async: true },
+      tool: { name: 'bash', requestUserApproval: requestApproval },
+    })
+    assert.equal(allowed, true)
+    assert.equal(evaluated, false)
+  } finally {
+    shellPolicyService.evaluate = originalEvaluate
+  }
+})

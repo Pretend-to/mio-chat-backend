@@ -69,6 +69,38 @@ describe('Channel Session History & Slash Commands Test', () => {
     assert.strictEqual(store.get('tools').includes('bash'), true)
   })
 
+  test('should toggle session-scoped yolo and report status', async () => {
+    const store = new Map()
+    const mockMemory = {
+      getActiveSession: async () => 's_test',
+      getAgentMeta: async (k, def) => store.get(k) ?? def,
+      setAgentMeta: async (k, v) => store.set(k, v),
+      getSession: async () => ({ id: 's_test', title: '开发', chat: [] }),
+    }
+    const channel = {
+      activeJobs: new Map([['job-1', {}]]),
+      model: 'test-model',
+      pendingConfirmations: new Map(),
+      provider: 'test-provider',
+    }
+    const handler = new SlashCommandHandler({ channel, memory: mockMemory })
+
+    const before = await handler.handle('/yolo')
+    assert.match(before.text, /YOLO 模式：已关闭/)
+
+    const enabled = await handler.handle('/yolo on')
+    assert.match(enabled.text, /已开启/)
+    assert.deepStrictEqual(store.get('session_yolo'), { s_test: true })
+
+    const status = await handler.handle('/status')
+    assert.match(status.text, /会话: s_test/)
+    assert.match(status.text, /YOLO: 开启/)
+    assert.match(status.text, /运行中任务: 1 个/)
+
+    await handler.handle('/yolo off')
+    assert.deepStrictEqual(store.get('session_yolo'), {})
+  })
+
   test('should auto-merge text segments when contextToken quota is running low in WechatChannel', async () => {
     const { WechatChannel } = await import('../../channels/wechat/WechatChannel.js')
     const channel = new WechatChannel({

@@ -14,6 +14,7 @@ import { SlashHandler } from './SlashHandler.js'
 import { ConfirmationManager } from './ConfirmationManager.js'
 import { KeepAliveManager } from './KeepAliveManager.js'
 import { MediaResolver } from './MediaResolver.js'
+import { getSessionYolo, setSessionYolo } from '../../lib/chat/sessionExecutionState.js'
 import sessions from '../../lib/server/socket.io/services/sessions.js'
 
 export class BaseChannel {
@@ -65,6 +66,7 @@ export class BaseChannel {
     this.onActivity = onActivity
     this.activeJobs = new Map() // sessionId -> { startTime, text, currentTool, toolCount, lastProgressText }
     this._sessionQueues = new Map() // sessionId -> Promise chain (FIFO 互斥队列)
+    this._sessionYolo = new Map()
 
     this.running = false
     this._abort = null
@@ -174,6 +176,25 @@ export class BaseChannel {
       this._abort.abort()
       this._abort = null
     }
+  }
+
+  /**
+   * Session-scoped shell approval override used by /yolo. The persisted map
+   * keeps the setting stable across channel restarts while the local cache
+   * avoids another metadata read for every shell tool call.
+   */
+  async isSessionYoloEnabled(sessionId) {
+    if (!sessionId) return false
+    if (this._sessionYolo.has(sessionId)) return this._sessionYolo.get(sessionId)
+    const enabled = await getSessionYolo(this.memory, sessionId)
+    this._sessionYolo.set(sessionId, enabled)
+    return enabled
+  }
+
+  async setSessionYolo(sessionId, enabled) {
+    const value = await setSessionYolo(this.memory, sessionId, enabled)
+    this._sessionYolo.set(sessionId, value)
+    return value
   }
 
   // ===============================================================
