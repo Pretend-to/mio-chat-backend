@@ -81,6 +81,19 @@ test('DatabaseMemoryStore preserves the MemoryStore contract and archive semanti
     memory.appendToChat(session.id, user('two', 4000)),
     memory.appendToChat(session.id, assistant('two answer', 5000)),
   ])
+  const canonicalRow = await prisma.message.findFirst({ orderBy: { seq: 'asc' }, where: { sessionId: session.id } })
+  await prisma.message.update({
+    data: {
+      legacyJson: JSON.stringify({
+        content: [{ data: { text: 'stale legacy' }, type: 'text' }],
+        role: 'assistant',
+        text: 'stale legacy',
+      }),
+    },
+    where: { id: canonicalRow.id },
+  })
+  assert.equal((await memory.getChat(session.id))[0].text, 'one')
+
   await memory.setCrystal(session.id, '<memory_crystal>db</memory_crystal>')
   await memory.appendPendingMemory(session.id, { kind: 'fact' })
 
@@ -180,10 +193,12 @@ test('BaseChannel persists user and assistant placeholder before invoking the LL
   await memory.createSession({ id: 'session-channel' })
 
   const observed = []
+  const observedMessageTimes = []
   const channel = new BaseChannel({
     client: { botId: 'bot' },
     llm: {
       process: async context => {
+        observedMessageTimes.push(context.messageTime)
         const rows = await prisma.message.findMany({ orderBy: { seq: 'asc' } })
         observed.push(rows.map(row => `${row.role}:${row.status}`))
         await context.onEmitTextBlock('semantic answer')
@@ -202,12 +217,17 @@ test('BaseChannel persists user and assistant placeholder before invoking the LL
     from: 'user-db',
     isWeb: true,
     messageId: 'assistant-db',
+    messageTime: 123_456,
     sid: 'session-channel',
   })
 
   assert.deepEqual(observed, [['user:final', 'assistant:streaming']])
+  assert.deepEqual(observedMessageTimes, [123_456])
   const rows = await prisma.message.findMany({ orderBy: { seq: 'asc' } })
   assert.deepEqual(rows.map(row => `${row.role}:${row.status}`), ['user:final', 'assistant:final'])
+  assert.equal(rows[0].businessTime.getTime(), 123_456)
+  assert.equal(rows[0].legacyJson, null)
+  assert.equal(rows[1].legacyJson, null)
   assert.equal(await prisma.messageChunk.count({ where: { messageId: 'assistant-db' } }), 1)
 })
 

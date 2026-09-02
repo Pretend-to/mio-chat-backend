@@ -1,9 +1,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { ensureMessageTime } from '../../lib/chat/messageTimestamp.js'
 
 /**
- * MemoryStore — 渠道无关记忆落盘层
+ * MemoryStore — 渠道无关的 legacy 文件落盘层
+ *
+ * 仅供显式 legacy/shadow 诊断、回滚和一次性迁移使用；生产运行时由
+ * DatabaseMemoryStore 提供规范消息读写，不在这里做旧消息格式适配。
  *
  * 定位：扮演「无前端 store 的渠道（微信等）」的客户端持久化端。
  *   - soul.md            人格/灵魂（用户可定制，markdown）
@@ -217,9 +221,7 @@ export class MemoryStore {
   async appendToChat(id, msg) {
     const session = (await this.getSession(id)) || (await this.createSession({ id }))
     session.chat = session.chat || []
-    if (!msg.time) {
-      msg.time = Date.now()
-    }
+    msg.time = ensureMessageTime(msg.time)
     session.chat.push(msg)
     await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
     return session

@@ -265,6 +265,12 @@ Channel 与 Session 兼容层仍保留四种显式诊断模式：
 使用的 HTTP/Socket 管理接口和 Channel 工具也必须经过同一个存储工厂，不能绕过
 开关直接实例化 `MemoryStore`。
 
+运行时消息契约只使用 `messages.content`、`messages.text`、`messages.business_time`
+等规范列。`messages.legacy_json` / `messages.legacy_source` 只属于一次性迁移导入的
+复验审计记录：数据库运行时不会读取或写入它们，LLM 历史和 Channel 历史也不再接受
+旧的 `{ role, text }` 消息形态。待所有实例完成迁移并确认备份可回收后，再单独安排
+删除这些审计列及迁移器。
+
 正常升级不需要单独执行迁移命令。应用重启时，init 会在 Channel、Trigger 和 HTTP
 服务启动前盘点旧数据，为当前迁移版本创建一次本地快照，生成或读取实例加密密钥，
 完成导入并复验，然后直接切到 `database` 单线运行。无旧数据的新实例也会写入同一

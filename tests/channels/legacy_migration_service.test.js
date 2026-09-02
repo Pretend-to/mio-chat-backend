@@ -144,7 +144,7 @@ test('LegacyMigrationService imports and verifies a complete legacy instance ide
   const messages = await prisma.message.findMany({ orderBy: { seq: 'asc' } })
   assert.deepEqual(messages.map(message => message.seq), [0, 1, 2, 3])
   assert.equal(messages[0].businessTime, null)
-  assert.equal(messages[0].content, 'null')
+  assert.equal(messages[0].content, JSON.stringify([{ data: { text: 'missing time and content' }, type: 'text' }]))
   assert.ok(messages[0].archivedAt instanceof Date)
   assert.equal(messages[2].archivedAt, null)
 

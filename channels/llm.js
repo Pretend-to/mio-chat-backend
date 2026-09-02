@@ -10,6 +10,7 @@
  */
 
 import skillService from '../lib/chat/llm/services/SkillService.js'
+import { wrapUserMessageWithTimestamp } from '../lib/chat/messageTimestamp.js'
 import sessions from '../lib/server/socket.io/services/sessions.js'
 import streamCache from '../lib/server/socket.io/services/streamCache.js'
 
@@ -102,7 +103,7 @@ function parseMultimodalContent(text) {
 /**
  * 渠道历史消息 (ctx.chat) 精密转换为大模型标准 messages 数组（支持 Tool Calls, Reasoning, Tool Results）
  */
-function convertChatHistoryToLLMMessages(chatHistory) {
+export function convertChatHistoryToLLMMessages(chatHistory) {
   const msgs = []
   if (!Array.isArray(chatHistory)) return msgs
 
@@ -118,7 +119,8 @@ function convertChatHistoryToLLMMessages(chatHistory) {
         }
       } else if (item.role === 'user') {
         const textContent = item.content.filter(c => c.type === 'text').map(c => c.data?.text || '').join('')
-        msgs.push({ content: parseMultimodalContent(textContent || item.text || ''), role: 'user' })
+        const timestampedText = wrapUserMessageWithTimestamp(textContent, item.time)
+        msgs.push({ content: parseMultimodalContent(timestampedText), role: 'user' })
       } else if (item.role === 'assistant' || item.role === 'other') {
         let currentAssistant = null
         let pendingReasoning = ''
@@ -198,13 +200,6 @@ function convertChatHistoryToLLMMessages(chatHistory) {
     } else if (item.tool_calls || item.role === 'tool') {
       // 2. 如果本身已经是标准的 OpenAI 格式消息节点
       msgs.push(item)
-    } else if (item.text || item.content) {
-      // 3. 兜底降级：老的简单 { role, text } 格式
-      const textContent = typeof item.content === 'string' ? item.content : (item.text || '')
-      if (textContent) {
-        const role = item.role === 'assistant' ? 'assistant' : (item.role === 'system' ? 'system' : 'user')
-        msgs.push({ content: parseMultimodalContent(textContent), role })
-      }
     }
   }
   return msgs
@@ -422,14 +417,15 @@ export function createBackendLlm(opts = {}) {
         messages.push(...convertedLLMMessages)
       }
 
-      // 3. 当前最新用户输入 (纯净原始输入，保障多轮历史与当前输入 100% 幂等稳定)
+      // 3. 当前最新用户输入（只在 LLM 请求层注入时间，持久化原文保持幂等）
       let textContent = ctx.text || ''
       const imageList = Array.isArray(ctx.images) ? [...ctx.images] : []
 
-      // 提取文本中可能已包含的 Markdown 图片链接
-      const parsed = parseMultimodalContent(textContent)
-      if (Array.isArray(parsed)) {
-        for (const p of parsed) {
+      // 提取文本中可能已包含的 Markdown 图片链接（包装时间前解析，避免
+      // XML 标签影响图片识别）。
+      const parsedInput = parseMultimodalContent(textContent)
+      if (Array.isArray(parsedInput)) {
+        for (const p of parsedInput) {
           if (p.type === 'image_url') {
             const url = p.image_url?.url || p.image_url
             if (url && !imageList.includes(url)) {
@@ -446,6 +442,11 @@ export function createBackendLlm(opts = {}) {
           textContent = (textContent ? textContent + imagePrompt : imagePrompt).trim()
         }
       }
+
+      // 与历史 user 消息使用同一套稳定时间格式。这里只包装当前轮，
+      // 原始 ctx.text 和 session.chat 均保持不变；图片提示也纳入同一轮。
+      textContent = wrapUserMessageWithTimestamp(textContent, ctx.messageTime)
+      const parsed = parseMultimodalContent(textContent)
 
       let latestContent
       if (imageList.length > 0) {

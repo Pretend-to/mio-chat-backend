@@ -15,6 +15,7 @@ import { ConfirmationManager } from './ConfirmationManager.js'
 import { KeepAliveManager } from './KeepAliveManager.js'
 import { MediaResolver } from './MediaResolver.js'
 import { getSessionYolo, setSessionYolo } from '../../lib/chat/sessionExecutionState.js'
+import { ensureMessageTime } from '../../lib/chat/messageTimestamp.js'
 import sessions from '../../lib/server/socket.io/services/sessions.js'
 
 export class BaseChannel {
@@ -227,6 +228,10 @@ export class BaseChannel {
 
   /** 统一消息路由入口：拦截确认 -> Slash 指令 -> 任务忙临时插话 -> 正式对话处理 */
   async _route(text, ctx) {
+    // 在进入确认、Slash 或 session FIFO 之前固定消息时间，确保排队期间
+    // 不会因为处理延迟而改变本轮输入在缓存与历史中的时间锚点。
+    ctx.messageTime = ensureMessageTime(ctx.messageTime)
+
     if (ctx?.contextToken) {
       this.latestContextToken = ctx.contextToken
       if (this.memory) {
@@ -319,11 +324,13 @@ export class BaseChannel {
       triggerId: options.triggerId || null,
       ...options,
     }
+    ctx.messageTime = ensureMessageTime(ctx.messageTime)
     return this._enqueueSession(targetSid, () => this._processChat(text.trim(), ctx))
   }
 
   /** 处理任务执行中途的用户即时插话 */
   async _handleTransientFollowup(text, activeJob, ctx) {
+    ctx.messageTime = ensureMessageTime(ctx.messageTime)
     const elapsedSec = Math.floor((Date.now() - activeJob.startTime) / 1000)
     const promptStatus = [
       `【系统上下文 - 即时任务状态】`,
@@ -353,6 +360,7 @@ export class BaseChannel {
         guidance: false,
         memory: this.memory,
         model: this.model,
+        messageTime: ctx.messageTime,
         onEmitTextBlock: async (msgContent) => {
           if (msgContent?.trim()) {
             await this._safeSend(ctx.from, ctx.contextToken || this.latestContextToken, msgContent.trim())
@@ -376,6 +384,10 @@ export class BaseChannel {
   // 核心对话处理、多模态流式流水线与持久化落盘
   // ===============================================================
   async _processChat(text, ctx) {
+    // 消息时间由公共管线统一生成，与具体渠道协议解耦。后续的 Web 镜像、
+    // session 持久化和 LLM 请求必须复用同一个值，保证跨轮次输入稳定。
+    ctx.messageTime = ensureMessageTime(ctx.messageTime)
+
     if (this.onActivity) {
       this.onActivity()
     }
@@ -426,7 +438,7 @@ export class BaseChannel {
                 id: userMsgId,
                 role: 'user',
                 text,
-                time: Date.now(),
+                time: ctx.messageTime,
               },
             },
             protocol: 'channel',
@@ -460,7 +472,7 @@ export class BaseChannel {
         from_user_id: ctx.from,
         role: 'user',
         text: finalUserText,
-        time: ctx.time || ctx.rawMsg?.time || Date.now(),
+        time: ctx.messageTime,
       })
       userPersistedBeforeLlm = true
       assistantPersistenceId = await this.memory.beginAssistantMessage(sid, {
@@ -698,6 +710,7 @@ export class BaseChannel {
         images: ctx.rawMsg?.images || ctx.images || null,
         isWeb: ctx.isWeb,
         memory: this.memory,
+        messageTime: ctx.messageTime,
         messageId: ctx.messageId,
         model: this.model,
         onEmitTextBlock,
@@ -740,7 +753,7 @@ export class BaseChannel {
           from_user_id: ctx.from,
           role: 'user',
           text: finalUserText,
-          time: ctx.time || ctx.rawMsg?.time || now,
+          time: ctx.messageTime || now,
         }
         if (!userPersistedBeforeLlm) await this.memory.appendToChat(sid, userMsg)
 
