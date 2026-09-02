@@ -68,6 +68,9 @@
     "puppeteer-core": "^25.3.0",
     "silk-wasm": "^3.7.1",
     "socket.io": "^4.8.3",
+    "tree-sitter": "^0.25.1",
+    "tree-sitter-bash": "^0.25.1",
+    "tree-sitter-powershell": "^0.26.4",
     "vhtml": "^2.2.0",
     "web-push": "^3.6.7",
     "ws": "^8.21.1"

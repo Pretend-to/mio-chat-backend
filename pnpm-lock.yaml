@@ -21,7 +21,7 @@ overrides:
   dompurify: '>=3.4.13'
   mermaid: '>=11.16.1'
   valibot: '>=1.4.2'
-  js-yaml: '>=4.3.1'
+  js-yaml: '>=4.3.1 <5'
   socket.io-parser: '>=4.2.7'
   file-type: '>=21.3.1'
   body-parser: '>=2.3.0'
@@ -91,8 +91,8 @@ importers:
         specifier: ^3.1.1
         version: 3.1.1
       js-yaml:
-        specifier: '>=4.3.1'
-        version: 5.2.2
+        specifier: '>=4.3.1 <5'
+        version: 4.3.2
       multer:
         specifier: ^2.2.0
         version: 2.2.0
@@ -123,6 +123,15 @@ importers:
       socket.io:
         specifier: ^4.8.3
         version: 4.8.3
+      tree-sitter:
+        specifier: ^0.25.1
+        version: 0.25.1
+      tree-sitter-bash:
+        specifier: ^0.25.1
+        version: 0.25.1(tree-sitter@0.25.1)
+      tree-sitter-powershell:
+        specifier: ^0.26.4
+        version: 0.26.4(tree-sitter@0.25.1)
       vhtml:
         specifier: ^2.2.0
         version: 2.2.0
@@ -3264,8 +3273,8 @@ packages:
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
-  js-yaml@5.2.2:
-    resolution: {integrity: sha512-dayzUzKkJ1MkuUtZglSebU43utNXH0OWQByK9rKOOuYIO8M5TV1y+n8ALMdG0rdzBnfNkOmZEqrURepb0ejqBw==}
+  js-yaml@4.3.2:
+    resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
     hasBin: true
 
   jsep@1.4.0:
@@ -3794,6 +3803,10 @@ packages:
   node-addon-api@7.1.1:
     resolution: {integrity: sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ==}
 
+  node-addon-api@8.9.2:
+    resolution: {integrity: sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==}
+    engines: {node: ^18 || ^20 || >= 21}
+
   node-cron@3.0.3:
     resolution: {integrity: sha512-dOal67//nohNgYWb+nWmg5dkFdIwDm8EpeGYMekPMrngV3637lqnX0lbUcCtgibHTz6SEz7DAIjKvKDFYCnO1A==}
     engines: {node: '>=6.0.0'}
@@ -3822,6 +3835,10 @@ packages:
   node-fetch@3.3.2:
     resolution: {integrity: sha512-dRB78srN/l6gqWulah9SrxeYnxeddIG30+GOqK/9OlLVyLg3HPnr6SqOWTWOXKRwC2eGYCkZ59NNuSgvSrpgOA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
+  node-gyp-build@4.8.4:
+    resolution: {integrity: sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ==}
+    hasBin: true
 
   node-pty@1.1.0:
     resolution: {integrity: sha512-20JqtutY6JPXTUnL0ij1uad7Qe1baT46lyolh2sSENDd4sTzKZ4nmAFkeAARDKwmlLjPx6XKRlwRUxwjOy+lUg==}
@@ -4801,6 +4818,25 @@ packages:
   tr46@0.0.3:
     resolution: {integrity: sha512-N3WMsuqV66lT30CrXNbEjx4GEwlow3v6rr4mCcv6prnfwhS01rkgyFdjPNBYd9br7LpXV1+Emh01fHnq2Gdgrw==}
 
+  tree-sitter-bash@0.25.1:
+    resolution: {integrity: sha512-7hMytuYIMoXOq24yRulgIxthE9YmggZIOHCyPTTuJcu6EU54tYD+4G39cUb28kxC6jMf/AbPfWGLQtgPTdh3xw==}
+    peerDependencies:
+      tree-sitter: ^0.25.0
+    peerDependenciesMeta:
+      tree-sitter:
+        optional: true
+
+  tree-sitter-powershell@0.26.4:
+    resolution: {integrity: sha512-5RwNW/qN/cKArZY0znvTOG+OWSau7Agel5K0A8KQ5Nubw/4SyZ5KC02RKCaYcA2ur5UQ8esyxe9+6yXup2MXkw==}
+    peerDependencies:
+      tree-sitter: ^0.25.0
+    peerDependenciesMeta:
+      tree-sitter:
+        optional: true
+
+  tree-sitter@0.25.1:
+    resolution: {integrity: sha512-mrcEdkYtHfrK1A6fs3O6FxkBo0Qig5XUXqHhxUOQu0bmPo00QF4XaSx4edpazdHwxnSCjlGKGgIqWdaN4dvTLA==}
+
   trim-lines@3.0.1:
     resolution: {integrity: sha512-kRj8B+YHZCc9kQYdWfJB2/oUl9rA99qbowYYBtr4ui4mZyAQ2JpvVBd/6U2YloATfqBhBTSMhTpgBHtU0Mf3Rg==}
 
@@ -5216,7 +5252,7 @@ snapshots:
   '@apidevtools/json-schema-ref-parser@14.2.1(@types/json-schema@7.0.15)':
     dependencies:
       '@types/json-schema': 7.0.15
-      js-yaml: 5.2.2
+      js-yaml: 4.3.2
 
   '@aws-sdk/checksums@3.1000.20':
     dependencies:
@@ -6725,7 +6761,7 @@ snapshots:
   '@readme/postman-to-openapi@4.1.0':
     dependencies:
       '@readme/http-status-codes': 7.2.0
-      js-yaml: 5.2.2
+      js-yaml: 4.3.2
       jsonc-parser: 3.2.0
       lodash.camelcase: 4.3.0
       marked: 4.3.0
@@ -7318,7 +7354,7 @@ snapshots:
       execa: 8.0.1
       figures: 6.1.0
       httpsnippet-client-api: 7.0.1(@readme/httpsnippet@11.3.2)
-      js-yaml: 5.2.2
+      js-yaml: 4.3.2
       json-schema-traverse: 1.0.0
       license: 1.0.3
       lodash-es: 4.18.1
@@ -8769,7 +8805,7 @@ snapshots:
 
   js-tokens@4.0.0: {}
 
-  js-yaml@5.2.2:
+  js-yaml@4.3.2:
     dependencies:
       argparse: 2.0.1
 
@@ -8899,7 +8935,7 @@ snapshots:
   load-yaml-file@0.2.0:
     dependencies:
       graceful-fs: 4.2.11
-      js-yaml: 5.2.2
+      js-yaml: 4.3.2
       pify: 4.0.1
       strip-bom: 3.0.0
 
@@ -9583,6 +9619,8 @@ snapshots:
 
   node-addon-api@7.1.1: {}
 
+  node-addon-api@8.9.2: {}
+
   node-cron@3.0.3:
     dependencies:
       uuid: 13.0.2
@@ -9604,6 +9642,8 @@ snapshots:
       data-uri-to-buffer: 4.0.1
       fetch-blob: 3.2.0
       formdata-polyfill: 4.0.10
+
+  node-gyp-build@4.8.4: {}
 
   node-pty@1.1.0:
     dependencies:
@@ -9638,7 +9678,7 @@ snapshots:
     dependencies:
       '@readme/openapi-parser': 6.3.0(openapi-types@12.1.3)
       '@readme/postman-to-openapi': 4.1.0
-      js-yaml: 5.2.2
+      js-yaml: 4.3.2
       openapi-types: 12.1.3
       swagger2openapi: 7.0.8
     transitivePeerDependencies:
@@ -10802,6 +10842,25 @@ snapshots:
       ieee754: 1.2.1
 
   tr46@0.0.3: {}
+
+  tree-sitter-bash@0.25.1(tree-sitter@0.25.1):
+    dependencies:
+      node-addon-api: 8.9.2
+      node-gyp-build: 4.8.4
+    optionalDependencies:
+      tree-sitter: 0.25.1
+
+  tree-sitter-powershell@0.26.4(tree-sitter@0.25.1):
+    dependencies:
+      node-addon-api: 8.9.2
+      node-gyp-build: 4.8.4
+    optionalDependencies:
+      tree-sitter: 0.25.1
+
+  tree-sitter@0.25.1:
+    dependencies:
+      node-addon-api: 8.9.2
+      node-gyp-build: 4.8.4
 
   trim-lines@3.0.1: {}
 
