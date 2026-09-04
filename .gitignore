@@ -52,6 +52,11 @@ artifacts/
 /lib/plugins/anyui-plugin/templates/*
 !/lib/plugins/anyui-plugin/templates/global/
 !/lib/plugins/anyui-plugin/templates/global/**
+
+# Email Plugin 模板库 - 仅跟踪内置全局模板 (global)，忽略用户自定义运行时模板
+/plugins/email-plugin/templates/*
+!/plugins/email-plugin/templates/global/
+!/plugins/email-plugin/templates/global/**
 # 运行时数据（含渠道 token / 会话记忆，绝不提交）
 /channels-data/
 /memory/

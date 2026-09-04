@@ -101,11 +101,224 @@ function parseMultimodalContent(text) {
 }
 
 /**
+ * Build the canonical channel user input once and reuse it for both the
+ * current LLM request and session persistence.
+ *
+ * The request-side representation intentionally puts explicit images before
+ * the text part.  Persisted channel messages use the equivalent frontend
+ * image/text nodes, so converting the message back on the next turn produces
+ * the exact same message prefix.  Keeping these two representations in sync
+ * is important for provider-side input/prompt caching.
+ */
+export function prepareChannelUserInput(text = '', images = [], messageTime = null) {
+  const originalText = typeof text === 'string' ? text : String(text ?? '')
+  const imageList = []
+  const addImage = (url) => {
+    if (typeof url === 'string' && url && !imageList.includes(url)) {
+      imageList.push(url)
+    }
+  }
+
+  if (Array.isArray(images)) {
+    images.forEach(addImage)
+  }
+
+  // Markdown images embedded in the text are also explicit multimodal input.
+  // Extract them before adding the stable timestamp envelope, otherwise the
+  // envelope itself can interfere with parsing.
+  const parsedInput = parseMultimodalContent(originalText)
+  if (Array.isArray(parsedInput)) {
+    for (const part of parsedInput) {
+      if (part.type === 'image_url') {
+        addImage(part.image_url?.url || part.image_url)
+      }
+    }
+  }
+
+  let sourceText = originalText
+  if (imageList.length > 0) {
+    const imagePrompt = `\n\n以下是用户所上传的图片链接：\n${imageList.join('\n')}`
+    if (!sourceText.includes('以下是用户所上传的图片链接：') && !sourceText.includes(imageList[0])) {
+      sourceText = (sourceText ? sourceText + imagePrompt : imagePrompt).trim()
+    }
+  }
+
+  const timestampedText = wrapUserMessageWithTimestamp(sourceText, messageTime)
+  const latestContent = imageList.length > 0
+    ? [
+        ...imageList.map(url => ({ image_url: { url }, type: 'image_url' })),
+        { text: timestampedText || '[图片]', type: 'text' },
+      ]
+    : parseMultimodalContent(timestampedText)
+
+  // This is the lossless frontend/session representation of the same input.
+  // Do not put the timestamp envelope or duplicated markdown links in storage;
+  // the next request derives the envelope deterministically from message.time.
+  const persistedContent = imageList.length > 0
+    ? [
+        ...imageList.map(url => ({ data: { file: url }, type: 'image' })),
+        { data: { text: sourceText || '[图片]' }, type: 'text' },
+      ]
+    : [{ data: { text: sourceText }, type: 'text' }]
+
+  return {
+    imageList,
+    latestContent,
+    persistedContent,
+    sourceText,
+  }
+}
+
+/**
+ * Find user messages injected after the current channel input during tool
+ * recursion.  They are not ordinary chat input, but they are part of the
+ * previous recursive context and must survive the frontend-format roundtrip.
+ */
+export function collectRecursiveUserMessages(messages, currentUserMessage) {
+  if (!Array.isArray(messages)) return []
+
+  let currentIndex = messages.indexOf(currentUserMessage)
+  if (currentIndex < 0) return []
+
+  const entries = []
+  let lastToolCallId = null
+  let toolCallOrdinal = -1
+
+  for (let i = currentIndex + 1; i < messages.length; i++) {
+    const message = messages[i]
+    if (!message) continue
+
+    if (message.role === 'assistant' && Array.isArray(message.tool_calls)) {
+      for (const call of message.tool_calls) {
+        lastToolCallId = call?.id || call?.call_id || null
+        toolCallOrdinal++
+      }
+      continue
+    }
+
+    if (message.role === 'user') {
+      entries.push({
+        afterToolCallId: lastToolCallId,
+        afterToolCallOrdinal: toolCallOrdinal,
+        message,
+      })
+    }
+  }
+
+  return entries
+}
+
+/**
+ * Preserve recursive user context inside the single visible assistant
+ * MessageChain node.  `convertChatHistoryToLLMMessages` expands these hidden
+ * markers back into real user messages at the original tool-call boundary.
+ */
+export function appendRecursiveContextMessages(content, entries) {
+  if (!Array.isArray(content) || !Array.isArray(entries) || entries.length === 0) {
+    return Array.isArray(content) ? content : []
+  }
+
+  const byId = new Map()
+  const byOrdinal = new Map()
+  const markerEntries = entries.map((entry) => {
+    const marker = {
+      data: {
+        content: entry.message?.content,
+        role: 'user',
+      },
+      type: 'context_message',
+    }
+    return { entry, marker }
+  })
+  const addMarker = ({ entry, marker }) => {
+    if (entry.afterToolCallId) {
+      const list = byId.get(entry.afterToolCallId) || []
+      list.push(marker)
+      byId.set(entry.afterToolCallId, list)
+    } else {
+      const list = byOrdinal.get(entry.afterToolCallOrdinal) || []
+      list.push(marker)
+      byOrdinal.set(entry.afterToolCallOrdinal, list)
+    }
+  }
+  markerEntries.forEach(addMarker)
+
+  const result = []
+  let toolCallOrdinal = -1
+  const inserted = new Set()
+  for (const node of content) {
+    result.push(node)
+    if (node?.type !== 'tool_call') continue
+
+    toolCallOrdinal++
+    const id = node.data?.id || null
+    const markers = [
+      ...(id ? (byId.get(id) || []) : []),
+      ...(byOrdinal.get(toolCallOrdinal) || []),
+    ]
+    for (const marker of markers) {
+      if (inserted.has(marker)) continue
+      inserted.add(marker)
+      result.push(marker)
+    }
+  }
+
+  // A provider may omit a tool id in its stream.  Keep such context rather
+  // than silently dropping it; ordinal matching above handles the normal
+  // case, while this fallback preserves the complete chain for recovery.
+  for (const { marker } of markerEntries) {
+    if (!inserted.has(marker)) {
+      inserted.add(marker)
+      result.push(marker)
+    }
+  }
+
+  return result
+}
+
+/**
  * 渠道历史消息 (ctx.chat) 精密转换为大模型标准 messages 数组（支持 Tool Calls, Reasoning, Tool Results）
  */
 export function convertChatHistoryToLLMMessages(chatHistory) {
   const msgs = []
   if (!Array.isArray(chatHistory)) return msgs
+
+  const convertStoredUserContent = (content, time) => {
+    if (!Array.isArray(content)) {
+      const textContent = typeof content === 'string' ? content : ''
+      return parseMultimodalContent(wrapUserMessageWithTimestamp(textContent, time))
+    }
+
+    const explicitImages = []
+    let textContent = ''
+    let hasExplicitImage = false
+    for (const part of content) {
+      if (part?.type === 'image') {
+        const url = part.data?.file || part.data?.url || part.url
+        if (url && !explicitImages.some(image => image.image_url?.url === url)) {
+          explicitImages.push({ image_url: { url }, type: 'image_url' })
+        }
+        hasExplicitImage = true
+      } else if (part?.type === 'image_url' || part?.type === 'input_image') {
+        const url = part.image_url?.url || part.image_url || part.image || part.data?.file
+        if (url && !explicitImages.some(image => image.image_url?.url === url)) {
+          explicitImages.push({ image_url: { url }, type: 'image_url' })
+        }
+        hasExplicitImage = true
+      } else if (part?.type === 'text' || part?.type === 'input_text') {
+        textContent += part.data?.text ?? part.text ?? ''
+      }
+    }
+
+    const timestampedText = wrapUserMessageWithTimestamp(textContent, time)
+    if (hasExplicitImage) {
+      return [
+        ...explicitImages,
+        { text: timestampedText || '[图片]', type: 'text' },
+      ]
+    }
+    return parseMultimodalContent(timestampedText)
+  }
 
   for (const item of chatHistory) {
     if (!item) continue
@@ -118,9 +331,7 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
           msgs.push({ content: `[系统通知]: ${textContent.trim()}`, role: 'user' })
         }
       } else if (item.role === 'user') {
-        const textContent = item.content.filter(c => c.type === 'text').map(c => c.data?.text || '').join('')
-        const timestampedText = wrapUserMessageWithTimestamp(textContent, item.time)
-        msgs.push({ content: parseMultimodalContent(timestampedText), role: 'user' })
+        msgs.push({ content: convertStoredUserContent(item.content, item.time), role: 'user' })
       } else if (item.role === 'assistant' || item.role === 'other') {
         let currentAssistant = null
         let pendingReasoning = ''
@@ -181,6 +392,16 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
               name: elm.data.name,
               role: 'tool',
               tool_call_id: callId,
+            })
+          } else if (elm.type === 'context_message') {
+            // A tool may inject a user message into the recursive request
+            // (for example a direct multimodal pass-through).  Flush the
+            // preceding assistant/tool segment first, then restore the user
+            // node exactly at that boundary.
+            flushAssistant()
+            msgs.push({
+              content: convertStoredUserContent(elm.data?.content, null),
+              role: 'user',
             })
           }
         })
@@ -417,54 +638,15 @@ export function createBackendLlm(opts = {}) {
         messages.push(...convertedLLMMessages)
       }
 
-      // 3. 当前最新用户输入（只在 LLM 请求层注入时间，持久化原文保持幂等）
-      let textContent = ctx.text || ''
-      const imageList = Array.isArray(ctx.images) ? [...ctx.images] : []
-
-      // 提取文本中可能已包含的 Markdown 图片链接（包装时间前解析，避免
-      // XML 标签影响图片识别）。
-      const parsedInput = parseMultimodalContent(textContent)
-      if (Array.isArray(parsedInput)) {
-        for (const p of parsedInput) {
-          if (p.type === 'image_url') {
-            const url = p.image_url?.url || p.image_url
-            if (url && !imageList.includes(url)) {
-              imageList.push(url)
-            }
-          }
-        }
-      }
-
-      // 与前端保持一致：在文本中显式注入图片链接提示（方便非视觉模型自主识别并调用 vision 工具）
-      if (imageList.length > 0) {
-        const imagePrompt = `\n\n以下是用户所上传的图片链接：\n${imageList.join('\n')}`
-        if (!textContent.includes('以下是用户所上传的图片链接：') && !textContent.includes(imageList[0])) {
-          textContent = (textContent ? textContent + imagePrompt : imagePrompt).trim()
-        }
-      }
-
-      // 与历史 user 消息使用同一套稳定时间格式。这里只包装当前轮，
-      // 原始 ctx.text 和 session.chat 均保持不变；图片提示也纳入同一轮。
-      textContent = wrapUserMessageWithTimestamp(textContent, ctx.messageTime)
-      const parsed = parseMultimodalContent(textContent)
-
-      let latestContent
-      if (imageList.length > 0) {
-        // 与前端结构一致：先 image_url 对象列表，再 text 对象
-        const parts = imageList.map(url => ({
-          image_url: { url },
-          type: 'image_url'
-        }))
-        parts.push({
-          text: textContent || '[图片]',
-          type: 'text'
-        })
-        latestContent = parts
-      } else {
-        latestContent = parsed
-      }
-
-      messages.push({ content: latestContent, role: 'user' })
+      // 3. 当前最新用户输入。请求态与持久化态必须由同一份 canonical
+      // 结构派生，保证下一轮重建出的历史是上一轮递归上下文的稳定前缀。
+      const preparedInput = prepareChannelUserInput(
+        ctx.text,
+        ctx.images,
+        ctx.messageTime,
+      )
+      const currentUserMessage = { content: preparedInput.latestContent, role: 'user' }
+      messages.push(currentUserMessage)
 
       // 4. 确定使用的 provider 与 model
       const targetProvider = ctx.provider || (typeof svc._getDefaultProvider === 'function' ? svc._getDefaultProvider() : undefined)
@@ -487,6 +669,11 @@ export function createBackendLlm(opts = {}) {
       let currentTextBlock = ''
       let currentBlockType = 'idle'
       let streamError = null
+      // Crystallization is triggered from adapter recursion through a
+      // fire-and-forget update callback.  Serialize its storage side effects
+      // and make completion wait for them, otherwise the next queued Channel
+      // user message can read the old crystal/chat window.
+      let contextPersistenceQueue = Promise.resolve()
 
       /**
        * 将累积的完整文本块原样交给渠道，由渠道适配器（如 WechatChannel.splitTextToSegments）
@@ -758,26 +945,25 @@ export function createBackendLlm(opts = {}) {
               if (summaryXml) {
                 latestCrystal = summaryXml
                 if (ctx.memory && ctx.sessionId) {
-                  ctx.memory.setCrystal(ctx.sessionId, summaryXml).catch(err => {
-                    ctx.channel?.log?.error?.(`[${ctx.channel?.channelType || 'channel'}] 记忆结晶落盘失败:`, err)
-                  })
-                  if (typeof ctx.memory.clearPendingMemories === 'function') {
-                    ctx.memory.clearPendingMemories(ctx.sessionId).catch(() => {})
-                  }
-                  // 上下文压缩闭环：归档 + 裁剪会话历史（仿前端压缩节点索引），仅保留最近 N 轮交互
-                  if (typeof ctx.memory.rotateChat === 'function') {
-                    const keepTurns = Number(event.body?.settings?.crystallization_keep_turns) || 1
-                    try {
+                  contextPersistenceQueue = contextPersistenceQueue.then(async () => {
+                    await ctx.memory.setCrystal(ctx.sessionId, summaryXml)
+                    if (typeof ctx.memory.clearPendingMemories === 'function') {
+                      await ctx.memory.clearPendingMemories(ctx.sessionId)
+                    }
+                    // 上下文压缩闭环：归档 + 裁剪 + 读窗口更新必须在
+                    // 下一条排队 user 进入前完成，否则会读到旧上下文。
+                    if (typeof ctx.memory.rotateChat === 'function') {
+                      const keepTurns = Number(event.body?.settings?.crystallization_keep_turns) || 1
                       const rotateRes = await ctx.memory.rotateChat(ctx.sessionId, keepTurns)
                       if (rotateRes?.rotated) {
                         ctx.channel?.log?.info?.(
                           `[${ctx.channel?.channelType || 'channel'}] 🗜️ 会话历史已归档并裁剪 | 归档: ${rotateRes.archivePath} | 裁剪 ${rotateRes.removedCount} 条, 保留 ${rotateRes.keptCount} 条`
                         )
                       }
-                    } catch (err) {
-                      ctx.channel?.log?.error?.(`[${ctx.channel?.channelType || 'channel'}] 会话历史归档/裁剪失败:`, err)
                     }
-                  }
+                  }).catch(err => {
+                    ctx.channel?.log?.error?.(`[${ctx.channel?.channelType || 'channel'}] 记忆结晶/裁剪落盘失败:`, err)
+                  })
                 }
               }
             }
@@ -892,6 +1078,7 @@ export function createBackendLlm(opts = {}) {
                 }, ctx.messageId)
               }
             }
+            await contextPersistenceQueue
             resolve()
           } catch (e) {
             reject(e)
@@ -945,6 +1132,8 @@ export function createBackendLlm(opts = {}) {
         completed: !event.aborted,
         content: structuredContent,
         crystal: latestCrystal || event.body?.settings?.previous_summary || null,
+        crystalPersisted: Boolean(latestCrystal),
+        recursiveUserMessages: collectRecursiveUserMessages(event.body.messages, currentUserMessage),
         rawMessages: event.body.messages,
       }
     },

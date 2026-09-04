@@ -16,6 +16,7 @@ import { KeepAliveManager } from './KeepAliveManager.js'
 import { MediaResolver } from './MediaResolver.js'
 import { getSessionYolo, setSessionYolo } from '../../lib/chat/sessionExecutionState.js'
 import { ensureMessageTime } from '../../lib/chat/messageTimestamp.js'
+import { appendRecursiveContextMessages, prepareChannelUserInput } from '../llm.js'
 import sessions from '../../lib/server/socket.io/services/sessions.js'
 
 export class BaseChannel {
@@ -455,23 +456,27 @@ export class BaseChannel {
     let assistantPersistenceId = null
     let persistenceQueue = Promise.resolve()
     let userPersistedBeforeLlm = false
+    const preparedUserInput = prepareChannelUserInput(
+      text,
+      ctx.images,
+      ctx.messageTime,
+    )
+    const persistedUserText = Array.isArray(preparedUserInput.imageList) && preparedUserInput.imageList.length > 0
+      ? `${preparedUserInput.sourceText}\n${preparedUserInput.imageList
+        .filter(image => !preparedUserInput.sourceText.includes(`![图片](${image})`))
+        .map(image => `![图片](${image})`)
+        .join('\n')}`.trim()
+      : preparedUserInput.sourceText
 
     if (supportsPersistenceLifecycle) {
-      let finalUserText = text
-      const imageList = ctx.rawMsg?.images || ctx.images || null
-      if (Array.isArray(imageList) && imageList.length > 0) {
-        for (const image of imageList) {
-          if (!finalUserText.includes(`![图片](${image})`)) finalUserText += `\n![图片](${image})`
-        }
-      }
       const persistUser = typeof this.memory.appendUserMessage === 'function'
         ? this.memory.appendUserMessage.bind(this.memory)
         : this.memory.appendToChat.bind(this.memory)
       await persistUser(sid, {
-        content: [{ data: { text: finalUserText }, type: 'text' }],
+        content: preparedUserInput.persistedContent,
         from_user_id: ctx.from,
         role: 'user',
-        text: finalUserText,
+        text: persistedUserText,
         time: ctx.messageTime,
       })
       userPersistedBeforeLlm = true
@@ -737,28 +742,22 @@ export class BaseChannel {
       // 会话持久化落盘（包含完整 Tool Calls、参数、运行结果、思考链以及文本节点）
       if (emittedBlocks.length > 0 || (reply?.content && reply.content.length > 0) || reply?.aborted) {
         const fullAssistantReply = emittedBlocks.join('\n\n')
-        let finalUserText = text
-        const imgList = ctx.rawMsg?.images || ctx.images || null
-        if (Array.isArray(imgList) && imgList.length > 0) {
-          for (const img of imgList) {
-            if (!finalUserText.includes(`![图片](${img})`)) {
-              finalUserText += `\n![图片](${img})`
-            }
-          }
-        }
 
         const now = Date.now()
         const userMsg = {
-          content: [{ data: { text: finalUserText }, type: 'text' }],
+          content: preparedUserInput.persistedContent,
           from_user_id: ctx.from,
           role: 'user',
-          text: finalUserText,
+          text: persistedUserText,
           time: ctx.messageTime || now,
         }
         if (!userPersistedBeforeLlm) await this.memory.appendToChat(sid, userMsg)
 
-        const assistantContent = (Array.isArray(reply?.content) && reply.content.length > 0)
-          ? [...reply.content]
+        const assembledAssistantContent = Array.isArray(reply?.content)
+          ? appendRecursiveContextMessages(reply.content, reply.recursiveUserMessages)
+          : []
+        const assistantContent = (assembledAssistantContent.length > 0)
+          ? [...assembledAssistantContent]
           : [{ data: { text: fullAssistantReply || (reply?.aborted ? '⏹️ [用户已中止任务 / User aborted]' : '') }, type: 'text' }]
 
         const hasTextNode = assistantContent.some((c) => c.type === 'text' && c.data?.text?.trim())
@@ -799,7 +798,7 @@ export class BaseChannel {
         const currentCount = updatedSession?.chat?.length || 0
         const toolCallCount = assistantContent.filter((c) => c.type === 'tool_call').length
         this.log?.info?.(`[${this.channelType}] 💾 会话历史已成功落盘 | 会话: ${sid} | 本轮交互已追加 (含 ${toolCallCount} 个 ToolCalls${reply?.aborted ? ', 用户中止' : ''}) | 累计条数: ${currentCount} 条`)
-        if (reply?.crystal) {
+        if (reply?.crystal && !reply?.crystalPersisted) {
           await this.memory.setCrystal(sid, reply.crystal)
           this.log?.info?.(`[${this.channelType}] 💎 会话结晶已更新 | 会话: ${sid} | 结晶长度: ${reply.crystal.length} 字符`)
         }
