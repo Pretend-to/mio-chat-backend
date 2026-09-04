@@ -49,9 +49,10 @@ export function completeToolHashes(tools, allSystemTools = []) {
   if (!Array.isArray(tools) || tools.length === 0) {
     return { migrated: false, tools: tools || [] }
   }
-  const systemTools = (Array.isArray(allSystemTools) && allSystemTools.length > 0)
-    ? allSystemTools
-    : getRegisteredSystemToolNames()
+  const systemTools =
+    Array.isArray(allSystemTools) && allSystemTools.length > 0
+      ? allSystemTools
+      : getRegisteredSystemToolNames()
 
   let migrated = false
   const completed = tools.map((t) => {
@@ -60,7 +61,8 @@ export function completeToolHashes(tools, allSystemTools = []) {
       return t
     }
     const matched = systemTools.find(
-      (st) => st === t || st.split('_mid_')[0] === t || st.startsWith(`${t}_mid_`)
+      (st) =>
+        st === t || st.split('_mid_')[0] === t || st.startsWith(`${t}_mid_`),
     )
     if (matched) {
       migrated = true
@@ -81,7 +83,8 @@ export function createEchoLlm({ prefix = '' } = {}) {
 
 function parseMultimodalContent(text) {
   if (typeof text !== 'string') return text
-  const regex = /!\[.*?\]\(((?:https?|data|file):\/\/.*?|\/f\/up\/.*?|\/f\/gen\/.*?)\)/g
+  const regex =
+    /!\[.*?\]\(((?:https?|data|file):\/\/.*?|\/f\/up\/.*?|\/f\/gen\/.*?)\)/g
   const parts = []
   let lastIndex = 0
   let match
@@ -110,7 +113,11 @@ function parseMultimodalContent(text) {
  * the exact same message prefix.  Keeping these two representations in sync
  * is important for provider-side input/prompt caching.
  */
-export function prepareChannelUserInput(text = '', images = [], messageTime = null) {
+export function prepareChannelUserInput(
+  text = '',
+  images = [],
+  messageTime = null,
+) {
   const originalText = typeof text === 'string' ? text : String(text ?? '')
   const imageList = []
   const addImage = (url) => {
@@ -138,28 +145,36 @@ export function prepareChannelUserInput(text = '', images = [], messageTime = nu
   let sourceText = originalText
   if (imageList.length > 0) {
     const imagePrompt = `\n\n以下是用户所上传的图片链接：\n${imageList.join('\n')}`
-    if (!sourceText.includes('以下是用户所上传的图片链接：') && !sourceText.includes(imageList[0])) {
+    if (
+      !sourceText.includes('以下是用户所上传的图片链接：') &&
+      !sourceText.includes(imageList[0])
+    ) {
       sourceText = (sourceText ? sourceText + imagePrompt : imagePrompt).trim()
     }
   }
 
   const timestampedText = wrapUserMessageWithTimestamp(sourceText, messageTime)
-  const latestContent = imageList.length > 0
-    ? [
-        ...imageList.map(url => ({ image_url: { url }, type: 'image_url' })),
-        { text: timestampedText || '[图片]', type: 'text' },
-      ]
-    : parseMultimodalContent(timestampedText)
+  const latestContent =
+    imageList.length > 0
+      ? [
+          ...imageList.map((url) => ({
+            image_url: { url },
+            type: 'image_url',
+          })),
+          { text: timestampedText || '[图片]', type: 'text' },
+        ]
+      : parseMultimodalContent(timestampedText)
 
   // This is the lossless frontend/session representation of the same input.
   // Do not put the timestamp envelope or duplicated markdown links in storage;
   // the next request derives the envelope deterministically from message.time.
-  const persistedContent = imageList.length > 0
-    ? [
-        ...imageList.map(url => ({ data: { file: url }, type: 'image' })),
-        { data: { text: sourceText || '[图片]' }, type: 'text' },
-      ]
-    : [{ data: { text: sourceText }, type: 'text' }]
+  const persistedContent =
+    imageList.length > 0
+      ? [
+          ...imageList.map((url) => ({ data: { file: url }, type: 'image' })),
+          { data: { text: sourceText || '[图片]' }, type: 'text' },
+        ]
+      : [{ data: { text: sourceText }, type: 'text' }]
 
   return {
     imageList,
@@ -177,7 +192,7 @@ export function prepareChannelUserInput(text = '', images = [], messageTime = nu
 export function collectRecursiveUserMessages(messages, currentUserMessage) {
   if (!Array.isArray(messages)) return []
 
-  let currentIndex = messages.indexOf(currentUserMessage)
+  const currentIndex = messages.indexOf(currentUserMessage)
   if (currentIndex < 0) return []
 
   const entries = []
@@ -214,7 +229,11 @@ export function collectRecursiveUserMessages(messages, currentUserMessage) {
  * markers back into real user messages at the original tool-call boundary.
  */
 export function appendRecursiveContextMessages(content, entries) {
-  if (!Array.isArray(content) || !Array.isArray(entries) || entries.length === 0) {
+  if (
+    !Array.isArray(content) ||
+    !Array.isArray(entries) ||
+    entries.length === 0
+  ) {
     return Array.isArray(content) ? content : []
   }
 
@@ -231,14 +250,14 @@ export function appendRecursiveContextMessages(content, entries) {
     return { entry, marker }
   })
   const addMarker = ({ entry, marker }) => {
+    const ordinalList = byOrdinal.get(entry.afterToolCallOrdinal) || []
+    ordinalList.push(marker)
+    byOrdinal.set(entry.afterToolCallOrdinal, ordinalList)
+
     if (entry.afterToolCallId) {
       const list = byId.get(entry.afterToolCallId) || []
       list.push(marker)
       byId.set(entry.afterToolCallId, list)
-    } else {
-      const list = byOrdinal.get(entry.afterToolCallOrdinal) || []
-      list.push(marker)
-      byOrdinal.set(entry.afterToolCallOrdinal, list)
     }
   }
   markerEntries.forEach(addMarker)
@@ -253,7 +272,7 @@ export function appendRecursiveContextMessages(content, entries) {
     toolCallOrdinal++
     const id = node.data?.id || null
     const markers = [
-      ...(id ? (byId.get(id) || []) : []),
+      ...(id ? byId.get(id) || [] : []),
       ...(byOrdinal.get(toolCallOrdinal) || []),
     ]
     for (const marker of markers) {
@@ -286,7 +305,9 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
   const convertStoredUserContent = (content, time) => {
     if (!Array.isArray(content)) {
       const textContent = typeof content === 'string' ? content : ''
-      return parseMultimodalContent(wrapUserMessageWithTimestamp(textContent, time))
+      return parseMultimodalContent(
+        wrapUserMessageWithTimestamp(textContent, time),
+      )
     }
 
     const explicitImages = []
@@ -295,13 +316,20 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
     for (const part of content) {
       if (part?.type === 'image') {
         const url = part.data?.file || part.data?.url || part.url
-        if (url && !explicitImages.some(image => image.image_url?.url === url)) {
+        if (
+          url &&
+          !explicitImages.some((image) => image.image_url?.url === url)
+        ) {
           explicitImages.push({ image_url: { url }, type: 'image_url' })
         }
         hasExplicitImage = true
       } else if (part?.type === 'image_url' || part?.type === 'input_image') {
-        const url = part.image_url?.url || part.image_url || part.image || part.data?.file
-        if (url && !explicitImages.some(image => image.image_url?.url === url)) {
+        const url =
+          part.image_url?.url || part.image_url || part.image || part.data?.file
+        if (
+          url &&
+          !explicitImages.some((image) => image.image_url?.url === url)
+        ) {
           explicitImages.push({ image_url: { url }, type: 'image_url' })
         }
         hasExplicitImage = true
@@ -326,12 +354,21 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
     // 1. 如果包含结构化 content 数组（与 TaskRunner/前端格式一致）
     if (Array.isArray(item.content)) {
       if (item.role === 'system') {
-        const textContent = item.content.filter(c => c.type === 'text').map(c => c.data?.text || '').join('')
+        const textContent = item.content
+          .filter((c) => c.type === 'text')
+          .map((c) => c.data?.text || '')
+          .join('')
         if (textContent.trim()) {
-          msgs.push({ content: `[系统通知]: ${textContent.trim()}`, role: 'user' })
+          msgs.push({
+            content: `[系统通知]: ${textContent.trim()}`,
+            role: 'user',
+          })
         }
       } else if (item.role === 'user') {
-        msgs.push({ content: convertStoredUserContent(item.content, item.time), role: 'user' })
+        msgs.push({
+          content: convertStoredUserContent(item.content, item.time),
+          role: 'user',
+        })
       } else if (item.role === 'assistant' || item.role === 'other') {
         let currentAssistant = null
         let pendingReasoning = ''
@@ -343,7 +380,11 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
               currentAssistant.reasoning_content = pendingReasoning
               pendingReasoning = ''
             }
-            if (!currentAssistant.content && (!currentAssistant.tool_calls || currentAssistant.tool_calls.length === 0)) {
+            if (
+              !currentAssistant.content &&
+              (!currentAssistant.tool_calls ||
+                currentAssistant.tool_calls.length === 0)
+            ) {
               currentAssistant.content = ''
             }
             msgs.push(currentAssistant)
@@ -357,18 +398,27 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
 
         item.content.forEach((elm, elmIdx) => {
           if (elm.type === 'reason') {
-            if (currentAssistant && currentAssistant.tool_calls && currentAssistant.tool_calls.length > 0) {
+            if (
+              currentAssistant &&
+              currentAssistant.tool_calls &&
+              currentAssistant.tool_calls.length > 0
+            ) {
               flushAssistant()
             }
             pendingReasoning += elm.data?.text || ''
           } else if (elm.type === 'text') {
-            if (currentAssistant && currentAssistant.tool_calls && currentAssistant.tool_calls.length > 0) {
+            if (
+              currentAssistant &&
+              currentAssistant.tool_calls &&
+              currentAssistant.tool_calls.length > 0
+            ) {
               flushAssistant()
             }
             if (!currentAssistant) {
               currentAssistant = { content: '', role: 'assistant' }
             }
-            currentAssistant.content = (currentAssistant.content || '') + (elm.data?.text || '')
+            currentAssistant.content =
+              (currentAssistant.content || '') + (elm.data?.text || '')
           } else if (elm.type === 'tool_call') {
             if (!currentAssistant) {
               currentAssistant = { role: 'assistant' }
@@ -377,10 +427,12 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
               currentAssistant.tool_calls = []
             }
             const args = elm.data.arguments || elm.data.parameters || ''
-            const callId = elm.data.id || `call_${elm.data.name || 'tool'}_${elmIdx}`
+            const callId =
+              elm.data.id || `call_${elm.data.name || 'tool'}_${elmIdx}`
             currentAssistant.tool_calls.push({
               function: {
-                arguments: typeof args === 'string' ? args : JSON.stringify(args || {}),
+                arguments:
+                  typeof args === 'string' ? args : JSON.stringify(args || {}),
                 name: elm.data.name,
               },
               id: callId,
@@ -388,7 +440,10 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
             })
 
             pendingToolMessages.push({
-              content: typeof elm.data.result === 'string' ? elm.data.result : JSON.stringify(elm.data.result || 'Success'),
+              content:
+                typeof elm.data.result === 'string'
+                  ? elm.data.result
+                  : JSON.stringify(elm.data.result || 'Success'),
               name: elm.data.name,
               role: 'tool',
               tool_call_id: callId,
@@ -454,8 +509,9 @@ function assembleStructuredContent(chunks) {
   const flushReason = () => {
     if (currentReason && currentReason.trim()) {
       const now = Date.now()
-      const start = reasonData?.startTime || (now - 1000)
-      const duration = reasonData?.duration || (now > start ? now - start : 1000)
+      const start = reasonData?.startTime || now - 1000
+      const duration =
+        reasonData?.duration || (now > start ? now - start : 1000)
       const safeDuration = duration > 0 ? duration : 1000
       content.push({
         data: {
@@ -476,7 +532,9 @@ function assembleStructuredContent(chunks) {
 
     if (chunk.type === 'reason' || chunk.type === 'reasoningContent') {
       flushText()
-      currentReason += chunk.data?.text || (typeof chunk.content === 'string' ? chunk.content : '')
+      currentReason +=
+        chunk.data?.text ||
+        (typeof chunk.content === 'string' ? chunk.content : '')
       if (!reasonData && chunk.data) {
         reasonData = chunk.data
       }
@@ -493,17 +551,24 @@ function assembleStructuredContent(chunks) {
 
       const toolPayload = chunk.content || chunk
       const callId = toolPayload.id || `call_${Date.now()}`
-      const isFinished = toolPayload.action === 'finished' || !!toolPayload.result
-      const callStatus = isFinished ? 'done' : (toolPayload.action === 'started' ? 'waiting' : 'running')
+      const isFinished =
+        toolPayload.action === 'finished' || !!toolPayload.result
+      const callStatus = isFinished
+        ? 'done'
+        : toolPayload.action === 'started'
+          ? 'waiting'
+          : 'running'
 
       const rawArgs = toolPayload.arguments || toolPayload.parameters || ''
       const toolCallData = {
         ...toolPayload,
         action: toolPayload.action || (isFinished ? 'finished' : 'running'),
-        arguments: typeof rawArgs === 'object' ? JSON.stringify(rawArgs) : rawArgs,
+        arguments:
+          typeof rawArgs === 'object' ? JSON.stringify(rawArgs) : rawArgs,
         id: callId,
         name: toolPayload.name || '',
-        parameters: typeof rawArgs === 'object' ? JSON.stringify(rawArgs) : rawArgs,
+        parameters:
+          typeof rawArgs === 'object' ? JSON.stringify(rawArgs) : rawArgs,
         result: toolPayload.result || '',
         status: callStatus,
       }
@@ -546,7 +611,11 @@ function assembleStructuredContent(chunks) {
   // 兜底保障：扫描所有 tool_call 节点，若存在未完成 (action !== 'finished' 或 result 为空) 的节点，自动补全 User aborted
   for (const node of content) {
     if (node.type === 'tool_call') {
-      if (node.data.action !== 'finished' || !node.data.result || node.data.status === 'running') {
+      if (
+        node.data.action !== 'finished' ||
+        !node.data.result ||
+        node.data.status === 'running'
+      ) {
         node.data.action = 'finished'
         node.data.status = 'aborted'
         node.data.result = node.data.result || 'User aborted.'
@@ -562,18 +631,25 @@ export function createBackendLlm(opts = {}) {
 
   return {
     getModels: (isAdmin = true) => {
-      const svc = customService || (typeof global !== 'undefined' && global.middleware?.llm)
+      const svc =
+        customService ||
+        (typeof global !== 'undefined' && global.middleware?.llm)
       if (!svc || typeof svc.getModelList !== 'function') {
         return { default: 'echo', models: {} }
       }
       return {
-        defaultProvider: typeof svc._getDefaultProvider === 'function' ? svc._getDefaultProvider() : 'openai',
+        defaultProvider:
+          typeof svc._getDefaultProvider === 'function'
+            ? svc._getDefaultProvider()
+            : 'openai',
         models: svc.getModelList(isAdmin) || {},
       }
     },
 
     process: async (ctx) => {
-      const svc = customService || (typeof global !== 'undefined' && global.middleware?.llm)
+      const svc =
+        customService ||
+        (typeof global !== 'undefined' && global.middleware?.llm)
       if (!svc) {
         return { text: `[Echo] ${ctx.text}` }
       }
@@ -585,16 +661,20 @@ export function createBackendLlm(opts = {}) {
       const systemSections = []
 
       // 静态前缀：Skill 注册表 (与 Web UI 保持一致置顶)
-      const skillsBlock = skillService?.buildSystemPromptBlock ? skillService.buildSystemPromptBlock() : ''
+      const skillsBlock = skillService?.buildSystemPromptBlock
+        ? skillService.buildSystemPromptBlock()
+        : ''
       if (skillsBlock) {
         systemSections.push(skillsBlock)
       }
 
       // 静态前缀：自治与工具说明
-      systemSections.push([
-        '【工具使用与自治能力】',
-        '你可以使用 `channel_profile` 自主管理自身灵魂，使用 `channel_session` 管理会话历史，使用 `channel_model` 切换底层模型，使用 `toolsmanager` 管理所有工具开闭，使用 `memory` 记录用户事实，使用 `bash` 执行终端命令，使用 `Skill` 加载专家能力。',
-      ].join('\n'))
+      systemSections.push(
+        [
+          '【工具使用与自治能力】',
+          '你可以使用 `channel_profile` 自主管理自身灵魂，使用 `channel_session` 管理会话历史，使用 `channel_model` 切换底层模型，使用 `toolsmanager` 管理所有工具开闭，使用 `memory` 记录用户事实，使用 `bash` 执行终端命令，使用 `Skill` 加载专家能力。',
+        ].join('\n'),
+      )
 
       // 静态前缀：渠道交互风格 Prompt
       if (ctx.channel && typeof ctx.channel.getChannelPrompt === 'function') {
@@ -608,22 +688,28 @@ export function createBackendLlm(opts = {}) {
       if (ctx.soul?.trim()) {
         systemSections.push(`【你的灵魂设定与行为准则】\n${ctx.soul.trim()}`)
       } else {
-        systemSections.push([
-          '【灵魂设定】',
-          '你当前尚未设定专属灵魂人格 (Soul)。你是一个温暖、聪明、善解人意的全能 AI 助手。',
-          '💡【引导提示】：由于你还没有专属人设，请在适当时机（例如初次认识、开启新对话或交流顺畅时），自然友好地向用户自我介绍，并主动建议用户为你设定专属人格、语气或名字（例如：“你希望我怎样陪伴你呢？可以随时给我取个专属名字或者设定喜欢的性格哦～”）。',
-          '一旦用户明确表达了对你的名字、性格、语气或角色期待，你可以直接调用 `channel_profile(action="update", soul="...")` 工具自主将这份灵魂固化保存，永久成为用户的专属陪伴。',
-        ].join('\n'))
+        systemSections.push(
+          [
+            '【灵魂设定】',
+            '你当前尚未设定专属灵魂人格 (Soul)。你是一个温暖、聪明、善解人意的全能 AI 助手。',
+            '💡【引导提示】：由于你还没有专属人设，请在适当时机（例如初次认识、开启新对话或交流顺畅时），自然友好地向用户自我介绍，并主动建议用户为你设定专属人格、语气或名字（例如：“你希望我怎样陪伴你呢？可以随时给我取个专属名字或者设定喜欢的性格哦～”）。',
+            '一旦用户明确表达了对你的名字、性格、语气或角色期待，你可以直接调用 `channel_profile(action="update", soul="...")` 工具自主将这份灵魂固化保存，永久成为用户的专属陪伴。',
+          ].join('\n'),
+        )
       }
 
       // 稳定前缀：全局长期记忆
       if (ctx.globalMem?.trim()) {
-        systemSections.push(`【关于用户的全局长期记忆与稳定事实】\n${ctx.globalMem.trim()}`)
+        systemSections.push(
+          `【关于用户的全局长期记忆与稳定事实】\n${ctx.globalMem.trim()}`,
+        )
       }
 
       // 会话结晶 (memory_crystal)
       if (ctx.crystal?.trim()) {
-        systemSections.push(`【会话历史事实结晶】\n<memory_crystal>\n${ctx.crystal.trim()}\n</memory_crystal>`)
+        systemSections.push(
+          `【会话历史事实结晶】\n<memory_crystal>\n${ctx.crystal.trim()}\n</memory_crystal>`,
+        )
       }
 
       messages.push({
@@ -645,11 +731,18 @@ export function createBackendLlm(opts = {}) {
         ctx.images,
         ctx.messageTime,
       )
-      const currentUserMessage = { content: preparedInput.latestContent, role: 'user' }
+      const currentUserMessage = {
+        content: preparedInput.latestContent,
+        role: 'user',
+      }
       messages.push(currentUserMessage)
 
       // 4. 确定使用的 provider 与 model
-      const targetProvider = ctx.provider || (typeof svc._getDefaultProvider === 'function' ? svc._getDefaultProvider() : undefined)
+      const targetProvider =
+        ctx.provider ||
+        (typeof svc._getDefaultProvider === 'function'
+          ? svc._getDefaultProvider()
+          : undefined)
       let targetModel = ctx.model || null
 
       if (!targetModel && targetProvider && svc.llms) {
@@ -674,6 +767,7 @@ export function createBackendLlm(opts = {}) {
       // and make completion wait for them, otherwise the next queued Channel
       // user message can read the old crystal/chat window.
       let contextPersistenceQueue = Promise.resolve()
+      let crystalPersistenceSucceeded = false
 
       /**
        * 将累积的完整文本块原样交给渠道，由渠道适配器（如 WechatChannel.splitTextToSegments）
@@ -691,24 +785,41 @@ export function createBackendLlm(opts = {}) {
       }
 
       const defaultChannelTools = getRegisteredSystemToolNames()
-      let savedTools = ctx.memory ? await ctx.memory.getAgentMeta('tools', null) : null
+      let savedTools = ctx.memory
+        ? await ctx.memory.getAgentMeta('tools', null)
+        : null
       if (Array.isArray(savedTools)) {
-        const { migrated, tools: completedTools } = completeToolHashes(savedTools, defaultChannelTools)
+        const { migrated, tools: completedTools } = completeToolHashes(
+          savedTools,
+          defaultChannelTools,
+        )
         if (migrated) {
           savedTools = completedTools
           ctx.memory.setAgentMeta('tools', completedTools).catch(() => {})
         }
       }
-      const finalTools = (Array.isArray(savedTools) && savedTools.length > 0)
-        ? savedTools
-        : (defaultChannelTools.length > 0 ? defaultChannelTools : [])
-      const savedEffort = ctx.memory ? await ctx.memory.getAgentMeta('reasoning_effort', 0) : 0
-      const chatParams = (typeof savedEffort === 'number' && savedEffort > 0) ? { reasoning_effort: savedEffort } : {}
+      const finalTools =
+        Array.isArray(savedTools) && savedTools.length > 0
+          ? savedTools
+          : defaultChannelTools.length > 0
+            ? defaultChannelTools
+            : []
+      const savedEffort = ctx.memory
+        ? await ctx.memory.getAgentMeta('reasoning_effort', 0)
+        : 0
+      const chatParams =
+        typeof savedEffort === 'number' && savedEffort > 0
+          ? { reasoning_effort: savedEffort }
+          : {}
 
       // 详细打印消息组装诊断日志（包含工具数、思考强度等关键信息）
       const log = ctx.channel?.log || console
-      log.info?.(`[${ctx.channel?.channelType || 'channel'}] 🧩 消息链拼装完成: 总消息数=${messages.length} (System段数=${systemSections.length}, 历史轮数=${chatHistoryCount}, 注入工具数=${finalTools.length}, 思考强度=${savedEffort}, 当前输入="${ctx.text.slice(0, 30)}")`)
-      log.info?.(`[${ctx.channel?.channelType || 'channel'}] 🧠 记忆载入详情: Soul=${ctx.soul ? '已设定' : '无'}, GlobalMem=${ctx.globalMem ? `${ctx.globalMem.length}字` : '无'}, Crystal=${ctx.crystal ? `${ctx.crystal.length}字` : '无'}`)
+      log.info?.(
+        `[${ctx.channel?.channelType || 'channel'}] 🧩 消息链拼装完成: 总消息数=${messages.length} (System段数=${systemSections.length}, 历史轮数=${chatHistoryCount}, 注入工具数=${finalTools.length}, 思考强度=${savedEffort}, 当前输入="${ctx.text.slice(0, 30)}")`,
+      )
+      log.info?.(
+        `[${ctx.channel?.channelType || 'channel'}] 🧠 记忆载入详情: Soul=${ctx.soul ? '已设定' : '无'}, GlobalMem=${ctx.globalMem ? `${ctx.globalMem.length}字` : '无'}, Crystal=${ctx.crystal ? `${ctx.crystal.length}字` : '无'}`,
+      )
 
       let lastActionData = null
       let latestCrystal = null
@@ -783,8 +894,10 @@ export function createBackendLlm(opts = {}) {
         abort: () => {
           if (event.aborted) return
           event.aborted = true
-          abortCallbacks.forEach(cb => {
-            try { cb() } catch {}
+          abortCallbacks.forEach((cb) => {
+            try {
+              cb()
+            } catch {}
           })
           if (typeof event.complete === 'function') {
             event.complete()
@@ -792,7 +905,9 @@ export function createBackendLlm(opts = {}) {
         },
         onAbort: (cb) => {
           if (event.aborted) {
-            try { cb() } catch {}
+            try {
+              cb()
+            } catch {}
           } else {
             abortCallbacks.push(cb)
           }
@@ -806,54 +921,86 @@ export function createBackendLlm(opts = {}) {
             ctx.webClient.pushEvent(ctx.messageId, event)
           } else {
             // 2. 来自渠道端（微信长轮询等）：向第三方渠道推送文本确认卡片并通过消息回复进行交互
-            const reqFn = ctx.channel?.requestConfirmation || ctx.channel?.requestUserConfirmation
+            const reqFn =
+              ctx.channel?.requestConfirmation ||
+              ctx.channel?.requestUserConfirmation
             if (ctx.channel && typeof reqFn === 'function') {
               try {
                 const meta = lastActionData?.meta || {}
-                const prompt = lastActionData?.prompt || 'LLM 正在申请执行敏感操作，是否授权？'
+                const prompt =
+                  lastActionData?.prompt ||
+                  'LLM 正在申请执行敏感操作，是否授权？'
                 let title = '安全操作二次确认'
                 const details = []
 
-                if (meta.type === 'global_memory' || meta.fact || meta.content) {
+                if (
+                  meta.type === 'global_memory' ||
+                  meta.fact ||
+                  meta.content
+                ) {
                   title = '全局长期记忆更新审批'
                   const contentText = meta.content || meta.fact || ''
                   if (contentText) details.push(`📝 记忆内容：${contentText}`)
-                  if (meta.category) details.push(`📁 记忆分类：${meta.category}`)
-                  if (meta.action) details.push(`⚙️ 操作类型：${meta.action === 'add' ? '新增' : meta.action === 'update' ? '更新' : meta.action === 'delete' ? '删除' : meta.action}`)
+                  if (meta.category)
+                    details.push(`📁 记忆分类：${meta.category}`)
+                  if (meta.action)
+                    details.push(
+                      `⚙️ 操作类型：${meta.action === 'add' ? '新增' : meta.action === 'update' ? '更新' : meta.action === 'delete' ? '删除' : meta.action}`,
+                    )
                   if (meta.target) details.push(`🎯 记忆目标：${meta.target}`)
                 } else if (meta.command) {
-                  title = meta.highRisk ? '⚠️ 高危 Shell 命令授权' : '💻 Shell 命令授权'
+                  title = meta.highRisk
+                    ? '⚠️ 高危 Shell 命令授权'
+                    : '💻 Shell 命令授权'
                   const commandPreview = meta.commandPreview || meta.command
-                  details.push(meta.rememberable === false
-                    ? `💻 待执行命令：\n${commandPreview}`
-                    : `💻 待执行命令：\`${commandPreview}\``)
+                  details.push(
+                    meta.rememberable === false
+                      ? `💻 待执行命令：\n${commandPreview}`
+                      : `💻 待执行命令：\`${commandPreview}\``,
+                  )
                   if (meta.cwd) details.push(`📂 工作目录：${meta.cwd}`)
                 } else if (meta.params) {
                   title = '⚙️ 系统配置修改审批'
-                  const paramsStr = typeof meta.params === 'object' ? JSON.stringify(meta.params, null, 2) : String(meta.params)
+                  const paramsStr =
+                    typeof meta.params === 'object'
+                      ? JSON.stringify(meta.params, null, 2)
+                      : String(meta.params)
                   details.push(`⚙️ 修改内容：\n${paramsStr}`)
                 } else if (meta.key && meta.value !== undefined) {
                   title = '⚙️ 配置修改审批'
-                  details.push(`⚙️ 修改项：${meta.key} -> ${JSON.stringify(meta.value)}`)
+                  details.push(
+                    `⚙️ 修改项：${meta.key} -> ${JSON.stringify(meta.value)}`,
+                  )
                 }
 
-                const description = details.length > 0
-                  ? `${prompt}\n\n${details.join('\n')}`
-                  : prompt
+                const description =
+                  details.length > 0
+                    ? `${prompt}\n\n${details.join('\n')}`
+                    : prompt
 
-                const res = await reqFn.call(ctx.channel, {
-                  contextToken: ctx.contextToken,
-                  command: meta.command,
-                  commandPrefix1: meta.commandPrefix1,
-                  commandPrefix2: meta.commandPrefix2,
-                  description,
-                  from: ctx.from,
-                  rememberable: meta.rememberable === true,
-                  title,
-                }, ctx)
-                event.emitInteraction(interactionId, typeof res === 'object' ? res : { approved: Boolean(res) })
+                const res = await reqFn.call(
+                  ctx.channel,
+                  {
+                    contextToken: ctx.contextToken,
+                    command: meta.command,
+                    commandPrefix1: meta.commandPrefix1,
+                    commandPrefix2: meta.commandPrefix2,
+                    description,
+                    from: ctx.from,
+                    rememberable: meta.rememberable === true,
+                    title,
+                  },
+                  ctx,
+                )
+                event.emitInteraction(
+                  interactionId,
+                  typeof res === 'object' ? res : { approved: Boolean(res) },
+                )
               } catch (err) {
-                event.emitInteraction(interactionId, { approved: false, reason: err.message })
+                event.emitInteraction(interactionId, {
+                  approved: false,
+                  reason: err.message,
+                })
               }
             } else {
               event.emitInteraction(interactionId, { approved: true })
@@ -874,7 +1021,13 @@ export function createBackendLlm(opts = {}) {
           }
 
           // 无论 Web 客户端是否在线，流式 Chunks 异步沉淀至 streamCache（完全不阻塞微信下发）
-          const resolvedContactorId = ctx.channelId || ctx.agentId || ctx.channel?.id || ctx.channel?.channelId || ctx.memory?.agentId || null
+          const resolvedContactorId =
+            ctx.channelId ||
+            ctx.agentId ||
+            ctx.channel?.id ||
+            ctx.channel?.channelId ||
+            ctx.memory?.agentId ||
+            null
           if (resolvedContactorId && ctx.messageId) {
             let finalData = data
             if (data.type === 'reasoningContent') {
@@ -907,7 +1060,10 @@ export function createBackendLlm(opts = {}) {
               currentReasoningStartTime = null
             }
 
-            const isChannelApproval = !ctx.isWeb && data.type === 'action' && data.content?.actionType === 'REQUEST_APPROVAL'
+            const isChannelApproval =
+              !ctx.isWeb &&
+              data.type === 'action' &&
+              data.content?.actionType === 'REQUEST_APPROVAL'
             const dataWithMeta = {
               ...finalData,
               metaData: {
@@ -915,7 +1071,7 @@ export function createBackendLlm(opts = {}) {
                 isTask: Boolean(ctx.isTask),
                 messageId: ctx.messageId,
                 triggerType: ctx.isTask ? 'task' : 'chat',
-                ...(data.metaData),
+                ...data.metaData,
               },
             }
 
@@ -924,14 +1080,22 @@ export function createBackendLlm(opts = {}) {
             if (!isChannelApproval) {
               // 1. 并发写入 streamCache，支撑离线回放
               try {
-                streamCache.push('admin', resolvedContactorId, ctx.messageId, finalData, dataWithMeta.metaData)
+                streamCache.push(
+                  'admin',
+                  resolvedContactorId,
+                  ctx.messageId,
+                  finalData,
+                  dataWithMeta.metaData,
+                )
               } catch {}
             }
 
             // 2. 若存在在线 Web 客户端，实时推送镜像流
             const targetWebClients = isChannelApproval
               ? []
-              : ((ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || []))
+              : ctx.isWeb && ctx.webClient
+                ? [ctx.webClient]
+                : sessions.getAllAdminClients() || []
             if (targetWebClients.length > 0) {
               for (const client of targetWebClients) {
                 client.sendOpenaiMessage('update', dataWithMeta, ctx.messageId)
@@ -945,25 +1109,40 @@ export function createBackendLlm(opts = {}) {
               if (summaryXml) {
                 latestCrystal = summaryXml
                 if (ctx.memory && ctx.sessionId) {
-                  contextPersistenceQueue = contextPersistenceQueue.then(async () => {
-                    await ctx.memory.setCrystal(ctx.sessionId, summaryXml)
-                    if (typeof ctx.memory.clearPendingMemories === 'function') {
-                      await ctx.memory.clearPendingMemories(ctx.sessionId)
-                    }
-                    // 上下文压缩闭环：归档 + 裁剪 + 读窗口更新必须在
-                    // 下一条排队 user 进入前完成，否则会读到旧上下文。
-                    if (typeof ctx.memory.rotateChat === 'function') {
-                      const keepTurns = Number(event.body?.settings?.crystallization_keep_turns) || 1
-                      const rotateRes = await ctx.memory.rotateChat(ctx.sessionId, keepTurns)
-                      if (rotateRes?.rotated) {
-                        ctx.channel?.log?.info?.(
-                          `[${ctx.channel?.channelType || 'channel'}] 🗜️ 会话历史已归档并裁剪 | 归档: ${rotateRes.archivePath} | 裁剪 ${rotateRes.removedCount} 条, 保留 ${rotateRes.keptCount} 条`
-                        )
+                  contextPersistenceQueue = contextPersistenceQueue
+                    .then(async () => {
+                      await ctx.memory.setCrystal(ctx.sessionId, summaryXml)
+                      if (
+                        typeof ctx.memory.clearPendingMemories === 'function'
+                      ) {
+                        await ctx.memory.clearPendingMemories(ctx.sessionId)
                       }
-                    }
-                  }).catch(err => {
-                    ctx.channel?.log?.error?.(`[${ctx.channel?.channelType || 'channel'}] 记忆结晶/裁剪落盘失败:`, err)
-                  })
+                      // 上下文压缩闭环：归档 + 裁剪 + 读窗口更新必须在
+                      // 下一条排队 user 进入前完成，否则会读到旧上下文。
+                      if (typeof ctx.memory.rotateChat === 'function') {
+                        const keepTurns =
+                          Number(
+                            event.body?.settings?.crystallization_keep_turns,
+                          ) || 1
+                        const rotateRes = await ctx.memory.rotateChat(
+                          ctx.sessionId,
+                          keepTurns,
+                        )
+                        if (rotateRes?.rotated) {
+                          ctx.channel?.log?.info?.(
+                            `[${ctx.channel?.channelType || 'channel'}] 🗜️ 会话历史已归档并裁剪 | 归档: ${rotateRes.archivePath} | 裁剪 ${rotateRes.removedCount} 条, 保留 ${rotateRes.keptCount} 条`,
+                          )
+                        }
+                      }
+                      crystalPersistenceSucceeded = true
+                    })
+                    .catch((err) => {
+                      crystalPersistenceSucceeded = false
+                      ctx.channel?.log?.error?.(
+                        `[${ctx.channel?.channelType || 'channel'}] 记忆结晶/裁剪落盘失败:`,
+                        err,
+                      )
+                    })
                 }
               }
             }
@@ -975,7 +1154,11 @@ export function createBackendLlm(opts = {}) {
               currentTextBlock += data.content
             }
             // 同步阶段性输出到 activeJob
-            if (ctx.channel?.activeJobs && ctx.sessionId && ctx.channel.activeJobs.has(ctx.sessionId)) {
+            if (
+              ctx.channel?.activeJobs &&
+              ctx.sessionId &&
+              ctx.channel.activeJobs.has(ctx.sessionId)
+            ) {
               const job = ctx.channel.activeJobs.get(ctx.sessionId)
               job.lastProgressText = currentTextBlock.slice(0, 100)
             }
@@ -984,7 +1167,12 @@ export function createBackendLlm(opts = {}) {
               await flushTextBlock()
             }
             // 同步正在执行的工具到 activeJob
-            if (data.type === 'toolCall' && ctx.channel?.activeJobs && ctx.sessionId && ctx.channel.activeJobs.has(ctx.sessionId)) {
+            if (
+              data.type === 'toolCall' &&
+              ctx.channel?.activeJobs &&
+              ctx.sessionId &&
+              ctx.channel.activeJobs.has(ctx.sessionId)
+            ) {
               const job = ctx.channel.activeJobs.get(ctx.sessionId)
               if (data.content?.action === 'running') {
                 job.currentTool = data.content.name || '工具'
@@ -997,37 +1185,97 @@ export function createBackendLlm(opts = {}) {
             if (data.type === 'toolCall' || data.type === 'extraRender') {
               const toolPayload = data.content || data
               const renders = [
-                ...(Array.isArray(toolPayload?.extraRender) ? toolPayload.extraRender : (toolPayload?.extraRender ? [toolPayload.extraRender] : [])),
-                ...(Array.isArray(data.extraRender) ? data.extraRender : (data.extraRender ? [data.extraRender] : [])),
+                ...(Array.isArray(toolPayload?.extraRender)
+                  ? toolPayload.extraRender
+                  : toolPayload?.extraRender
+                    ? [toolPayload.extraRender]
+                    : []),
+                ...(Array.isArray(data.extraRender)
+                  ? data.extraRender
+                  : data.extraRender
+                    ? [data.extraRender]
+                    : []),
               ]
 
               // 扫描 extraRender 中的规范渲染项并实时推送到渠道
               for (const r of renders) {
                 if (!r) continue
-                const renderKey = r.url || r.text || (r.title ? `${r.title}:${r.description}` : JSON.stringify(r))
+                const renderKey =
+                  r.url ||
+                  r.text ||
+                  (r.title ? `${r.title}:${r.description}` : JSON.stringify(r))
                 if (emittedRenders.has(renderKey)) continue
                 emittedRenders.add(renderKey)
 
                 if (r.type === 'image' && (r.url || r.buffer || r.localPath)) {
                   if (typeof ctx.onEmitTextBlock === 'function') {
-                    await ctx.onEmitTextBlock('', { extraRender: r, image: r.url })
+                    await ctx.onEmitTextBlock('', {
+                      extraRender: r,
+                      image: r.url,
+                    })
                   }
-                } else if ((r.type === 'audio' || r.type === 'voice') && (r.url || r.buffer || r.localPath)) {
+                } else if (
+                  (r.type === 'audio' || r.type === 'voice') &&
+                  (r.url || r.buffer || r.localPath)
+                ) {
                   if (typeof ctx.onEmitTextBlock === 'function') {
-                    await ctx.onEmitTextBlock('', { audio: r.url, extraRender: r })
+                    await ctx.onEmitTextBlock('', {
+                      audio: r.url,
+                      extraRender: r,
+                    })
                   }
-                } else if ((r.type === 'file' || r.type === 'document') && (r.url || r.buffer || r.localPath)) {
+                } else if (
+                  (r.type === 'file' || r.type === 'document') &&
+                  (r.url || r.buffer || r.localPath)
+                ) {
                   if (typeof ctx.onEmitTextBlock === 'function') {
-                    await ctx.onEmitTextBlock('', { extraRender: r, file: r.url })
+                    await ctx.onEmitTextBlock('', {
+                      extraRender: r,
+                      file: r.url,
+                    })
                   }
-                } else if (r.type === 'video' && (r.url || r.buffer || r.localPath)) {
+                } else if (
+                  r.type === 'video' &&
+                  (r.url || r.buffer || r.localPath)
+                ) {
                   if (typeof ctx.onEmitTextBlock === 'function') {
-                    await ctx.onEmitTextBlock('', { extraRender: r, video: r.url })
+                    await ctx.onEmitTextBlock('', {
+                      extraRender: r,
+                      video: r.url,
+                    })
                   }
-                } else if (r.type === 'text' || r.type === 'notice' || r.type === 'alert' || r.type === 'link' || r.type === 'card') {
-                  const notice = r.text || (r.title ? `[${r.title}] ${r.description || ''}` : r.description)
+                } else if (
+                  r.type === 'link' ||
+                  (!r.type && (r.url || r.href))
+                ) {
+                  const linkUrl = r.url || r.href || ''
+                  if (typeof ctx.onEmitTextBlock === 'function') {
+                    await ctx.onEmitTextBlock('', {
+                      extraRender: r,
+                      link: linkUrl,
+                    })
+                  }
+                } else if (r.type === 'card' || r.type === 'html') {
+                  if (typeof ctx.onEmitTextBlock === 'function') {
+                    await ctx.onEmitTextBlock('', {
+                      card: r,
+                      extraRender: r,
+                    })
+                  }
+                } else if (
+                  r.type === 'text' ||
+                  r.type === 'notice' ||
+                  r.type === 'alert'
+                ) {
+                  const notice =
+                    r.text ||
+                    (r.title
+                      ? `[${r.title}] ${r.description || ''}`
+                      : r.description)
                   if (notice && typeof ctx.onEmitTextBlock === 'function') {
-                    await ctx.onEmitTextBlock(notice, { extraRender: r })
+                    await ctx.onEmitTextBlock(notice, {
+                      extraRender: r,
+                    })
                   }
                 }
               }
@@ -1052,6 +1300,12 @@ export function createBackendLlm(opts = {}) {
       // 等待底层 LLM 完整运行完毕（包含所有递归工具轮次）
       await new Promise((resolve, reject) => {
         let isDone = false
+        const rejectAfterContextPersistence = (error) => {
+          contextPersistenceQueue.then(
+            () => reject(error),
+            () => reject(error),
+          )
+        }
         event.complete = async () => {
           if (isDone) return
           isDone = true
@@ -1060,28 +1314,47 @@ export function createBackendLlm(opts = {}) {
               await flushTextBlock()
             }
             currentBlockType = 'idle'
-            const resolvedContactorId = ctx.channelId || ctx.agentId || ctx.channel?.id || ctx.channel?.channelId || ctx.memory?.agentId || null
+            // Do not announce completion until the crystal and rotated chat
+            // window are visible to the next FIFO Channel request.
+            await contextPersistenceQueue
+            const resolvedContactorId =
+              ctx.channelId ||
+              ctx.agentId ||
+              ctx.channel?.id ||
+              ctx.channel?.channelId ||
+              ctx.memory?.agentId ||
+              null
             if (resolvedContactorId && ctx.messageId) {
               try {
-                streamCache.complete('admin', resolvedContactorId, ctx.messageId)
+                streamCache.complete(
+                  'admin',
+                  resolvedContactorId,
+                  ctx.messageId,
+                )
               } catch {}
             }
-            const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
+            const targetWebClients =
+              ctx.isWeb && ctx.webClient
+                ? [ctx.webClient]
+                : sessions.getAllAdminClients() || []
             if (targetWebClients.length > 0 && ctx.messageId) {
               for (const client of targetWebClients) {
                 client.popEvent?.(ctx.messageId)
-                client.sendOpenaiMessage('complete', {
-                  metaData: {
-                    contactorId: resolvedContactorId,
-                    messageId: ctx.messageId,
+                client.sendOpenaiMessage(
+                  'complete',
+                  {
+                    metaData: {
+                      contactorId: resolvedContactorId,
+                      messageId: ctx.messageId,
+                    },
                   },
-                }, ctx.messageId)
+                  ctx.messageId,
+                )
               }
             }
-            await contextPersistenceQueue
             resolve()
           } catch (e) {
-            reject(e)
+            rejectAfterContextPersistence(e)
           }
         }
 
@@ -1089,32 +1362,50 @@ export function createBackendLlm(opts = {}) {
           if (isDone) return
           isDone = true
           streamError = err
-          const resolvedContactorId = ctx.channelId || ctx.agentId || ctx.channel?.id || ctx.channel?.channelId || ctx.memory?.agentId || null
+          const resolvedContactorId =
+            ctx.channelId ||
+            ctx.agentId ||
+            ctx.channel?.id ||
+            ctx.channel?.channelId ||
+            ctx.memory?.agentId ||
+            null
           if (resolvedContactorId && ctx.messageId) {
             try {
-              streamCache.fail('admin', resolvedContactorId, ctx.messageId, err?.message || String(err))
+              streamCache.fail(
+                'admin',
+                resolvedContactorId,
+                ctx.messageId,
+                err?.message || String(err),
+              )
             } catch {}
           }
-          const targetWebClients = (ctx.isWeb && ctx.webClient) ? [ctx.webClient] : (sessions.getAllAdminClients() || [])
+          const targetWebClients =
+            ctx.isWeb && ctx.webClient
+              ? [ctx.webClient]
+              : sessions.getAllAdminClients() || []
           if (targetWebClients.length > 0 && ctx.messageId) {
             for (const client of targetWebClients) {
               client.popEvent?.(ctx.messageId)
-              client.sendOpenaiMessage('failed', {
-                message: err?.message || String(err),
-                metaData: {
-                  contactorId: resolvedContactorId,
-                  messageId: ctx.messageId,
+              client.sendOpenaiMessage(
+                'failed',
+                {
+                  message: err?.message || String(err),
+                  metaData: {
+                    contactorId: resolvedContactorId,
+                    messageId: ctx.messageId,
+                  },
                 },
-              }, ctx.messageId)
+                ctx.messageId,
+              )
             }
           }
-          reject(err)
+          rejectAfterContextPersistence(err)
         }
 
         svc.handleMessage(event).catch((err) => {
           if (isDone) return
           isDone = true
-          reject(err)
+          rejectAfterContextPersistence(err)
         })
       })
 
@@ -1131,9 +1422,13 @@ export function createBackendLlm(opts = {}) {
         aborted: !!event.aborted,
         completed: !event.aborted,
         content: structuredContent,
-        crystal: latestCrystal || event.body?.settings?.previous_summary || null,
-        crystalPersisted: Boolean(latestCrystal),
-        recursiveUserMessages: collectRecursiveUserMessages(event.body.messages, currentUserMessage),
+        crystal:
+          latestCrystal || event.body?.settings?.previous_summary || null,
+        crystalPersisted: Boolean(latestCrystal) && crystalPersistenceSucceeded,
+        recursiveUserMessages: collectRecursiveUserMessages(
+          event.body.messages,
+          currentUserMessage,
+        ),
         rawMessages: event.body.messages,
       }
     },

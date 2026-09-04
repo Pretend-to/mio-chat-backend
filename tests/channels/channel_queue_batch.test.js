@@ -75,9 +75,14 @@ test('BaseChannel: 队列排位反馈、任务批次合并与 /btw 旁路插话'
     messageId: 'msg_a',
   })
 
-  // 稍作等待确保任务 A 已启动并持有主锁
-  await new Promise((r) => setTimeout(r, 20))
-  const sid = await memory.getActiveSession()
+  // 稍作等待确保任务 A 已启动并持有主锁与活跃任务
+  let sid = null
+  for (let i = 0; i < 50; i++) {
+    sid = await memory.getActiveSession()
+    if (sid && channel._sessionLocks.has(sid) && channel.activeJobs.has(sid))
+      break
+    await new Promise((r) => setTimeout(r, 10))
+  }
   assert.ok(channel._sessionLocks.has(sid), '任务 A 应持有会话锁')
   assert.ok(channel.activeJobs.has(sid), '会话应处于繁忙活跃状态')
 
@@ -86,9 +91,13 @@ test('BaseChannel: 队列排位反馈、任务批次合并与 /btw 旁路插话'
     from: MASTER,
     messageId: 'msg_b',
   })
-  await new Promise((r) => setTimeout(r, 20))
+  let feedback1 = null
+  for (let i = 0; i < 30; i++) {
+    feedback1 = channel.sentPackets.find((p) => p.text.includes('[1/1]'))
+    if (feedback1) break
+    await new Promise((r) => setTimeout(r, 10))
+  }
 
-  const feedback1 = channel.sentPackets.find((p) => p.text.includes('[1/1]'))
   assert.ok(feedback1, '应收到排位 [1/1] 的即时反馈')
   assert.ok(feedback1.text.includes('当前有任务正在全力处理中'))
 
@@ -97,9 +106,13 @@ test('BaseChannel: 队列排位反馈、任务批次合并与 /btw 旁路插话'
     from: MASTER,
     messageId: 'msg_c',
   })
-  await new Promise((r) => setTimeout(r, 20))
+  let feedback2 = null
+  for (let i = 0; i < 30; i++) {
+    feedback2 = channel.sentPackets.find((p) => p.text.includes('[2/2]'))
+    if (feedback2) break
+    await new Promise((r) => setTimeout(r, 10))
+  }
 
-  const feedback2 = channel.sentPackets.find((p) => p.text.includes('[2/2]'))
   assert.ok(feedback2, '应收到排位 [2/2] 的即时反馈')
 
   // 4. 发送 /btw 旁路插话 -> 应该不排队、不占主锁，立即获得响应
@@ -173,7 +186,10 @@ test('BaseChannel: 渠道通用入站大防抖 (5s 文本 / 10s 富媒体)', asy
   channel.enqueueInboundDebounce(MASTER, { text: '帮我查一下BTC价格' })
 
   // 等待 100ms（超过 80ms 纯文本防抖时间）
-  await new Promise((r) => setTimeout(r, 120))
+  for (let i = 0; i < 30; i++) {
+    if (routedMessages.length > 0) break
+    await new Promise((r) => setTimeout(r, 10))
+  }
   assert.equal(routedMessages.length, 1, '两次文本输入应合并为一次路由')
   assert.ok(routedMessages[0].text.includes('在吗？'))
   assert.ok(routedMessages[0].text.includes('帮我查一下BTC价格'))
@@ -196,8 +212,11 @@ test('BaseChannel: 渠道通用入站大防抖 (5s 文本 / 10s 富媒体)', asy
     '收到富媒体后防抖窗口应延长至 mediaMs，90ms 不应提前触发',
   )
 
-  // 等待总耗时超过 150ms
-  await new Promise((r) => setTimeout(r, 100))
+  // 等待媒体防抖窗口闭合并完成路由
+  for (let i = 0; i < 40; i++) {
+    if (routedMessages.length > 0) break
+    await new Promise((r) => setTimeout(r, 10))
+  }
   assert.equal(routedMessages.length, 1, '媒体防抖窗口闭合后应成功路由')
   assert.equal(routedMessages[0].images.length, 1)
   assert.equal(routedMessages[0].images[0], 'https://example.com/photo.png')

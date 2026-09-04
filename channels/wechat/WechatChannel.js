@@ -278,6 +278,59 @@ export class WechatChannel extends BaseChannel {
   }
 
   /**
+   * 微信链接/网页卡片下发实现
+   * 微信客户端原生支持将 http(s):// 识别为可点击超链接，基于结构化数据拼装最优气泡并记录 token
+   */
+  async doSendLink({
+    contextToken,
+    description: _description,
+    extraRender: _extraRender,
+    text,
+    title,
+    to,
+    url,
+  } = {}) {
+    if (contextToken) {
+      this._recordTokenUsage(contextToken)
+    }
+    const label = text || title || '打开已发布的网页 🌐'
+    const noticeText = url ? `${label}\n🔗 链接: ${url}` : label
+    const payload = this.buildSendMsg({
+      contextToken,
+      fromBot: this.client?.botId,
+      text: noticeText,
+      to,
+    })
+    return this.doSendMessage(payload)
+  }
+
+  /**
+   * 微信卡片/富媒体下发实现
+   */
+  async doSendCard({
+    card = {},
+    contextToken,
+    extraRender: _extraRender,
+    to,
+  } = {}) {
+    if (contextToken) {
+      this._recordTokenUsage(contextToken)
+    }
+    const title = card.title ? `[${card.title}] ` : ''
+    const desc = card.description || card.text || ''
+    const url =
+      card.url || card.href ? `\n🔗 链接: ${card.url || card.href}` : ''
+    const noticeText = `${title}${desc}${url}`.trim() || '[富媒体卡片]'
+    const payload = this.buildSendMsg({
+      contextToken,
+      fromBot: this.client?.botId,
+      text: noticeText,
+      to,
+    })
+    return this.doSendMessage(payload)
+  }
+
+  /**
    * 微信原生图片发送实现 (IMAGE=1)
    */
   async doSendImage({ to, contextToken, buffer, url, localPath }) {
@@ -314,44 +367,66 @@ export class WechatChannel extends BaseChannel {
   }
 
   /**
-   * 微信原生语音发送实现 (VOICE=4，自动转码为 Silk v3 格式)
-   * ⚠️ 2026-08-28 实测禁用：sendmessage 成功返回 message_id，但微信客户端无法渲染该语音气泡。
-   * 现直接抛错走 BaseChannel 的 catch 分支，降级为「音频链接」文本通知。恢复原生直传时解开下方注释即可。
+   * 微信语音发送实现：
+   * 微信官方 Bot 不支持渲染原生语音气泡 (VOICE=4)，因此按照设计以音频文件 (FILE=3) 形式分享发送 (支持 mp3/wav)。
    */
   async doSendVoice({
-    _to,
-    _contextToken,
-    _buffer,
-    _url,
-    _localPath,
-    _text = '',
-    _durationMs = 0,
+    to,
+    contextToken,
+    buffer,
+    url,
+    localPath,
+    fileName,
+    text: _text = '',
+    durationMs: _durationMs = 0,
+    extraRender = {},
   } = {}) {
-    throw new Error('微信客户端暂无法渲染原生语音消息，降级为链接发送')
-    /*
-    if (contextToken) {
-      this._recordTokenUsage(contextToken)
-    }
-    const rawAudioBuffer = await MediaResolver.resolveBuffer({ buffer, localPath, url })
-    if (!rawAudioBuffer || rawAudioBuffer.length === 0) {
-      throw new Error(`无法获取有效的音频二进制数据 (url=${url}, localPath=${localPath})`)
+    this.log?.info?.(
+      `[WechatChannel] 🎙️ 微信 Bot 不支持原生语音气泡，转为音频文件 (wav/mp3) 分享形式发送`,
+    )
+
+    let finalFileName =
+      fileName ||
+      extraRender?.fileName ||
+      extraRender?.name ||
+      (localPath ? localPath.split('/').pop() : '') ||
+      (url ? url.split('/').pop()?.split('?')[0] : '')
+
+    if (finalFileName) {
+      const lower = finalFileName.toLowerCase()
+      if (
+        !lower.endsWith('.mp3') &&
+        !lower.endsWith('.wav') &&
+        !lower.endsWith('.m4a') &&
+        !lower.endsWith('.aac') &&
+        !lower.endsWith('.ogg') &&
+        !lower.endsWith('.flac')
+      ) {
+        finalFileName = `${finalFileName}.mp3`
+      }
+    } else {
+      if (
+        buffer &&
+        buffer.length >= 4 &&
+        buffer[0] === 0x52 &&
+        buffer[1] === 0x49 &&
+        buffer[2] === 0x46 &&
+        buffer[3] === 0x46
+      ) {
+        finalFileName = `语音消息_${Date.now()}.wav`
+      } else {
+        finalFileName = `语音消息_${Date.now()}.mp3`
+      }
     }
 
-    const { silkBuffer, durationMs: calculatedDuration } = await convertAudioToSilk(rawAudioBuffer)
-    const mediaInfo = await this.client.uploadMedia(silkBuffer, { mediaType: 4, toUserId: to })
-    const voiceMsg = buildSendVoiceMsg({
+    return this.doSendFile({
+      buffer,
       contextToken,
-      durationMs: durationMs || calculatedDuration,
-      fromBot: this.client.botId,
-      mediaInfo,
-      text,
+      fileName: finalFileName,
+      localPath,
       to,
+      url,
     })
-
-    const sendRes = await this.client.sendMessage(voiceMsg)
-    this.log?.info?.(`[WechatChannel] 📤 原生语音消息发送结果 (长度: ${durationMs || calculatedDuration}ms): ${JSON.stringify(sendRes)}`)
-    return sendRes
-    */
   }
 
   /**

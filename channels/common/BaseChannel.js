@@ -174,6 +174,67 @@ export class BaseChannel {
     throw new Error('doSendVideo() must be implemented by subclass')
   }
 
+  /**
+   * 发送结构化链接 / 网页卡片消息
+   * @param {Object} options
+   * @param {string} options.to 接收人 ID
+   * @param {string} [options.contextToken] 上下文票据（微信等渠道）
+   * @param {string} options.url 链接目标 URL
+   * @param {string} [options.text] 链接文案或按钮文本
+   * @param {string} [options.title] 标题
+   * @param {string} [options.description] 描述
+   * @param {Object} [options.extraRender] 原始完整 extraRender 对象
+   */
+  async doSendLink({
+    contextToken,
+    description: _description,
+    extraRender: _extraRender,
+    text,
+    title,
+    to,
+    url,
+  } = {}) {
+    // 默认降级实现：若适配器未重写原生富文本卡片发送，则默认以结构化信息格式化为文本兜底
+    const label = text || title || '网页链接'
+    const noticeText = url ? `${label}\n🔗 链接: ${url}` : label
+    const payload = this.buildSendMsg({
+      contextToken,
+      fromBot: this.client?.botId,
+      text: noticeText,
+      to,
+    })
+    return this.doSendMessage(payload)
+  }
+
+  /**
+   * 发送结构化卡片 / 复杂富媒体消息
+   * @param {Object} options
+   * @param {string} options.to 接收人 ID
+   * @param {string} [options.contextToken] 上下文票据
+   * @param {Object} options.card 卡片元数据
+   * @param {Object} [options.extraRender] 原始完整 extraRender 对象
+   */
+  async doSendCard({
+    card = {},
+    contextToken,
+    extraRender: _extraRender,
+    to,
+  } = {}) {
+    // 默认降级实现：提取标题、描述和链接构建文本兜底发送
+    const title = card.title ? `[${card.title}] ` : ''
+    const desc = card.description || card.text || ''
+    const url =
+      card.url || card.href ? `\n🔗 链接: ${card.url || card.href}` : ''
+    const noticeText = `${title}${desc}${url}`.trim() || '[富媒体卡片]'
+    const payload = this.buildSendMsg({
+      contextToken,
+      fromBot: this.client?.botId,
+      text: noticeText,
+      to,
+    })
+    return this.doSendMessage(payload)
+  }
+
   // ===============================================================
   // 会话输入状态与心跳保活管理 (Channel-Agnostic Typing Lifecycle)
   // ===============================================================
@@ -1072,7 +1133,10 @@ export class BaseChannel {
           assistantPersistenceId &&
           typeof this.memory.appendAssistantChunk === 'function'
         ) {
-          const render = meta.extraRender || {}
+          const rawRender = meta.extraRender
+          const render = Array.isArray(rawRender)
+            ? rawRender[0] || {}
+            : rawRender || {}
           persistenceQueue = persistenceQueue
             .then(() =>
               this.memory.appendAssistantChunk(
@@ -1080,8 +1144,11 @@ export class BaseChannel {
                 'semantic_block',
                 {
                   render: {
+                    description: render.description || null,
                     fileName: render.fileName || render.name || null,
                     localPath: render.localPath || null,
+                    text: render.text || null,
+                    title: render.title || null,
                     type: render.type || null,
                     url:
                       render.imageUrl ||
@@ -1089,6 +1156,7 @@ export class BaseChannel {
                       render.fileUrl ||
                       render.videoUrl ||
                       render.url ||
+                      render.href ||
                       null,
                   },
                   text: textBlock || '',
@@ -1107,18 +1175,24 @@ export class BaseChannel {
         }
         sendQueue = sendQueue
           .then(async () => {
+            const rawRender = meta.extraRender
+            const renderItems = Array.isArray(rawRender)
+              ? rawRender
+              : rawRender
+                ? [rawRender]
+                : []
+            const primaryRender = renderItems[0] || {}
+
             // 1. 原生图片下发 (Image)
             if (
               meta.image ||
-              meta.extraRender?.type === 'image' ||
-              meta.extraRender?.imageUrl
+              primaryRender?.type === 'image' ||
+              primaryRender?.imageUrl
             ) {
               const imgUrl =
-                meta.image ||
-                meta.extraRender?.imageUrl ||
-                meta.extraRender?.url
-              const imgBuffer = meta.imageBuffer || meta.extraRender?.buffer
-              const localPath = meta.extraRender?.localPath
+                meta.image || primaryRender?.imageUrl || primaryRender?.url
+              const imgBuffer = meta.imageBuffer || primaryRender?.buffer
+              const localPath = primaryRender?.localPath
               this.log?.info?.(
                 `[${this.channelType}] 🖼️ 正在发送原生图片: ${imgUrl || localPath || 'buffer'}`,
               )
@@ -1152,20 +1226,18 @@ export class BaseChannel {
             // 2. 原生语音下发 (Audio / Voice - Silk 转码)
             else if (
               meta.audio ||
-              meta.extraRender?.type === 'audio' ||
-              meta.extraRender?.type === 'voice' ||
-              meta.extraRender?.audioUrl
+              primaryRender?.type === 'audio' ||
+              primaryRender?.type === 'voice' ||
+              primaryRender?.audioUrl
             ) {
               const audioUrl =
-                meta.audio ||
-                meta.extraRender?.audioUrl ||
-                meta.extraRender?.url
-              const audioBuffer = meta.audioBuffer || meta.extraRender?.buffer
-              const localPath = meta.extraRender?.localPath
+                meta.audio || primaryRender?.audioUrl || primaryRender?.url
+              const audioBuffer = meta.audioBuffer || primaryRender?.buffer
+              const localPath = primaryRender?.localPath
               const durationMs =
-                meta.extraRender?.durationMs || meta.extraRender?.duration
+                primaryRender?.durationMs || primaryRender?.duration
               const audioText =
-                meta.extraRender?.text || meta.extraRender?.title || ''
+                primaryRender?.text || primaryRender?.title || ''
               this.log?.info?.(
                 `[${this.channelType}] 🎙️ 正在发送原生语音: ${audioUrl || localPath || 'buffer'}`,
               )
@@ -1174,6 +1246,8 @@ export class BaseChannel {
                   buffer: audioBuffer,
                   contextToken: ctx.contextToken,
                   durationMs,
+                  extraRender: primaryRender,
+                  fileName: primaryRender?.fileName || primaryRender?.name,
                   localPath,
                   text: audioText,
                   to: ctx.from,
@@ -1201,17 +1275,17 @@ export class BaseChannel {
             // 3. 原生文件下发 (File / Document)
             else if (
               meta.file ||
-              meta.extraRender?.type === 'file' ||
-              meta.extraRender?.type === 'document' ||
-              meta.extraRender?.fileUrl
+              primaryRender?.type === 'file' ||
+              primaryRender?.type === 'document' ||
+              primaryRender?.fileUrl
             ) {
               const fileUrl =
-                meta.file || meta.extraRender?.fileUrl || meta.extraRender?.url
-              const fileBuffer = meta.fileBuffer || meta.extraRender?.buffer
-              const localPath = meta.extraRender?.localPath
+                meta.file || primaryRender?.fileUrl || primaryRender?.url
+              const fileBuffer = meta.fileBuffer || primaryRender?.buffer
+              const localPath = primaryRender?.localPath
               const fileName =
-                meta.extraRender?.fileName ||
-                meta.extraRender?.name ||
+                primaryRender?.fileName ||
+                primaryRender?.name ||
                 (fileUrl ? fileUrl.split('/').pop() : 'file')
               this.log?.info?.(
                 `[${this.channelType}] 📁 正在发送原生文件: ${fileName}`,
@@ -1247,17 +1321,15 @@ export class BaseChannel {
             // 4. 原生视频下发 (Video)
             else if (
               meta.video ||
-              meta.extraRender?.type === 'video' ||
-              meta.extraRender?.videoUrl
+              primaryRender?.type === 'video' ||
+              primaryRender?.videoUrl
             ) {
               const videoUrl =
-                meta.video ||
-                meta.extraRender?.videoUrl ||
-                meta.extraRender?.url
-              const videoBuffer = meta.videoBuffer || meta.extraRender?.buffer
-              const localPath = meta.extraRender?.localPath
+                meta.video || primaryRender?.videoUrl || primaryRender?.url
+              const videoBuffer = meta.videoBuffer || primaryRender?.buffer
+              const localPath = primaryRender?.localPath
               const durationMs =
-                meta.extraRender?.durationMs || meta.extraRender?.duration
+                primaryRender?.durationMs || primaryRender?.duration
               this.log?.info?.(
                 `[${this.channelType}] 🎬 正在发送原生视频: ${videoUrl || localPath || 'buffer'}`,
               )
@@ -1289,7 +1361,89 @@ export class BaseChannel {
               await new Promise((r) => setTimeout(r, 100))
             }
 
-            // 5. 文本分条下发
+            // 5. 结构化链接/网页卡片下发 (Link / Web Preview)
+            const linkCandidates = []
+            const seenLinkUrls = new Set()
+            for (const item of renderItems) {
+              if (
+                item &&
+                (item.type === 'link' ||
+                  (!item.type && (item.url || item.href)))
+              ) {
+                const u = item.url || item.href
+                if (u && !seenLinkUrls.has(u)) {
+                  seenLinkUrls.add(u)
+                  linkCandidates.push(item)
+                }
+              }
+            }
+            if (meta.link && !seenLinkUrls.has(meta.link)) {
+              seenLinkUrls.add(meta.link)
+              linkCandidates.push({ url: meta.link })
+            }
+            if (linkCandidates.length > 0) {
+              for (const item of linkCandidates) {
+                const linkUrl = item.url || item.href
+                if (linkUrl) {
+                  this.log?.info?.(
+                    `[${this.channelType}] 🔗 正在下发结构化链接: ${linkUrl}`,
+                  )
+                  try {
+                    const sendRes = await this.doSendLink({
+                      contextToken: ctx.contextToken,
+                      description: item.description || null,
+                      extraRender: item,
+                      text: item.text || null,
+                      title: item.title || null,
+                      to: ctx.from,
+                      url: linkUrl,
+                    })
+                    const label =
+                      item.text || item.title || '打开已发布的网页 🌐'
+                    emittedBlocks.push(`${label}\n🔗 链接: ${linkUrl}`)
+                    this.log?.info?.(
+                      `[${this.channelType}] 📤 链接消息发送结果: ${JSON.stringify(sendRes)}`,
+                    )
+                  } catch (e) {
+                    this.log?.warn?.(
+                      `[${this.channelType}] ⚠️ 结构化链接发送异常 (${e.message})`,
+                    )
+                  }
+                  await new Promise((r) => setTimeout(r, 100))
+                }
+              }
+            }
+
+            // 6. 结构化卡片/UI富媒体下发 (Card / UI)
+            const cardCandidates = renderItems.filter(
+              (r) => r && (r.type === 'card' || r.type === 'html'),
+            )
+            if (cardCandidates.length > 0) {
+              for (const item of cardCandidates) {
+                this.log?.info?.(
+                  `[${this.channelType}] 🃏 正在下发结构化卡片: ${item.title || item.type}`,
+                )
+                try {
+                  const sendRes = await this.doSendCard({
+                    card: item,
+                    contextToken: ctx.contextToken,
+                    extraRender: item,
+                    to: ctx.from,
+                  })
+                  emittedBlocks.push(item.text || item.title || '[富媒体卡片]')
+                  this.log?.info?.(
+                    `[${this.channelType}] 📤 卡片消息发送结果: ${JSON.stringify(sendRes)}`,
+                  )
+                } catch (e) {
+                  this.log?.warn?.(
+                    `[${this.channelType}] ⚠️ 结构化卡片发送异常 (${e.message})`,
+                  )
+                }
+                await new Promise((r) => setTimeout(r, 100))
+              }
+            }
+
+            // 7. 普通文本分条下发
             if (textBlock?.trim()) {
               const segments = this.splitTextToSegments(textBlock.trim(), ctx)
               for (const seg of segments) {
