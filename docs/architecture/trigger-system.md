@@ -1,6 +1,6 @@
-# MioChat Trigger Architecture v0.4
+# MioChat Trigger Architecture v0.5
 
-> 状态：Registry 数据库化已实现；路由与脚本安全收口待实施
+> 状态：Registry 数据库化与长驻哨兵进程已实现；脚本按 AdminOnly 受信任代码运行
 > 日期：2026-08-31
 > 依赖：[`session-persistence.md`](./session-persistence.md)
 > 可执行 schema：[`session-persistence-schema.prisma`](./session-persistence-schema.prisma)
@@ -14,16 +14,14 @@ Trigger 把“事件 → 唤醒指定 Channel 会话”定义为系统原语，�
 当前已实现：
 
 - `TriggerRegistry` Prisma CRUD、软删除与执行审计；
-- `TriggerRunner` 子进程执行和 stdout `@WAKE@` 协议；
+- `TriggerRunner` 长驻子进程、PID 生命周期和 stdout `@WAKE@` 协议；
 - `WakeInjector` 冷却、日限额和会话注入；
-- `trigger_manage` 与 `/triggers`；
-- script/cron 轮询运行。
+- `sentinel` 与 `/triggers`；
+- cron 仅负责纯时间任务；sentinel 脚本自行循环/等待条件。
 
 仍待实现：
 
-- 精确 channel 路由；
 - payload 白名单、长度上限和全局熔断；
-- 脚本环境变量白名单与更强隔离；
 - webhook。
 
 ## 2. 分层
@@ -78,17 +76,22 @@ Trigger 与 Session 共用一套关系图。权威 schema 位于
 未知字段丢弃。非法 JSON、超限 payload 或非 object data 都只记录失败审计，不进入
 LLM prompt。
 
+每个脚本必须实现两个一级运行参数：`test` 和 `loop`。缺少参数或参数不是这两个
+值时，脚本必须立即以非零码退出。`test` 只做一次快速可用性检查并退出；后台启动
+只传 `loop`，由脚本自行循环、等待和重试。系统的 `sentinel(action="run")` 只传
+`test`，不会用调试模式启动后台循环。
+
 标准流程：
 
-1. 加载未删除且 enabled 的 Trigger；
-2. 检查 trigger 冷却、日预算和 agent 全局预算；
-3. 校验、截断并规范化 payload；
-4. 精确查找 `channelId + agentId` 对应的运行实例；
-5. 验证 session 存在且归属于同一 agent；
+1. 加载未删除且 enabled 的 Trigger，并启动对应的长驻 script 子进程；
+2. 脚本自行循环/等待条件，在 stdout 输出一条 `@WAKE@`；
+3. 检查 trigger 冷却和日预算；
+4. 校验并规范化 payload；
+5. 精确查找 `channelId + agentId` 对应的运行实例；
 6. 插值 promptTemplate；
 7. 通过 SessionPersistence 立即落盘 user 消息，再进入 Channel session FIFO；
 8. 写 TriggerExecution；
-9. persistent 更新计数；once 设置 deletedAt。
+9. 停止当前脚本进程；persistent 重新拉起，once 设置 deletedAt。
 
 任何一步失败都必须记录 Execution，且不得 fallback 到任意 Channel。
 
@@ -98,10 +101,21 @@ Trigger 创建时必须绑定 `agentId`，正常情况下同时绑定 `channelId
 
 - `channelId` 缺失：只允许迁移期旧数据，自动 disable 并要求重新绑定；
 - `sessionId` 缺失：创建时可解析 agent active session 并将结果固化，运行时不动态漂移；
-- Channel 未运行：记录 `target_unavailable`，不选择第一个 active channel；
+- Channel 未运行：记录 `target_unavailable`，不选择第一个 active channel，并停止/禁用
+  当前哨兵，待 Channel 恢复后由用户重新 enable；
 - Session 不属于 Agent：记录 `target_mismatch` 并 disable Trigger。
 
-## 6. 生命周期与计数
+## 6. 进程生命周期与主进程退出
+
+当前实现使用 Node.js `child_process.spawn()`，不是 `exec()`。后台哨兵以独立进程组
+启动，主进程在停止、删除、禁用和正常退出时同步终止对应进程组，并在运行态记录
+PID、启动时间、最近退出和错误状态。
+
+操作系统不会在 Node 主进程被 `SIGKILL` 强杀、机器断电或内核崩溃时替主进程执行
+清理，因此这种极端情况下不能保证子进程自动停止；脚本自身也应做好父进程失联后
+的退出策略。
+
+## 7. 生命周期与计数
 
 区分两个计数：
 
@@ -114,23 +128,17 @@ Trigger 创建时必须绑定 `agentId`，正常情况下同时绑定 `channelId
 once 仅在消息成功落盘并进入处理队列后软删除。注入失败时保留 enabled 状态，由
 冷却和重试策略处理。
 
-## 7. Script 安全
+## 8. Script 安全
 
-子进程不是安全沙箱。当前实现会继承完整 `process.env`，所以在完成以下措施前，
-Trigger 脚本只能视为受信任的本地管理员代码：
+子进程不是安全沙箱。`sentinel` 当前为 AdminOnly 工具，脚本按受信任的本地管理员
+代码运行，以兼容 OpenCV、Python 虚拟环境和其他本地工具链；普通 `spawn()` 不应
+被描述为不受信任代码隔离。
 
-- 默认环境只传 PATH、LANG、TRIGGER_ID、TRIGGER_AGENT_ID、TRIGGER_SESSION_ID 和
-  TRIGGER_PARAMS；
-- API key、数据库 URL、管理口令不得继承；
-- scriptPath 必须 realpath 后位于配置的 scripts 根目录内；
-- 禁止符号链接逃逸；
-- 10 秒超时，stdout/stderr 分别限制 64 KiB；
-- 并发执行数设全局上限；
-- 可选部署级 sandbox/container 才能声称“不受信任脚本隔离”。
+主进程仍限制 stdout/stderr 的单次缓存，并在收到第一条有效 `@WAKE@` 后停止当前
+进程。脚本的内部循环没有固定超时；`sentinel(action="run")` 的调试试跑仍使用
+短超时。
 
-文档和 UI 不应把普通 `spawn()` 描述为安全隔离。
-
-## 8. Webhook（P2）
+## 9. Webhook（P2）
 
 ```text
 POST /channels/:channelId/triggers/:triggerId/hook
@@ -139,7 +147,7 @@ POST /channels/:channelId/triggers/:triggerId/hook
 要求：secret 只存 hash、恒定时间比较、请求体大小限制、来源频控、payload 走同一
 白名单。Webhook 只允许发起 wake，不能直接执行工具、Shell 或重启服务。
 
-## 9. 数据迁移
+## 10. 数据迁移
 
 从 `channels-data/triggers/triggers.json` 与 `executions.json` 导入：
 
@@ -155,7 +163,7 @@ POST /channels/:channelId/triggers/:triggerId/hook
 - 迁移账本复用 `LegacyMigration`，逐文件记录 hash 和状态；
 - 自动迁移验证完成后直接使用 DB 权威数据，旧 JSON 只读保留。
 
-## 10. 与 Session Persistence 的关系
+## 11. 与 Session Persistence 的关系
 
 Trigger 不自行拼装或写 session JSON。WakeInjector 调用 Channel 的统一注入入口，
 底层由 SessionPersistence 完成 user Message 落盘和 assistant placeholder 创建。
@@ -163,20 +171,21 @@ Trigger 不自行拼装或写 session JSON。WakeInjector 调用 Channel 的统�
 TriggerExecution 与 Message 不建立强外键。审计记录保存 `sessionId` 与注入产生的
 `messageId` 快照即可，避免删除聊天历史时破坏系统审计。
 
-## 11. 验收标准
+## 12. 验收标准
 
 - 现有 WakeProtocol/Registry/Runner/Injector/tool 测试在 DB adapter 下继续通过；
 - once 唤醒后 list 不可见，但 Execution 可查询；
 - 删除 Trigger、Channel 或 Session 后历史 Execution 仍存在；
 - 两个运行 Channel 属于不同 agent 时，永不发生 fallback 误投；
-- payload 超限、路径逃逸、超时、日预算和全局预算均有审计；
+- payload 超限、脚本异常、超时、日预算和全局预算均有审计；
 - 同一 Trigger 并发触发只允许一个请求越过冷却；
+- persistent 哨兵每次唤醒后只有一个活动 PID，停止/禁用/删除不会遗留子进程；
 - 迁移脚本重复执行不产生重复 Trigger 或 Execution。
 
-## 12. 分期
+## 13. 分期
 
 - P1.1：Registry DB adapter、迁移与软删除（已完成）；精确路由待收口；
-- P1.2：payload/环境/路径/并发安全收口；
+- P1.2：payload/环境/并发安全收口；脚本路径按 AdminOnly 受信任代码处理；
 - P2：webhook；
 - P3：管理面板和统计。
 

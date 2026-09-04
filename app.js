@@ -340,7 +340,7 @@ async function startApp() {
     // 初始化定时任务调度器
     const taskScheduler = (await import('./lib/cron.js')).default
     const { initChannelController, getChannelRuntime } = await import('./lib/server/http/controllers/channelController.js')
-    initChannelController() // 确保 deps 已初始化（幂等）
+    initChannelController({ startTriggers: false }) // 确保 deps 已初始化（幂等）
 
     // 自动恢复上次 running 状态的渠道（持久化开关）
     const channelRuntime = getChannelRuntime()
@@ -350,6 +350,10 @@ async function startApp() {
     } catch (e) {
       logger.warn('[ChannelRuntime] 自动恢复渠道时出错:', e.message)
     }
+
+    // 渠道恢复完成后再启动哨兵，避免启动窗口把目标 Channel 误判为不可用。
+    const { getTriggerService } = await import('./lib/triggers/index.js')
+    await getTriggerService().startScheduler()
 
     await taskScheduler.initialize(global.middleware.llm, channelRuntime)
     

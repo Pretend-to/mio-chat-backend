@@ -178,16 +178,25 @@ export class SlashHandler {
         if (!arg || arg === 'ls' || arg === 'list') {
           const list = await registry.list({ agentId })
           if (list.length === 0) {
-            return wrap('【触发器管理】当前未配置任何后台触发器与哨兵。\n\n提示：可以让助手通过 trigger_manage 自主编写并创建哨兵任务。')
+            return wrap(
+              '【触发器管理】当前未配置任何后台触发器与哨兵。\n\n提示：可以让助手通过 sentinel 自主编写并创建哨兵任务。',
+            )
           }
-          const lines = ['【后台触发器与哨兵管理】', `已登记触发器 (${list.length} 个):`]
+          const lines = [
+            '【后台触发器与哨兵管理】',
+            `已登记触发器 (${list.length} 个):`,
+          ]
           for (const t of list) {
             const status = t.enabled ? '🟢 [运行中]' : '⚪ [已禁用]'
             const modeTag = t.mode === 'once' ? '⚡一次性' : '🔄持续'
             const fires = `触发/唤醒: ${t.fireCount || 0}/${t.wakeCount || 0}`
-            lines.push(`  ${status} [${modeTag}] ${t.id} (${t.type}) - ${fires}`)
+            lines.push(
+              `  ${status} [${modeTag}] ${t.id} (${t.type}) - ${fires}`,
+            )
             if (t.lastFiredAt) {
-              lines.push(`    ↳ 最近唤醒: ${new Date(t.lastFiredAt).toLocaleTimeString()}`)
+              lines.push(
+                `    ↳ 最近唤醒: ${new Date(t.lastFiredAt).toLocaleTimeString()}`,
+              )
             }
           }
           lines.push('\n指令用法：')
@@ -204,36 +213,59 @@ export class SlashHandler {
         }
 
         if (subCmd === 'on' || subCmd === 'enable') {
-          const updated = await registry.update(targetId, { enabled: true })
-          return wrap(updated ? `触发器 "${targetId}" 已成功启用 🟢` : `未找到触发器 "${targetId}" ❌`)
+          const updated = await service.enableTrigger(targetId, { agentId })
+          return wrap(
+            updated
+              ? `触发器 "${targetId}" 已成功启用 🟢`
+              : `未找到触发器 "${targetId}" ❌`,
+          )
         }
 
         if (subCmd === 'off' || subCmd === 'disable') {
-          const updated = await registry.update(targetId, { enabled: false })
-          return wrap(updated ? `触发器 "${targetId}" 已成功禁用 ⚪` : `未找到触发器 "${targetId}" ❌`)
+          const updated = await service.disableTrigger(targetId, { agentId })
+          return wrap(
+            updated
+              ? `触发器 "${targetId}" 已成功禁用 ⚪`
+              : `未找到触发器 "${targetId}" ❌`,
+          )
         }
 
         if (subCmd === 'rm' || subCmd === 'delete' || subCmd === 'remove') {
-          const ok = await registry.remove(targetId)
-          return wrap(ok ? `触发器 "${targetId}" 及关联脚本已成功删除 🗑️` : `未找到触发器 "${targetId}" ❌`)
+          const ok = await service.removeTrigger(targetId, { agentId })
+          return wrap(
+            ok
+              ? `触发器 "${targetId}" 及关联脚本已成功删除 🗑️`
+              : `未找到触发器 "${targetId}" ❌`,
+          )
         }
 
         if (subCmd === 'run' || subCmd === 'test') {
           try {
-            const res = await service.runOnce(targetId, { forceWake: false })
+            const res = await service.runOnce(targetId, {
+              agentId,
+              forceWake: false,
+            })
             if (res.wake) {
-              return wrap(`🧪 哨兵 "${targetId}" 试跑成功，发出唤醒契约行！\n原因: ${res.reason || 'WAKE'}\n耗时: ${res.durationMs}ms`)
+              return wrap(
+                `🧪 哨兵 "${targetId}" 试跑成功，发出唤醒契约行！\n原因: ${res.reason || 'WAKE'}\n耗时: ${res.durationMs}ms`,
+              )
             }
             if (res.error) {
-              return wrap(`⚠️ 哨兵 "${targetId}" 试跑异常: ${res.error}\n耗时: ${res.durationMs}ms`)
+              return wrap(
+                `⚠️ 哨兵 "${targetId}" 试跑异常: ${res.error}\n耗时: ${res.durationMs}ms`,
+              )
             }
-            return wrap(`✅ 哨兵 "${targetId}" 试跑完毕，当前未满足唤醒条件。\n耗时: ${res.durationMs}ms`)
+            return wrap(
+              `✅ 哨兵 "${targetId}" 试跑完毕，当前未满足唤醒条件。\n耗时: ${res.durationMs}ms`,
+            )
           } catch (e) {
             return wrap(`❌ 执行试跑失败: ${e.message}`)
           }
         }
 
-        return wrap('未知指令，请使用 /triggers ls, /triggers on <id>, /triggers off <id>, /triggers rm <id> 或 /triggers run <id>')
+        return wrap(
+          '未知指令，请使用 /triggers ls, /triggers on <id>, /triggers off <id>, /triggers rm <id> 或 /triggers run <id>',
+        )
       }
 
       case 'think':

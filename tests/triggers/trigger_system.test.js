@@ -6,9 +6,14 @@ import { WakeProtocol } from '../../lib/triggers/WakeProtocol.js'
 import { TriggerRegistry } from '../../lib/triggers/TriggerRegistry.js'
 import { TriggerRunner } from '../../lib/triggers/TriggerRunner.js'
 import { WakeInjector } from '../../lib/triggers/WakeInjector.js'
-import TriggerManage from '../../lib/plugins/ai-plugin/tools/trigger_manage.js'
+import { TriggerService } from '../../lib/triggers/index.js'
+import SentinelTool from '../../lib/plugins/ai-plugin/tools/sentinel.js'
 
-const TEST_DATA_DIR = path.join(process.cwd(), 'tests-data', 'test-triggers-' + Date.now())
+const TEST_DATA_DIR = path.join(
+  process.cwd(),
+  'tests-data',
+  'test-triggers-' + Date.now(),
+)
 
 test.before(async () => {
   await fs.promises.mkdir(TEST_DATA_DIR, { recursive: true })
@@ -96,10 +101,14 @@ test('TriggerRunner: 真实子进程安全执行与超时保护', async () => {
 
   // 1. 正常运行脚本并输出契约
   const scriptFile = path.join(TEST_DATA_DIR, 'test_runner_normal.js')
-  await fs.promises.writeFile(scriptFile, `
+  await fs.promises.writeFile(
+    scriptFile,
+    `
+    if (process.argv[2] !== 'test' && process.argv[2] !== 'loop') process.exit(64);
     console.log("Preparing check...");
-    console.log("@WAKE@ " + JSON.stringify({ wake: true, reason: "ETH 突破 3000", data: { ethPrice: 3050 } }));
-  `)
+    console.log("@WAKE@ " + JSON.stringify({ wake: true, reason: "mode=" + process.argv[2], data: { ethPrice: 3050 } }));
+  `,
+  )
 
   const res = await runner.executeScript({
     id: 'trg_eth',
@@ -107,13 +116,16 @@ test('TriggerRunner: 真实子进程安全执行与超时保护', async () => {
   })
 
   assert.equal(res.wake, true)
-  assert.equal(res.reason, 'ETH 突破 3000')
+  assert.equal(res.reason, 'mode=test')
   assert.equal(res.data.ethPrice, 3050)
   assert.ok(res.durationMs >= 0)
 
   // 2. 脚本无 WAKE 输出
   const silentScript = path.join(TEST_DATA_DIR, 'test_runner_silent.js')
-  await fs.promises.writeFile(silentScript, `console.log("Everything is normal");`)
+  await fs.promises.writeFile(
+    silentScript,
+    `if (process.argv[2] !== 'test' && process.argv[2] !== 'loop') process.exit(64); console.log("Everything is normal");`,
+  )
   const silentRes = await runner.executeScript({
     id: 'trg_silent',
     scriptPath: silentScript,
@@ -122,7 +134,9 @@ test('TriggerRunner: 真实子进程安全执行与超时保护', async () => {
 })
 
 test('WakeInjector: 会话注入、冷却限制与 once 生命周期自动销毁', async () => {
-  const registry = new TriggerRegistry({ dataDir: path.join(TEST_DATA_DIR, 'injector') })
+  const registry = new TriggerRegistry({
+    dataDir: path.join(TEST_DATA_DIR, 'injector'),
+  })
   const injectedMessages = []
 
   const mockChannel = {
@@ -132,11 +146,11 @@ test('WakeInjector: 会话注入、冷却限制与 once 生命周期自动销毁
     memory: {
       agentId: 'wechat-master',
       getActiveSession: async () => 'session_123',
-    }
+    },
   }
 
   const mockRuntime = {
-    running: new Map([['c_1', { chn: mockChannel }]])
+    running: new Map([['c_1', { chn: mockChannel }]]),
   }
 
   const injector = new WakeInjector({
@@ -174,48 +188,101 @@ test('WakeInjector: 会话注入、冷却限制与 once 生命周期自动销毁
   assert.equal(logs[0].status, 'woken')
 })
 
-test('trigger_manage Tool: 创建、试跑、管理全生命周期', async () => {
-  const tool = new TriggerManage()
+test('sentinel Tool: 两步流创建、试跑、管理全生命周期', async () => {
+  const service = new TriggerService({
+    registry: new TriggerRegistry({
+      dataDir: path.join(TEST_DATA_DIR, 'tool-service'),
+    }),
+  })
+  const tool = new SentinelTool({ service })
+  service.setChannelRuntime({
+    running: new Map([
+      [
+        'sentinel-test-channel',
+        {
+          channel: { agentId: 'wechat-master', id: 'sentinel-test-channel' },
+          chn: {
+            appendUserMessage: async () => {},
+            channelId: 'sentinel-test-channel',
+            id: 'sentinel-test-channel',
+            memory: {
+              agentId: 'wechat-master',
+              getActiveSession: async () => 's_test',
+            },
+          },
+        },
+      ],
+    ]),
+  })
 
-  // 1. 创建
+  // 1. 第一步：先落盘独立的哨兵脚本文件
+  const testScriptPath = path.join(TEST_DATA_DIR, 'sentinel_sol_test.js')
+  await fs.promises.writeFile(
+    testScriptPath,
+    `
+    if (process.argv[2] !== 'test' && process.argv[2] !== 'loop') process.exit(64);
+    const params = JSON.parse(process.env.TRIGGER_PARAMS || '{}');
+    console.log("@WAKE@ " + JSON.stringify({ wake: true, reason: "SOL 突破 " + (params.target || 200), data: { sol: 205 } }));
+    `,
+    'utf8',
+  )
+
+  // 2. 第二步：调用 sentinel 工具传入 scriptPath 与 params 启动哨兵
   const createRes = await tool.execute({
     params: {
       action: 'create',
       id: 'tool_test_trg',
-      type: 'script',
       mode: 'persistent',
-      scriptCode: `console.log("@WAKE@ " + JSON.stringify({ wake: true, reason: "SOL 突破 200", data: { sol: 205 } }))`,
-      scriptLang: 'js',
+      params: { target: 200 },
       promptTemplate: 'SOL 警报: {{payload.reason}}',
+      scriptPath: testScriptPath,
     },
     channel: {
-      memory: { agentId: 'wechat-master', getActiveSession: async () => 's_test' }
-    }
+      id: 'sentinel-test-channel',
+      memory: {
+        agentId: 'wechat-master',
+        getActiveSession: async () => 's_test',
+      },
+    },
   })
 
   assert.equal(createRes.success, true)
   assert.equal(createRes.trigger.id, 'tool_test_trg')
+  assert.equal(createRes.trigger.scriptPath, testScriptPath)
 
-  // 2. 试跑 (run_once)
+  // 3. 试跑 (run)
   const runRes = await tool.execute({
     params: {
-      action: 'run_once',
+      action: 'run',
       id: 'tool_test_trg',
-    }
+    },
   })
   assert.equal(runRes.success, true)
   assert.equal(runRes.result.wake, true)
   assert.equal(runRes.result.reason, 'SOL 突破 200')
 
-  // 3. 列表
+  // 4. 列表 (list)
   const listRes = await tool.execute({
-    params: { action: 'list' }
+    params: { action: 'list' },
   })
   assert.ok(listRes.count >= 1)
+  const found = listRes.triggers.find((t) => t.id === 'tool_test_trg')
+  assert.ok(found)
+  assert.ok(
+    ['running', 'waking', 'woken', 'restarting', 'stopped'].includes(found.status),
+    JSON.stringify(found),
+  )
 
-  // 4. 删除
+  // 5. 校验缺少 scriptPath 时报错
+  await assert.rejects(async () => {
+    await tool.execute({
+      params: { action: 'create', id: 'fail_trg' },
+    })
+  }, /必须提供已落盘的 scriptPath/)
+
+  // 6. 删除 (remove)
   const rmRes = await tool.execute({
-    params: { action: 'remove', id: 'tool_test_trg' }
+    params: { action: 'remove', id: 'tool_test_trg' },
   })
   assert.equal(rmRes.success, true)
 })
