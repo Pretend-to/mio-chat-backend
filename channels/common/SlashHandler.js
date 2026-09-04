@@ -21,7 +21,10 @@
  */
 import { getRegisteredSystemToolNames } from '../llm.js'
 import { getTriggerService } from '../../lib/triggers/index.js'
-import { getSessionYolo, setSessionYolo } from '../../lib/chat/sessionExecutionState.js'
+import {
+  getSessionYolo,
+  setSessionYolo,
+} from '../../lib/chat/sessionExecutionState.js'
 
 export class SlashHandler {
   /**
@@ -67,7 +70,7 @@ export class SlashHandler {
             '  • /soul [set 设定] 查看或重设灵魂人设',
             '  • /memory 查看跨会话长期记忆',
             '  • /context 查看当前会话记忆结晶',
-          ].join('\n')
+          ].join('\n'),
         )
       }
 
@@ -80,7 +83,9 @@ export class SlashHandler {
       case 'break': {
         let count = 0
         if (this.channel?.activeJobs && this.channel.activeJobs.size > 0) {
-          for (const [jobSid, job] of Array.from(this.channel.activeJobs.entries())) {
+          for (const [jobSid, job] of Array.from(
+            this.channel.activeJobs.entries(),
+          )) {
             try {
               if (typeof job.abort === 'function') {
                 job.abort()
@@ -110,12 +115,18 @@ export class SlashHandler {
 
       case 'tools': {
         const defaultChannelTools = getRegisteredSystemToolNames()
-        const currentTools = (await this.memory.getAgentMeta('tools', null)) || defaultChannelTools
+        const currentTools =
+          (await this.memory.getAgentMeta('tools', null)) || defaultChannelTools
         const enabledSet = new Set(currentTools)
 
         if (!arg || arg === 'ls' || arg === 'list') {
-          const allTools = Array.from(new Set([...defaultChannelTools, ...currentTools]))
-          const lines = ['【工具状态管理】', `当前已激活工具 (共 ${enabledSet.size} 个):`]
+          const allTools = Array.from(
+            new Set([...defaultChannelTools, ...currentTools]),
+          )
+          const lines = [
+            '【工具状态管理】',
+            `当前已激活工具 (共 ${enabledSet.size} 个):`,
+          ]
           for (const t of allTools) {
             const status = enabledSet.has(t) ? '✅ [已启用]' : '❌ [已禁用]'
             lines.push(`  ${status} ${t}`)
@@ -139,16 +150,20 @@ export class SlashHandler {
           if (!toolStr) return wrap('用法：/tools on <工具名1,工具名2>')
           const targets = toolStr.split(/[,，\s]+/).filter(Boolean)
           for (const target of targets) {
-            const matched = defaultChannelTools.filter(t => t === target || t.split('_mid_')[0] === target)
+            const matched = defaultChannelTools.filter(
+              (t) => t === target || t.split('_mid_')[0] === target,
+            )
             if (matched.length > 0) {
-              matched.forEach(m => enabledSet.add(m))
+              matched.forEach((m) => enabledSet.add(m))
             } else {
               enabledSet.add(target)
             }
           }
           const newList = Array.from(enabledSet)
           await this.memory.setAgentMeta('tools', newList)
-          return wrap(`已开启工具 [${targets.join(', ')}]，当前激活工具总计 ${newList.length} 个 ✅`)
+          return wrap(
+            `已开启工具 [${targets.join(', ')}]，当前激活工具总计 ${newList.length} 个 ✅`,
+          )
         }
 
         if (subCmd === 'off' || subCmd === 'disable') {
@@ -163,10 +178,14 @@ export class SlashHandler {
           }
           const newList = Array.from(enabledSet)
           await this.memory.setAgentMeta('tools', newList)
-          return wrap(`已禁用工具 [${targets.join(', ')}]，当前激活工具总计 ${newList.length} 个 🚫`)
+          return wrap(
+            `已禁用工具 [${targets.join(', ')}]，当前激活工具总计 ${newList.length} 个 🚫`,
+          )
         }
 
-        return wrap('未知指令，请使用 /tools ls, /tools on <工具名>, /tools off <工具名> 或 /tools reset')
+        return wrap(
+          '未知指令，请使用 /tools ls, /tools on <工具名>, /tools off <工具名> 或 /tools reset',
+        )
       }
 
       case 'trigger':
@@ -271,23 +290,38 @@ export class SlashHandler {
       case 'think':
       case 'reasoning': {
         const effortMap = {
-          '0': '0 (Off/关闭)',
-          '1': '1 (Low/浅度思考)',
-          '2': '2 (Medium/中度思考)',
-          '3': '3 (High/深度思考)',
-          '4': '4 (Max/极限思考)',
-          'high': '3 (High/深度思考)',
-          'low': '1 (Low/浅度思考)',
-          'max': '4 (Max/极限思考)',
-          'medium': '2 (Medium/中度思考)',
-          'off': '0 (Off/关闭)',
+          0: '0 (Off/关闭)',
+          1: '1 (Low/浅度思考)',
+          2: '2 (Medium/中度思考)',
+          3: '3 (High/深度思考)',
+          4: '4 (Max/极限思考)',
+          high: '3 (High/深度思考)',
+          low: '1 (Low/浅度思考)',
+          max: '4 (Max/极限思考)',
+          medium: '2 (Medium/中度思考)',
+          off: '0 (Off/关闭)',
         }
         const valMap = {
-          '0': 0, '1': 1, '2': 2, '3': 3, '4': 4,
-          'close': 0, 'high': 3, 'low': 1, 'max': 4, 'med': 2, 'medium': 2, 'none': 0, 'off': 0, 'ultra': 4
+          0: 0,
+          1: 1,
+          2: 2,
+          3: 3,
+          4: 4,
+          close: 0,
+          high: 3,
+          low: 1,
+          max: 4,
+          med: 2,
+          medium: 2,
+          none: 0,
+          off: 0,
+          ultra: 4,
         }
 
-        const currentEffort = await this.memory.getAgentMeta('reasoning_effort', 0)
+        const currentEffort = await this.memory.getAgentMeta(
+          'reasoning_effort',
+          0,
+        )
 
         if (!arg) {
           return wrap(
@@ -302,7 +336,7 @@ export class SlashHandler {
               `  • 2 或 medium : 中度推理 (默认)`,
               `  • 3 或 high : 深度推理 / 复杂解题`,
               `  • 4 或 max  : 极限推理 / 最大算力预算`,
-            ].join('\n')
+            ].join('\n'),
           )
         }
 
@@ -310,63 +344,81 @@ export class SlashHandler {
         if (normalizedArg in valMap) {
           const targetLevel = valMap[normalizedArg]
           await this.memory.setAgentMeta('reasoning_effort', targetLevel)
-          return wrap(`思考/推理强度已设置为: ${effortMap[String(targetLevel)]} ✅`)
+          return wrap(
+            `思考/推理强度已设置为: ${effortMap[String(targetLevel)]} ✅`,
+          )
         }
 
-        return wrap(`未知档位 "${arg}"，有效档位: 0(off), 1(low), 2(medium), 3(high), 4(max)`)
+        return wrap(
+          `未知档位 "${arg}"，有效档位: 0(off), 1(low), 2(medium), 3(high), 4(max)`,
+        )
       }
 
       case 'yolo': {
         const sid = await active()
-        if (!sid) return wrap('当前无激活会话，无法设置会话级 YOLO。请先使用 /new 创建会话。')
+        if (!sid)
+          return wrap(
+            '当前无激活会话，无法设置会话级 YOLO。请先使用 /new 创建会话。',
+          )
 
         const normalized = arg.toLowerCase()
         if (!arg || normalized === 'status' || normalized === 'ls') {
           const enabled = this.channel?.isSessionYoloEnabled
             ? await this.channel.isSessionYoloEnabled(sid)
             : await getSessionYolo(this.memory, sid)
-          return wrap(`当前会话 YOLO 模式：${enabled ? '已开启 ⚠️' : '已关闭 ✅'}\n设置用法：/yolo on 或 /yolo off`)
+          return wrap(
+            `当前会话 YOLO 模式：${enabled ? '已开启 ⚠️' : '已关闭 ✅'}\n设置用法：/yolo on 或 /yolo off`,
+          )
         }
         if (normalized !== 'on' && normalized !== 'off') {
-          return wrap('用法：/yolo on|off（仅影响当前会话的所有 Shell 执行入口）')
+          return wrap(
+            '用法：/yolo on|off（仅影响当前会话的所有 Shell 执行入口）',
+          )
         }
 
         const enabled = normalized === 'on'
-        if (this.channel?.setSessionYolo) await this.channel.setSessionYolo(sid, enabled)
+        if (this.channel?.setSessionYolo)
+          await this.channel.setSessionYolo(sid, enabled)
         else await setSessionYolo(this.memory, sid, enabled)
-        return wrap(`当前会话 YOLO 模式已${enabled ? '开启 ⚠️（Shell 执行将跳过审批）' : '关闭 ✅（Shell 执行恢复审批策略）'}`)
+        return wrap(
+          `当前会话 YOLO 模式已${enabled ? '开启 ⚠️（Shell 执行将跳过审批）' : '关闭 ✅（Shell 执行恢复审批策略）'}`,
+        )
       }
 
       case 'status': {
         const sid = await active()
         const session = sid ? await this.memory.getSession(sid) : null
         const yolo = sid
-          ? (this.channel?.isSessionYoloEnabled
-              ? await this.channel.isSessionYoloEnabled(sid)
-              : await getSessionYolo(this.memory, sid))
+          ? this.channel?.isSessionYoloEnabled
+            ? await this.channel.isSessionYoloEnabled(sid)
+            : await getSessionYolo(this.memory, sid)
           : false
-        const tools = (await this.memory.getAgentMeta('tools', null)) || getRegisteredSystemToolNames()
+        const tools =
+          (await this.memory.getAgentMeta('tools', null)) ||
+          getRegisteredSystemToolNames()
         const effort = await this.memory.getAgentMeta('reasoning_effort', 0)
         const provider = this.channel?.provider || '默认'
         const model = this.channel?.model || '默认'
         const activeJobs = this.channel?.activeJobs?.size || 0
         const pendingApprovals = this.channel?.pendingConfirmations?.size || 0
-        return wrap([
-          '【当前状态】',
-          `会话: ${sid || '无'}${session?.title ? `「${session.title}」` : ''}`,
-          `YOLO: ${yolo ? '开启 ⚠️' : '关闭 ✅'}`,
-          `模型: ${provider}/${model}`,
-          `思考强度: ${effort}`,
-          `工具: ${Array.isArray(tools) ? tools.length : 0} 个`,
-          `运行中任务: ${activeJobs} 个`,
-          `待确认操作: ${pendingApprovals} 个`,
-        ].join('\n'))
+        return wrap(
+          [
+            '【当前状态】',
+            `会话: ${sid || '无'}${session?.title ? `「${session.title}」` : ''}`,
+            `YOLO: ${yolo ? '开启 ⚠️' : '关闭 ✅'}`,
+            `模型: ${provider}/${model}`,
+            `思考强度: ${effort}`,
+            `工具: ${Array.isArray(tools) ? tools.length : 0} 个`,
+            `运行中任务: ${activeJobs} 个`,
+            `待确认操作: ${pendingApprovals} 个`,
+          ].join('\n'),
+        )
       }
 
       case 'model': {
         if (!arg) {
           return wrap(
-            `【当前模型】\nProvider: ${this.channel.provider || '默认 (系统推荐)'}\nModel: ${this.channel.model || '默认 (渠道主模型)'}\n\n使用「/model ls」列出可用模型\n使用「/model <模型名>」切换模型\n使用「/model reset」恢复默认`
+            `【当前模型】\nProvider: ${this.channel.provider || '默认 (系统推荐)'}\nModel: ${this.channel.model || '默认 (渠道主模型)'}\n\n使用「/model ls」列出可用模型\n使用「/model <模型名>」切换模型\n使用「/model reset」恢复默认`,
           )
         }
         if (arg === 'ls' || arg === 'list') {
@@ -374,7 +426,7 @@ export class SlashHandler {
             return wrap('当前 LLM 驱动不支持模型列表查询')
           }
           const { models, defaultProvider } = this.channel.llm.getModels(true)
-          const MAX_PER_PROVIDER = 8   // 每个 provider 最多展示模型数
+          const MAX_PER_PROVIDER = 8 // 每个 provider 最多展示模型数
           const MAX_TOTAL_CHARS = 1200 // 总字符软上限
           const lines = ['【可用模型列表】']
           for (const [provider, modelGroups] of Object.entries(models || {})) {
@@ -390,17 +442,25 @@ export class SlashHandler {
             const shown = allModels.slice(0, MAX_PER_PROVIDER)
             for (const m of shown) lines.push(`  • ${m}`)
             if (allModels.length > MAX_PER_PROVIDER) {
-              lines.push(`  ...（共 ${allModels.length} 个，输入 /model <模型名> 直接切换）`)
+              lines.push(
+                `  ...（共 ${allModels.length} 个，输入 /model <模型名> 直接切换）`,
+              )
             }
           }
           lines.push('\n切换命令：/model <模型名>')
           const result = lines.join('\n')
-          return wrap(result.length > MAX_TOTAL_CHARS ? result.slice(0, MAX_TOTAL_CHARS) + '\n...（已截断）' : result)
+          return wrap(
+            result.length > MAX_TOTAL_CHARS
+              ? result.slice(0, MAX_TOTAL_CHARS) + '\n...（已截断）'
+              : result,
+          )
         }
         if (arg === 'reset') {
           this.channel.provider = this.channel.defaultProvider
           this.channel.model = this.channel.defaultModel
-          return wrap(`已重置为渠道默认模型配置：${this.channel.model || '系统默认'}`)
+          return wrap(
+            `已重置为渠道默认模型配置：${this.channel.model || '系统默认'}`,
+          )
         }
 
         // 切换模型（支持 provider/model 或直接 model）
@@ -411,7 +471,9 @@ export class SlashHandler {
         } else {
           this.channel.model = arg.trim()
         }
-        return wrap(`模型已切换为：${this.channel.provider ? `${this.channel.provider}/` : ''}${this.channel.model} ✅`)
+        return wrap(
+          `模型已切换为：${this.channel.provider ? `${this.channel.provider}/` : ''}${this.channel.model} ✅`,
+        )
       }
 
       case 'sessions':
@@ -420,8 +482,13 @@ export class SlashHandler {
         const cur = await active()
         return wrap(
           list.length
-            ? list.map((s) => `${s.id} ${s.id === cur ? '*' : ' '} ${s.title || ''} (${s.msgCount}条)`).join('\n')
-            : '暂无会话，用 /new 新建'
+            ? list
+                .map(
+                  (s) =>
+                    `${s.id} ${s.id === cur ? '*' : ' '} ${s.title || ''} (${s.msgCount}条)`,
+                )
+                .join('\n')
+            : '暂无会话，用 /new 新建',
         )
       }
 
@@ -463,7 +530,7 @@ export class SlashHandler {
         return wrap(
           soul
             ? `【灵魂】\n${soul}`
-            : '【灵魂】\n当前尚未设定专属人格。\n建议直接告诉我你希望我扮演的角色（如“叫你小管家，说话幽默一点”），或输入「/soul set <设定内容>」直接配置，我会为你永久记住～'
+            : '【灵魂】\n当前尚未设定专属人格。\n建议直接告诉我你希望我扮演的角色（如“叫你小管家，说话幽默一点”），或输入「/soul set <设定内容>」直接配置，我会为你永久记住～',
         )
       }
 
@@ -475,7 +542,9 @@ export class SlashHandler {
       case 'context': {
         const cur = await active()
         const crystal = cur ? await this.memory.getCrystal(cur) : ''
-        return wrap(crystal ? `【会话记忆】\n${crystal}` : '当前会话暂无结晶记忆')
+        return wrap(
+          crystal ? `【会话记忆】\n${crystal}` : '当前会话暂无结晶记忆',
+        )
       }
 
       case 'delete': {

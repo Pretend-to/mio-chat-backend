@@ -52,6 +52,25 @@ test('Crystallization - scanFrontendTurns', async (t) => {
     // Keep 3 turns -> should protect from 'run tool' (index 0) onwards
     assert.strictEqual(scanFrontendTurns(messages, 3), 0);
   });
+
+  await t.test('should treat recursive post messages as part of the current turn', () => {
+    const recursivePostMessage = { content: 'image context', role: 'user' };
+    Object.defineProperty(recursivePostMessage, '_is_recursive_context', {
+      enumerable: false,
+      value: true,
+    });
+    const messages = [
+      { content: 'previous', role: 'user' },
+      { content: 'previous answer', role: 'assistant' },
+      { content: 'current', role: 'user' },
+      { role: 'assistant', tool_calls: [{ id: 'call_1' }] },
+      { content: 'result', role: 'tool', tool_call_id: 'call_1' },
+      recursivePostMessage,
+    ];
+
+    assert.strictEqual(scanFrontendTurns(messages, 1), 2);
+    assert.strictEqual(scanFrontendTurns(messages, 2), 0);
+  });
 });
 
 import { parseXmlZones, buildXmlFromZones, applyMemoryCrud } from '../../lib/chat/llm/services/CrystallizationService.js';
