@@ -626,6 +626,43 @@ function assembleStructuredContent(chunks) {
   return content
 }
 
+/**
+ * 动态解析当前需要接收流式更新与完成状态的在线 Web 客户端。
+ * 无论是 Channel 侧原生入站还是 Web 侧发送，均采用动态连接池查询，
+ * 避免因单次网络波动/Socket实例重建导致的静态闭包失活与丢帧。
+ */
+export function resolveWebClients(ctx, isChannelApproval = false) {
+  if (isChannelApproval) return []
+
+  const clients = new Set()
+
+  // 1. 获取所有在线管理员客户端（动态连接池最新活跃对象）
+  const adminClients = sessions.getAllAdminClients() || []
+  for (const client of adminClients) {
+    if (client && client.socket) {
+      clients.add(client)
+    }
+  }
+
+  // 2. 若当前上下文持有发起端特定的 userId，动态获取该用户所有的活跃连接（支持多端及重连后实例）
+  const userId = ctx.webClient?.id || (ctx.isWeb ? ctx.from : null)
+  if (userId) {
+    const userClients = sessions.getClientsByUserId(userId, true) || []
+    for (const client of userClients) {
+      if (client && client.socket) {
+        clients.add(client)
+      }
+    }
+  }
+
+  // 3. 兜底保障：若初始捕获的 ctx.webClient 依然活跃，确保包含
+  if (ctx.webClient && ctx.webClient.socket) {
+    clients.add(ctx.webClient)
+  }
+
+  return Array.from(clients)
+}
+
 export function createBackendLlm(opts = {}) {
   const customService = opts.llmService || null
 
@@ -1078,7 +1115,7 @@ export function createBackendLlm(opts = {}) {
             // 渠道侧的审批卡片只能由渠道文本确认，不能写入/广播为 Web 可交互 action，
             // 否则 Web 会出现看得见但找不到 activeEvent 的“幽灵”确认框。
             if (!isChannelApproval) {
-              // 1. 并发写入 streamCache，支撑离线回放
+              // 1. 并发写入 streamCache，支撑离线回放（admin 与发起者双写）
               try {
                 streamCache.push(
                   'admin',
@@ -1087,15 +1124,20 @@ export function createBackendLlm(opts = {}) {
                   finalData,
                   dataWithMeta.metaData,
                 )
+                if (ctx.webClient?.id && ctx.webClient.id !== 'admin') {
+                  streamCache.push(
+                    ctx.webClient.id,
+                    resolvedContactorId,
+                    ctx.messageId,
+                    finalData,
+                    dataWithMeta.metaData,
+                  )
+                }
               } catch {}
             }
 
-            // 2. 若存在在线 Web 客户端，实时推送镜像流
-            const targetWebClients = isChannelApproval
-              ? []
-              : ctx.isWeb && ctx.webClient
-                ? [ctx.webClient]
-                : sessions.getAllAdminClients() || []
+            // 2. 若存在在线 Web 客户端，动态推送镜像流
+            const targetWebClients = resolveWebClients(ctx, isChannelApproval)
             if (targetWebClients.length > 0) {
               for (const client of targetWebClients) {
                 client.sendOpenaiMessage('update', dataWithMeta, ctx.messageId)
@@ -1331,12 +1373,16 @@ export function createBackendLlm(opts = {}) {
                   resolvedContactorId,
                   ctx.messageId,
                 )
+                if (ctx.webClient?.id && ctx.webClient.id !== 'admin') {
+                  streamCache.complete(
+                    ctx.webClient.id,
+                    resolvedContactorId,
+                    ctx.messageId,
+                  )
+                }
               } catch {}
             }
-            const targetWebClients =
-              ctx.isWeb && ctx.webClient
-                ? [ctx.webClient]
-                : sessions.getAllAdminClients() || []
+            const targetWebClients = resolveWebClients(ctx)
             if (targetWebClients.length > 0 && ctx.messageId) {
               for (const client of targetWebClients) {
                 client.popEvent?.(ctx.messageId)
@@ -1377,12 +1423,17 @@ export function createBackendLlm(opts = {}) {
                 ctx.messageId,
                 err?.message || String(err),
               )
+              if (ctx.webClient?.id && ctx.webClient.id !== 'admin') {
+                streamCache.fail(
+                  ctx.webClient.id,
+                  resolvedContactorId,
+                  ctx.messageId,
+                  err?.message || String(err),
+                )
+              }
             } catch {}
           }
-          const targetWebClients =
-            ctx.isWeb && ctx.webClient
-              ? [ctx.webClient]
-              : sessions.getAllAdminClients() || []
+          const targetWebClients = resolveWebClients(ctx)
           if (targetWebClients.length > 0 && ctx.messageId) {
             for (const client of targetWebClients) {
               client.popEvent?.(ctx.messageId)

@@ -885,9 +885,49 @@ export class BaseChannel {
       for (const item of batch) {
         item.resolve(res)
       }
+      // 若合并批次中包含被合并的 Web 请求，为其向 Web 客户端补发 complete 帧，消除前端死等 pending
+      for (let i = 0; i < batch.length - 1; i++) {
+        const itemCtx = batch[i].ctx
+        if (itemCtx?.isWeb && itemCtx?.messageId) {
+          const targetClients = sessions.getAllAdminClients() || []
+          for (const c of targetClients) {
+            c.popEvent?.(itemCtx.messageId)
+            c.sendOpenaiMessage?.(
+              'complete',
+              {
+                metaData: {
+                  contactorId: itemCtx.channelId || this.channelId || this.id,
+                  messageId: itemCtx.messageId,
+                },
+              },
+              itemCtx.messageId,
+            )
+          }
+        }
+      }
     } catch (err) {
       for (const item of batch) {
         item.reject(err)
+      }
+      for (let i = 0; i < batch.length - 1; i++) {
+        const itemCtx = batch[i].ctx
+        if (itemCtx?.isWeb && itemCtx?.messageId) {
+          const targetClients = sessions.getAllAdminClients() || []
+          for (const c of targetClients) {
+            c.popEvent?.(itemCtx.messageId)
+            c.sendOpenaiMessage?.(
+              'failed',
+              {
+                message: err.message || String(err),
+                metaData: {
+                  contactorId: itemCtx.channelId || this.channelId || this.id,
+                  messageId: itemCtx.messageId,
+                },
+              },
+              itemCtx.messageId,
+            )
+          }
+        }
       }
     } finally {
       await this._drainNextSessionBatch(sid)
