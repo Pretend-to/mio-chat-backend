@@ -15,7 +15,7 @@
     "define_ui_template",
     "manage_ui_templates",
     "draw",
-    "Skill"
+    "skill"
   ],
   "provider": "anyui-plugin"
 }
