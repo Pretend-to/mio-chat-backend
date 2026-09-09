@@ -3,16 +3,16 @@
  *
  * 职责：
  * 1. 统一为所有渠道（微信、飞书、钉钉、Telegram 等）构造标准化内部请求事件 (Internal Event)
- * 2. 默认装配注入全量核心工具集（ai-plugin, skill-plugin, terminal-pty, channel-manager-plugin）
- * 3. 自动将 SkillService 中的技能目录注册注入到 System Prompt (<skill_registry>)
+ * 2. 默认装配注入全量核心工具集（ai-plugin, terminal-pty, channel-manager-plugin）
+ * 3. 渐进式披露：技能由 ai-plugin 中的 skill 工具按需发现与加载，保护 Prompt Cache
  * 4. 监听底层流式输出并利用状态机将完成的文本块和原生媒体 (图片等) 实时推送给渠道
  * 5. 精密装配并还原历史消息中的 Tool Calls（ID、入参、运行结果）及思考链，防止多轮对话工具依赖断裂
  */
 
-import skillService from '../lib/chat/llm/services/SkillService.js'
 import { wrapUserMessageWithTimestamp } from '../lib/chat/messageTimestamp.js'
 import sessions from '../lib/server/socket.io/services/sessions.js'
 import streamCache from '../lib/server/socket.io/services/streamCache.js'
+import { getPluginToolNames } from '../lib/chat/llm/toolPolicy.js'
 
 /**
  * 动态获取当前系统已加载的所有可用工具完整名称（带 _mid_ 实例哈希）
@@ -693,23 +693,14 @@ export function createBackendLlm(opts = {}) {
 
       const messages = []
 
-      // 1. 组装 System Prompt（包含灵魂设定、全局长期记忆、会话结晶、技能目录）
       // 1. 组装 System Prompt（静态前缀优先排列，确保 Prompt Caching inputcache 100% 命中）
       const systemSections = []
-
-      // 静态前缀：Skill 注册表 (与 Web UI 保持一致置顶)
-      const skillsBlock = skillService?.buildSystemPromptBlock
-        ? skillService.buildSystemPromptBlock()
-        : ''
-      if (skillsBlock) {
-        systemSections.push(skillsBlock)
-      }
 
       // 静态前缀：自治与工具说明
       systemSections.push(
         [
           '【工具使用与自治能力】',
-          '你可以使用 `channel_profile` 自主管理自身灵魂，使用 `channel_session` 管理会话历史，使用 `channel_model` 切换底层模型，使用 `toolsmanager` 管理所有工具开闭，使用 `memory` 记录用户事实，使用 `bash` 执行终端命令，使用 `Skill` 加载专家能力。',
+          '你可以使用 `channel_profile` 自主管理自身灵魂，使用 `channel_session` 管理会话历史，使用 `channel_model` 切换底层模型，使用 `meta_tool` 动态查看与调用系统所有工具，使用 `memory` 记录用户事实，使用 `bash` 执行终端命令，使用 `skill` 加载专家能力。',
         ].join('\n'),
       )
 
@@ -821,26 +812,9 @@ export function createBackendLlm(opts = {}) {
         }
       }
 
-      const defaultChannelTools = getRegisteredSystemToolNames()
-      let savedTools = ctx.memory
-        ? await ctx.memory.getAgentMeta('tools', null)
-        : null
-      if (Array.isArray(savedTools)) {
-        const { migrated, tools: completedTools } = completeToolHashes(
-          savedTools,
-          defaultChannelTools,
-        )
-        if (migrated) {
-          savedTools = completedTools
-          ctx.memory.setAgentMeta('tools', completedTools).catch(() => {})
-        }
-      }
-      const finalTools =
-        Array.isArray(savedTools) && savedTools.length > 0
-          ? savedTools
-          : defaultChannelTools.length > 0
-            ? defaultChannelTools
-            : []
+      const finalTools = getPluginToolNames('ai-plugin', {
+        channel: ctx.channel || { type: 'channel' },
+      })
       const savedEffort = ctx.memory
         ? await ctx.memory.getAgentMeta('reasoning_effort', 0)
         : 0

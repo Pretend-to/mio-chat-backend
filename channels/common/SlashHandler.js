@@ -4,7 +4,7 @@
  * 支持通用指令：
  *   - /help 帮助菜单
  *   - /abort /crush /stop /cancel /interrupt /cut /break 任务中止与强插开启新对话
- *   - /tools 工具查看、开启、禁用、重置
+ *   - /tools 查看固定的 Channel 工具策略
  *   - /think /reasoning 思考推理强度调节
  *   - /yolo Shell 审批跳过开关（按当前会话）
  *   - /status 当前会话与执行状态
@@ -19,7 +19,7 @@
  *   - /context 当前话题记忆结晶查看
  *   - /delete 删除会话
  */
-import { getRegisteredSystemToolNames } from '../llm.js'
+import { getPluginToolNames } from '../../lib/chat/llm/toolPolicy.js'
 import { getTriggerService } from '../../lib/triggers/index.js'
 import {
   getSessionYolo,
@@ -114,78 +114,15 @@ export class SlashHandler {
       }
 
       case 'tools': {
-        const defaultChannelTools = getRegisteredSystemToolNames()
-        const currentTools =
-          (await this.memory.getAgentMeta('tools', null)) || defaultChannelTools
-        const enabledSet = new Set(currentTools)
-
-        if (!arg || arg === 'ls' || arg === 'list') {
-          const allTools = Array.from(
-            new Set([...defaultChannelTools, ...currentTools]),
-          )
-          const lines = [
-            '【工具状态管理】',
-            `当前已激活工具 (共 ${enabledSet.size} 个):`,
-          ]
-          for (const t of allTools) {
-            const status = enabledSet.has(t) ? '✅ [已启用]' : '❌ [已禁用]'
-            lines.push(`  ${status} ${t}`)
-          }
-          lines.push('\n用法：')
-          lines.push('  • /tools on <工具名1,工具名2> 开启工具')
-          lines.push('  • /tools off <工具名1,工具名2> 禁用工具')
-          lines.push('  • /tools reset 恢复默认工具集')
-          return wrap(lines.join('\n'))
-        }
-
-        const [subCmd, ...toolArgs] = arg.split(/\s+/)
-        const toolStr = toolArgs.join(' ')
-
-        if (subCmd === 'reset') {
-          await this.memory.setAgentMeta('tools', defaultChannelTools)
-          return wrap('已将工具集合成功重置为系统默认配置 ✅')
-        }
-
-        if (subCmd === 'on' || subCmd === 'enable') {
-          if (!toolStr) return wrap('用法：/tools on <工具名1,工具名2>')
-          const targets = toolStr.split(/[,，\s]+/).filter(Boolean)
-          for (const target of targets) {
-            const matched = defaultChannelTools.filter(
-              (t) => t === target || t.split('_mid_')[0] === target,
-            )
-            if (matched.length > 0) {
-              matched.forEach((m) => enabledSet.add(m))
-            } else {
-              enabledSet.add(target)
-            }
-          }
-          const newList = Array.from(enabledSet)
-          await this.memory.setAgentMeta('tools', newList)
-          return wrap(
-            `已开启工具 [${targets.join(', ')}]，当前激活工具总计 ${newList.length} 个 ✅`,
-          )
-        }
-
-        if (subCmd === 'off' || subCmd === 'disable') {
-          if (!toolStr) return wrap('用法：/tools off <工具名1,工具名2>')
-          const targets = toolStr.split(/[,，\s]+/).filter(Boolean)
-          for (const target of targets) {
-            for (const t of Array.from(enabledSet)) {
-              if (t === target || t.split('_mid_')[0] === target) {
-                enabledSet.delete(t)
-              }
-            }
-          }
-          const newList = Array.from(enabledSet)
-          await this.memory.setAgentMeta('tools', newList)
-          return wrap(
-            `已禁用工具 [${targets.join(', ')}]，当前激活工具总计 ${newList.length} 个 🚫`,
-          )
-        }
-
-        return wrap(
-          '未知指令，请使用 /tools ls, /tools on <工具名>, /tools off <工具名> 或 /tools reset',
-        )
+        const tools = getPluginToolNames('ai-plugin', {
+          channel: this.channel,
+        })
+        return wrap([
+          '【Channel 工具策略】',
+          'Channel 固定启用完整 ai-plugin，不支持按渠道增删工具。',
+          `当前工具数: ${tools.length}`,
+          ...tools.map(tool => `  ✅ ${tool}`),
+        ].join('\n'))
       }
 
       case 'trigger':
@@ -393,9 +330,9 @@ export class SlashHandler {
             ? await this.channel.isSessionYoloEnabled(sid)
             : await getSessionYolo(this.memory, sid)
           : false
-        const tools =
-          (await this.memory.getAgentMeta('tools', null)) ||
-          getRegisteredSystemToolNames()
+        const tools = getPluginToolNames('ai-plugin', {
+          channel: this.channel,
+        })
         const effort = await this.memory.getAgentMeta('reasoning_effort', 0)
         const provider = this.channel?.provider || '默认'
         const model = this.channel?.model || '默认'
