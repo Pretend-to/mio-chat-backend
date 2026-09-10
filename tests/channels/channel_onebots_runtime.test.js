@@ -129,6 +129,56 @@ test('ChannelRuntime migrates legacy wechat identity and latest context into One
   await runtime.dispose()
 })
 
+test('ChannelRuntime migrates legacy agent model config and persists later channel updates', async () => {
+  const store = makeStore({
+    id: 'model-channel', type: 'onebots', platform: 'wechat-clawbot',
+    agentId: 'shared-agent', userId: 'user', botId: 'bot', status: 'bound',
+    provider: 'OldProvider', model: 'old-model',
+  })
+  const meta = new Map([
+    ['provider', 'NewProvider'],
+    ['model', 'new-model'],
+  ])
+  let channelOptions = null
+  const channelInstance = { async start() {}, async stop() {} }
+  const runtime = new ChannelRuntime({
+    channelStore: store,
+    onebotsGateway: {
+      async init() {},
+      async startAccount() {},
+      async createClient() { return {} },
+      async stopAccount() {},
+    },
+    onebotChannelFactory: options => {
+      channelOptions = options
+      return Object.assign(channelInstance, {
+        model: options.model,
+        provider: options.provider,
+      })
+    },
+    persistenceFactory: async () => ({
+      ...makeMemory(),
+      async getAgentMeta(key, fallback) { return meta.has(key) ? meta.get(key) : fallback },
+      async setAgentMeta(key, value) { meta.set(key, value) },
+    }),
+  })
+
+  await runtime.start('model-channel')
+  assert.equal(channelOptions.provider, 'NewProvider')
+  assert.equal(channelOptions.model, 'new-model')
+  assert.equal(store.snapshot().provider, 'NewProvider')
+  assert.equal(store.snapshot().model, 'new-model')
+  assert.equal(meta.get('provider'), null)
+  assert.equal(meta.get('model'), null)
+
+  await channelOptions.onConfigUpdate({ provider: 'FinalProvider', model: 'final-model' })
+  assert.equal(store.snapshot().provider, 'FinalProvider')
+  assert.equal(store.snapshot().model, 'final-model')
+  assert.equal(channelInstance.provider, 'FinalProvider')
+  assert.equal(channelInstance.model, 'final-model')
+  await runtime.dispose()
+})
+
 test('OneBots QR controller delegates QR and confirmed state to gateway', async () => {
   const store = makeStore({
     id: 'onebot-qr', type: 'onebots', platform: 'wechat-clawbot',

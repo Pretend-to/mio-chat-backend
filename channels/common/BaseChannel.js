@@ -43,6 +43,7 @@ export class BaseChannel {
    * @param {object} [opts.keepAlive] 保活配置
    * @param {object} [opts.logger=console] 日志输出
    * @param {Function} [opts.onActivity] 活跃状态回调
+   * @param {Function} [opts.onConfigUpdate] 渠道配置持久化回调
    */
   constructor({
     client,
@@ -56,6 +57,7 @@ export class BaseChannel {
     keepAlive = {},
     logger = console,
     onActivity = null,
+    onConfigUpdate = null,
     id = null,
     channelId = null,
     debounceConfig = {},
@@ -80,6 +82,7 @@ export class BaseChannel {
     this.typing = typing
     this.log = logger
     this.onActivity = onActivity
+    this.onConfigUpdate = onConfigUpdate
     this.activeJobs = new Map() // sessionId -> { startTime, text, currentTool, toolCount, lastProgressText }
     this._sessionQueues = new Map() // sessionId -> Promise chain (FIFO 互斥队列兼容)
     this._sessionLocks = new Set() // sessionId -> 互斥单飞锁
@@ -116,6 +119,33 @@ export class BaseChannel {
   /** 兼容性 getter：直接访问 pendingConfirmations Map */
   get pendingConfirmations() {
     return this.confirmations.pendingConfirmations
+  }
+
+  /**
+   * 更新当前渠道的模型配置。ChannelStore 是唯一事实来源，运行时字段只作镜像。
+   */
+  async updateModelConfig(patch = {}) {
+    const next = {}
+    if (Object.hasOwn(patch, 'provider')) next.provider = patch.provider ?? ''
+    if (Object.hasOwn(patch, 'model')) next.model = patch.model ?? ''
+    if (Object.keys(next).length === 0) return {
+      model: this.model,
+      provider: this.provider,
+    }
+
+    const persisted = typeof this.onConfigUpdate === 'function'
+      ? await this.onConfigUpdate(next)
+      : next
+    if (Object.hasOwn(next, 'provider')) {
+      this.provider = persisted?.provider ?? next.provider
+    }
+    if (Object.hasOwn(next, 'model')) {
+      this.model = persisted?.model ?? next.model
+    }
+    return {
+      model: this.model,
+      provider: this.provider,
+    }
   }
 
   // ===============================================================

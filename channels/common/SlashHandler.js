@@ -393,20 +393,33 @@ export class SlashHandler {
           )
         }
         if (arg === 'reset') {
-          this.channel.provider = this.channel.defaultProvider
-          this.channel.model = this.channel.defaultModel
+          const patch = {
+            model: this.channel.defaultModel || '',
+            provider: this.channel.defaultProvider || '',
+          }
+          if (typeof this.channel.updateModelConfig === 'function') {
+            await this.channel.updateModelConfig(patch)
+          } else {
+            Object.assign(this.channel, patch)
+          }
           return wrap(
             `已重置为渠道默认模型配置：${this.channel.model || '系统默认'}`,
           )
         }
 
         // 切换模型（支持 provider/model 或直接 model）
+        const patch = {}
         if (arg.includes('/')) {
           const [p, m] = arg.split('/')
-          this.channel.provider = p.trim()
-          this.channel.model = m.trim()
+          patch.provider = p.trim()
+          patch.model = m.trim()
         } else {
-          this.channel.model = arg.trim()
+          patch.model = arg.trim()
+        }
+        if (typeof this.channel.updateModelConfig === 'function') {
+          await this.channel.updateModelConfig(patch)
+        } else {
+          Object.assign(this.channel, patch)
         }
         return wrap(
           `模型已切换为：${this.channel.provider ? `${this.channel.provider}/` : ''}${this.channel.model} ✅`,

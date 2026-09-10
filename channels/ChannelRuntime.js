@@ -139,9 +139,55 @@ export class ChannelRuntime {
     return memory
   }
 
+  async broadcastConfigUpdate(channel) {
+    try {
+      const { default: sessions } = await import('../lib/server/socket.io/services/sessions.js')
+      const publicChannel = typeof this.channelStore.getPublic === 'function'
+        ? await this.channelStore.getPublic(channel.id)
+        : channel
+      for (const client of sessions.getAllAdminClients() || []) {
+        client.sendSystemMessage?.('channel_config_updated', { channel: publicChannel })
+      }
+    } catch (error) {
+      this.logger.warn?.(`[ChannelRuntime] 渠道配置广播失败: ${error.message}`)
+    }
+  }
+
+  /** 持久化渠道配置并同步当前运行实例。 */
+  async updateConfig(channelId, patch, { broadcast = true } = {}) {
+    const updated = await this.channelStore.update(channelId, patch)
+    if (!updated) return null
+    const entry = this.running.get(channelId)
+    if (entry) {
+      Object.assign(entry.channel, patch)
+      Object.assign(entry.chn, patch)
+    }
+    if (broadcast) await this.broadcastConfigUpdate(updated)
+    return updated
+  }
+
+  /**
+   * 旧版本把渠道模型写进 agent meta。首次启动时迁回 ChannelStore 后清空，
+   * 避免 agent 级配置继续覆盖可独立配置的多个渠道。
+   */
+  async migrateLegacyModelConfig(memory, channel) {
+    const legacyProvider = await memory.getAgentMeta('provider', null)
+    const legacyModel = await memory.getAgentMeta('model', null)
+    if (legacyProvider == null && legacyModel == null) return channel
+
+    const patch = {}
+    if (legacyProvider != null) patch.provider = String(legacyProvider)
+    if (legacyModel != null) patch.model = String(legacyModel)
+    const updated = await this.channelStore.update(channel.id, patch)
+    await memory.setAgentMeta('provider', null)
+    await memory.setAgentMeta('model', null)
+    this.logger.info?.(`[ChannelRuntime] 已将渠道 "${channel.id}" 的旧 agent 模型配置迁移到 ChannelStore`)
+    return updated || { ...channel, ...patch }
+  }
+
   /** 启动一个已绑定渠道 */
   async start(channelId) {
-    const channel = await this.channelStore.get(channelId)
+    let channel = await this.channelStore.get(channelId)
     if (!channel) throw new Error(`channel ${channelId} not found`)
     const adapterDefinition = resolveChannelAdapter(channel)
     const onebots = this.isOneBotsChannel(channel)
@@ -156,6 +202,7 @@ export class ChannelRuntime {
     if (!platform) throw new Error(`channel adapter has no OneBots platform: ${channel.type || 'unknown'}`)
     this.logger.info?.(`[ChannelRuntime] 🚀 正在启动渠道 "${channelId}" (type=${channel.type}, platform=${platform}, masterId=${channel.userId || channel.botId})`)
     const memory = await this.createMemory(agentId, { recover: true })
+    channel = await this.migrateLegacyModelConfig(memory, channel)
     let client
     let gateway = null
     try {
@@ -169,9 +216,6 @@ export class ChannelRuntime {
         throw new Error('OneBots gateway does not provide createClient(channel)')
       }
       client = await gateway.createClient(channel)
-      const savedProvider = await memory.getAgentMeta('provider', channel.provider || null)
-      const savedModel = await memory.getAgentMeta('model', channel.model || null)
-
       const commonOptions = {
         channelId,
         id: channelId,
@@ -179,9 +223,10 @@ export class ChannelRuntime {
         memory,
         masterId: channel.userId || channel.botId || channelId,
         llm: this.llm,
-        provider: savedProvider,
-        model: savedModel,
+        provider: channel.provider || null,
+        model: channel.model || null,
         logger: this.logger,
+        onConfigUpdate: patch => this.updateConfig(channelId, patch),
         onActivity: () => {
           this.channelStore.update(channelId, { lastActive: Date.now() }).catch(() => {})
         },
