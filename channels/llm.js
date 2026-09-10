@@ -10,6 +10,7 @@
  */
 
 import { wrapUserMessageWithTimestamp } from '../lib/chat/messageTimestamp.js'
+import { coalesceCrystallizeEvents } from '../lib/chat/crystallizationContent.js'
 import sessions from '../lib/server/socket.io/services/sessions.js'
 import streamCache from '../lib/server/socket.io/services/streamCache.js'
 import { getPluginToolNames } from '../lib/chat/llm/toolPolicy.js'
@@ -623,7 +624,7 @@ function assembleStructuredContent(chunks) {
     }
   }
 
-  return content
+  return coalesceCrystallizeEvents(content)
 }
 
 /**
