@@ -847,9 +847,13 @@ export function createBackendLlm(opts = {}) {
         // shell hook independently fails closed when it cannot read YOLO.
         sessionYolo = false
       }
+      const auditChannelId =
+        ctx.channelId || ctx.channel?.id || ctx.channel?.channelId || null
       const event = {
         body: {
           channel: ctx.channel?.channelType || 'channel',
+          channelId: auditChannelId,
+          contactorId: auditChannelId,
           messages,
           sessionId: ctx.sessionId || null,
           settings: {
@@ -1305,6 +1309,7 @@ export function createBackendLlm(opts = {}) {
           channelType: ctx.channel?.channelType || 'channel',
           id: ctx.from || 'channel_master',
           isAdmin: true,
+          origin: ctx.isWeb ? 'web' : 'channel',
           role: 'admin',
           username: 'ChannelMaster',
         },

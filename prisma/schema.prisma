@@ -174,38 +174,49 @@ model TaskExecution {
 
 // LLM 调用审计日志表
 model LLMCallLog {
-  id               Int      @id @default(autoincrement())
-  requestId        String   @map("request_id") // 关联事件请求 ID (e.requestId)
-  userId           String?  @map("user_id") // 触发调用的用户 ID (e.user?.id)
-  userIp           String?  @map("user_ip") // 触发调用的 IP 地址 (e.user?.ip)
-  contactorId      String?  @map("contactor_id") // 触发会话的窗口 ID (e.body?.contactorId)
-  presetName       String?  @map("preset_name") // 使用的 Agent 预设名称 (e.body?.settings?.presetSettings?.name)
-  sessionTitle     String?  @map("session_title") // 关联会话的主题/第一条输入
-  provider         String // 适配器渠道 (openai, deepseek, gemini, vertex 等)
-  model            String // 调用的具体模型 (如 deepseek-chat, gpt-5.4-nano 等)
-  isStream         Boolean  @default(true) @map("is_stream") // 是否流式请求
-  trafficType      String?  @map("traffic_type") // 计费流量类型 (如 Gemini: ON_DEMAND)
-  promptTokens     Int      @default(0) @map("prompt_tokens") // 输入 Token 数
-  candidatesTokens Int      @default(0) @map("candidates_tokens") // 输出 Token 数
-  thinkingTokens   Int      @default(0) @map("thinking_tokens") // 深度思考 Token 数
-  toolsCalled      String?  @default("[]") @map("tools_called") // JSON 数组，记录调用的多个工具名称 (如 ["memory_query", "web_search"])
-  toolDetails      String?  @default("[]") @map("tool_details") // JSON 数组，记录调用的多个工具详细信息 { name, arguments, output }
-  cacheHitTokens   Int      @default(0) @map("cache_hit_tokens") // 缓存命中 Token 数
-  cacheMissTokens  Int      @default(0) @map("cache_miss_tokens") // 缓存未命中 Token 数
-  totalTokens      Int      @default(0) @map("total_tokens") // 总 Token 数
-  latency          Int // 总耗时/延迟 (单位: ms)
-  ttft             Int? // 首字延迟 (Time-To-First-Token, 单位: ms)，非流式则为 null
-  tps              Float? // 响应速度 (Tokens Per Second, 仅针对 candidates)
-  status           String   @default("SUCCESS") // 状态: SUCCESS (成功) | FAILED (异常失败) | ABORTED (用户中止)
-  errorMessage     String?  @map("error_message") // 失败异常时的错误堆栈/原因
-  createdAt        DateTime @default(now()) @map("created_at")
+  id                Int      @id @default(autoincrement())
+  requestId         String   @map("request_id") // 关联事件请求 ID (e.requestId)
+  userId            String?  @map("user_id") // 触发调用的用户 ID (e.user?.id)
+  userIp            String?  @map("user_ip") // 触发调用的 IP 地址 (e.user?.ip)
+  contactorId       String?  @map("contactor_id") // 触发会话的窗口 ID (e.body?.contactorId)
+  sourceType        String?  @map("source_type") // 调用来源: web | channel | system
+  sessionId         String?  @map("session_id") // 关联 Session.id，不使用 preset 作为会话标识
+  channelId         String?  @map("channel_id") // 关联 Channel.id
+  presetName        String?  @map("preset_name") // 使用的 Agent 预设名称 (e.body?.settings?.presetSettings?.name)
+  sessionTitle      String?  @map("session_title") // 关联会话的主题/第一条输入
+  provider          String // 历史适配器类型标签，保留用于兼容旧审计数据
+  adapterInstanceId String?  @map("adapter_instance_id") // 实际调用的适配器实例 ID
+  adapterName       String?  @map("adapter_name") // 用户配置的适配器实例显示名称
+  adapterType       String?  @map("adapter_type") // 适配器实现类型 (openai, vertex 等)
+  model             String // 调用的具体模型 (如 deepseek-chat, gpt-5.4-nano 等)
+  isStream          Boolean  @default(true) @map("is_stream") // 是否流式请求
+  trafficType       String?  @map("traffic_type") // 计费流量类型 (如 Gemini: ON_DEMAND)
+  promptTokens      Int      @default(0) @map("prompt_tokens") // 输入 Token 数
+  candidatesTokens  Int      @default(0) @map("candidates_tokens") // 输出 Token 数
+  thinkingTokens    Int      @default(0) @map("thinking_tokens") // 深度思考 Token 数
+  toolsCalled       String?  @default("[]") @map("tools_called") // JSON 数组，记录调用的多个工具名称 (如 ["memory_query", "web_search"])
+  toolDetails       String?  @default("[]") @map("tool_details") // JSON 数组，记录调用的多个工具详细信息 { name, arguments, output }
+  cacheHitTokens    Int      @default(0) @map("cache_hit_tokens") // 缓存命中 Token 数
+  cacheMissTokens   Int      @default(0) @map("cache_miss_tokens") // 缓存未命中 Token 数
+  totalTokens       Int      @default(0) @map("total_tokens") // 总 Token 数
+  latency           Int // 总耗时/延迟 (单位: ms)
+  ttft              Int? // 首字延迟 (Time-To-First-Token, 单位: ms)，非流式则为 null
+  tps               Float? // 端到端输出吞吐 (candidates tokens / request latency seconds)
+  status            String   @default("SUCCESS") // 状态: SUCCESS (成功) | FAILED (异常失败) | ABORTED (用户中止)
+  errorMessage      String?  @map("error_message") // 失败异常时的错误堆栈/原因
+  createdAt         DateTime @default(now()) @map("created_at")
 
   @@index([requestId])
   @@index([requestId, id])
   @@index([userId])
   @@index([userIp])
   @@index([contactorId])
+  @@index([sourceType])
+  @@index([sessionId])
+  @@index([channelId])
   @@index([provider])
+  @@index([adapterInstanceId])
+  @@index([adapterName])
   @@index([model])
   @@index([status])
   @@index([status, createdAt])
