@@ -364,20 +364,26 @@ async function startApp() {
     const { initChannelController, getChannelRuntime } = await import('./lib/server/http/controllers/channelController.js')
     initChannelController({ startTriggers: false }) // 确保 deps 已初始化（幂等）
 
+    const isolatedTest = process.env.MIOCHAT_TEST_ISOLATED === '1'
+
     // 自动恢复上次 running 状态的渠道（持久化开关）
     const channelRuntime = getChannelRuntime()
-    try {
-      // OneBots 通道需先恢复进程内网关与账号；旧 iLink 通道继续
-      if (typeof channelRuntime.init === 'function') await channelRuntime.init()
-    } catch (e) {
-      logger.warn('[ChannelRuntime] 自动恢复渠道时出错:', e.message)
+    if (!isolatedTest) {
+      try {
+        // OneBots 通道需先恢复进程内网关与账号；旧 iLink 通道继续
+        if (typeof channelRuntime.init === 'function') await channelRuntime.init()
+      } catch (e) {
+        logger.warn('[ChannelRuntime] 自动恢复渠道时出错:', e.message)
+      }
+
+      // 渠道恢复完成后再启动哨兵，避免启动窗口把目标 Channel 误判为不可用。
+      const { getTriggerService } = await import('./lib/triggers/index.js')
+      await getTriggerService().startScheduler()
+
+      await taskScheduler.initialize(global.middleware.llm, channelRuntime)
+    } else {
+      logger.info('[Test] 隔离测试模式：跳过渠道恢复、哨兵与定时任务')
     }
-
-    // 渠道恢复完成后再启动哨兵，避免启动窗口把目标 Channel 误判为不可用。
-    const { getTriggerService } = await import('./lib/triggers/index.js')
-    await getTriggerService().startScheduler()
-
-    await taskScheduler.initialize(global.middleware.llm, channelRuntime)
     
     // 启动服务器并保存实例
     httpServer = await dependencies.startServer()

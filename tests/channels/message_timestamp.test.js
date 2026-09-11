@@ -167,7 +167,7 @@ test('crystallization persistence completes before the backend process resolves'
     llmService: {
       handleMessage: async (event) => {
         await event.update({
-          content: { status: 'finished', summary: '<memory_crystal>new</memory_crystal>' },
+          content: { commit: true, status: 'finished', summary: '<memory_crystal>new</memory_crystal>' },
           type: 'crystallize',
         })
         await event.complete()
@@ -194,6 +194,76 @@ test('crystallization persistence completes before the backend process resolves'
     text: 'current',
   })
 
-  assert.deepEqual(order, ['set', 'clear', 'rotate'])
+  assert.deepEqual(order, ['set', 'rotate', 'clear'])
   assert.equal(result.crystalPersisted, true)
+})
+
+test('ordinary Channel turns never re-persist the existing crystal', async () => {
+  const calls = []
+  const llm = createBackendLlm({ llmService: {
+    handleMessage: async event => {
+      await event.update({ content: 'ok', type: 'content' })
+      await event.complete()
+    },
+  } })
+  const result = await llm.process({
+    channel: {}, chat: [], crystal: '<memory_crystal>committed</memory_crystal>',
+    globalMem: '', memory: {
+      clearPendingMemories: async () => calls.push('clear'),
+      getAgentMeta: async () => null,
+      rotateChat: async () => calls.push('rotate'),
+      setCrystal: async () => calls.push('set'),
+    }, sessionId: 'session-no-compression', text: 'current',
+  })
+  assert.equal(result.crystal, null)
+  assert.equal(result.crystalPersisted, false)
+  assert.deepEqual(calls, [])
+})
+
+test('failed crystallization snapshots cannot mutate durable memory', async () => {
+  const calls = []
+  const llm = createBackendLlm({ llmService: {
+    handleMessage: async event => {
+      await event.update({
+        content: { commit: false, status: 'failed', summary: '<memory_crystal>stale</memory_crystal>' },
+        type: 'crystallize',
+      })
+      await event.complete()
+    },
+  } })
+  const result = await llm.process({
+    channel: {}, chat: [], crystal: '<memory_crystal>committed</memory_crystal>',
+    globalMem: '', memory: {
+      clearPendingMemories: async () => calls.push('clear'),
+      getAgentMeta: async () => null,
+      rotateChat: async () => calls.push('rotate'),
+      setCrystal: async () => calls.push('set'),
+    }, sessionId: 'session-failed-compression', text: 'current',
+  })
+  assert.equal(result.crystal, null)
+  assert.equal(result.crystalPersisted, false)
+  assert.deepEqual(calls, [])
+})
+
+test('crystal persistence failure rejects and preserves pending memories', async () => {
+  const calls = []
+  const llm = createBackendLlm({ llmService: {
+    handleMessage: async event => {
+      await event.update({
+        content: { commit: true, status: 'finished', summary: '<memory_crystal>new</memory_crystal>' },
+        type: 'crystallize',
+      })
+      await event.complete()
+    },
+  } })
+  await assert.rejects(llm.process({
+    channel: {}, chat: [], crystal: '<memory_crystal>old</memory_crystal>',
+    globalMem: '', memory: {
+      clearPendingMemories: async () => calls.push('clear'),
+      getAgentMeta: async () => null,
+      rotateChat: async () => { calls.push('rotate'); throw new Error('rotate failed') },
+      setCrystal: async () => calls.push('set'),
+    }, sessionId: 'session-persistence-failure', text: 'current',
+  }), /rotate failed/)
+  assert.deepEqual(calls, ['set', 'rotate'])
 })

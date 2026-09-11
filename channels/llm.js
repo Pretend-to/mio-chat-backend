@@ -1154,7 +1154,12 @@ export function createBackendLlm(opts = {}) {
           }
 
           if (data.type === 'crystallize') {
-            if (data.content?.status === 'finished' && data.content?.summary) {
+            // UI snapshots and failed compression must never mutate durable memory.
+            if (
+              data.content?.commit === true &&
+              data.content?.status === 'finished' &&
+              data.content?.summary
+            ) {
               const summaryXml = data.content.summary.trim()
               if (summaryXml) {
                 latestCrystal = summaryXml
@@ -1162,11 +1167,6 @@ export function createBackendLlm(opts = {}) {
                   contextPersistenceQueue = contextPersistenceQueue
                     .then(async () => {
                       await ctx.memory.setCrystal(ctx.sessionId, summaryXml)
-                      if (
-                        typeof ctx.memory.clearPendingMemories === 'function'
-                      ) {
-                        await ctx.memory.clearPendingMemories(ctx.sessionId)
-                      }
                       // 上下文压缩闭环：归档 + 裁剪 + 读窗口更新必须在
                       // 下一条排队 user 进入前完成，否则会读到旧上下文。
                       if (typeof ctx.memory.rotateChat === 'function') {
@@ -1184,6 +1184,13 @@ export function createBackendLlm(opts = {}) {
                           )
                         }
                       }
+                      // Clear staged memory only after crystal storage and chat
+                      // rotation both succeeded, otherwise retry on next compression.
+                      if (
+                        typeof ctx.memory.clearPendingMemories === 'function'
+                      ) {
+                        await ctx.memory.clearPendingMemories(ctx.sessionId)
+                      }
                       crystalPersistenceSucceeded = true
                     })
                     .catch((err) => {
@@ -1192,6 +1199,7 @@ export function createBackendLlm(opts = {}) {
                         `[${ctx.channel?.channelType || 'channel'}] 记忆结晶/裁剪落盘失败:`,
                         err,
                       )
+                      throw err
                     })
                 }
               }
@@ -1482,8 +1490,8 @@ export function createBackendLlm(opts = {}) {
         aborted: !!event.aborted,
         completed: !event.aborted,
         content: structuredContent,
-        crystal:
-          latestCrystal || event.body?.settings?.previous_summary || null,
+        // Existing/request-local summaries are not new durable commits.
+        crystal: latestCrystal,
         crystalPersisted: Boolean(latestCrystal) && crystalPersistenceSucceeded,
         recursiveUserMessages: collectRecursiveUserMessages(
           event.body.messages,

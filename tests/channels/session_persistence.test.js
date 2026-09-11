@@ -95,6 +95,7 @@ test('DatabaseMemoryStore preserves the MemoryStore contract and archive semanti
   assert.equal((await memory.getChat(session.id))[0].text, 'one')
 
   await memory.setCrystal(session.id, '<memory_crystal>db</memory_crystal>')
+  await memory.setCrystal(session.id, '<memory_crystal>db</memory_crystal>')
   await memory.appendPendingMemory(session.id, { kind: 'fact' })
 
   assert.equal(await memory.readSoul(), 'database soul')
@@ -104,6 +105,7 @@ test('DatabaseMemoryStore preserves the MemoryStore contract and archive semanti
   assert.equal((await memory.getSession(session.id)).created_at, 1000)
   assert.equal((await memory.getChat(session.id)).length, 4)
   assert.equal((await memory.getPendingMemories(session.id))[0].kind, 'fact')
+  assert.equal(await prisma.crystal.count({ where: { sessionId: session.id } }), 1)
 
   const rotation = await memory.rotateChat(session.id, 1)
   assert.equal(rotation.rotated, true)

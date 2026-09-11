@@ -49,7 +49,8 @@ test('MemoryStore 记忆落盘层', async () => {
 
   await test('结晶：setCrystal/getCrystal + clearChat 保留 crystal', async () => {
     const s = await m.createSession({ title: 'ctx' })
-    await m.setCrystal(s.id, '<memory_crystal>长期事实A</memory_crystal>')
+    assert.strictEqual(await m.setCrystal(s.id, '<memory_crystal>长期事实A</memory_crystal>'), true)
+    assert.strictEqual(await m.setCrystal(s.id, '<memory_crystal>长期事实A</memory_crystal>'), false)
     assert.ok((await m.getCrystal(s.id)).includes('长期事实A'))
     await m.appendToChat(s.id, { role: 'user', content: 'x' })
     await m.clearChat(s.id)

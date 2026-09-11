@@ -233,7 +233,9 @@ export class MemoryStore {
   /** 设置/清除该会话的结晶摘要（memory_crystal / previous_summary） */
   async setCrystal(id, crystalXml = '') {
     const session = (await this.getSession(id)) || (await this.createSession({ id }))
-    session.crystal = crystalXml ?? ''
+    const nextCrystal = crystalXml ?? ''
+    if ((session.crystal || '') === nextCrystal) return false
+    session.crystal = nextCrystal
     await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
     return true
   }

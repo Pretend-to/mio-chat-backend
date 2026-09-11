@@ -54,6 +54,7 @@ test('Channel 落盘内容不会把每个结晶 chunk 保存成独立事件', as
         })
         await event.update({
           content: {
+            commit: true,
             status: 'finished',
             summary: '<long_term>ok</long_term>',
           },
