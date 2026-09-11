@@ -377,6 +377,7 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
 
         const flushAssistant = () => {
           if (currentAssistant) {
+            delete currentAssistant._step
             if (pendingReasoning) {
               currentAssistant.reasoning_content = pendingReasoning
               pendingReasoning = ''
@@ -421,16 +422,33 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
             currentAssistant.content =
               (currentAssistant.content || '') + (elm.data?.text || '')
           } else if (elm.type === 'tool_call') {
+            const currentStep = elm.data?.step
+            if (
+              currentAssistant &&
+              currentAssistant.tool_calls &&
+              currentAssistant.tool_calls.length > 0 &&
+              currentAssistant._step !== undefined &&
+              currentStep !== undefined &&
+              currentAssistant._step !== currentStep
+            ) {
+              flushAssistant()
+            }
             if (!currentAssistant) {
               currentAssistant = { role: 'assistant' }
+              if (currentStep !== undefined) {
+                currentAssistant._step = currentStep
+              }
             }
             if (!currentAssistant.tool_calls) {
               currentAssistant.tool_calls = []
+              if (currentStep !== undefined) {
+                currentAssistant._step = currentStep
+              }
             }
             const args = elm.data.arguments || elm.data.parameters || ''
             const callId =
               elm.data.id || `call_${elm.data.name || 'tool'}_${elmIdx}`
-            currentAssistant.tool_calls.push({
+            const toolCallObj = {
               function: {
                 arguments:
                   typeof args === 'string' ? args : JSON.stringify(args || {}),
@@ -438,9 +456,13 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
               },
               id: callId,
               type: 'function',
-            })
+            }
+            if (elm.data.thoughtSignature) {
+              toolCallObj.thoughtSignature = elm.data.thoughtSignature
+            }
+            currentAssistant.tool_calls.push(toolCallObj)
 
-            pendingToolMessages.push({
+            const toolMsgObj = {
               content:
                 typeof elm.data.result === 'string'
                   ? elm.data.result
@@ -448,7 +470,11 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
               name: elm.data.name,
               role: 'tool',
               tool_call_id: callId,
-            })
+            }
+            if (elm.data.thoughtSignature) {
+              toolMsgObj.thoughtSignature = elm.data.thoughtSignature
+            }
+            pendingToolMessages.push(toolMsgObj)
           } else if (elm.type === 'context_message') {
             // A tool may inject a user message into the recursive request
             // (for example a direct multimodal pass-through).  Flush the

@@ -432,13 +432,92 @@ test('Gemini Adapter', async (t) => {
       messages: [{ content: 'draw a cat', role: 'user' }],
       settings: {
         base: { model: 'imagen-3.0-generate-002', stream: true },
-        chatParams: {},
-        extraSettings: {},
         toolCallSettings: { mode: 'AUTO', tools: [] }
       }
     };
     const prepared = await adapter._prepareChatBody(body);
     assert.deepStrictEqual(prepared.responseModalities, ['Text', 'Image']);
+  });
+
+  await t.test('_preProcessMessage correctly translates reasoning_content to thought part', async () => {
+    const { Gemini } = await import('../../lib/chat/llm/adapters/lib/geminiHttpClient.js');
+    const gemini = new Gemini({ api_key: 'key', base_url: 'https://mock' });
+
+    const messages = [
+      {
+        content: 'Why is the sky blue?',
+        role: 'user',
+      },
+      {
+        content: 'The sky is blue because of Rayleigh scattering.',
+        reasoning_content: 'Let me think about physics and light scattering...',
+        role: 'assistant',
+      },
+    ];
+
+    const { contents } = await gemini._preProcessMessage(messages);
+    assert.strictEqual(contents.length, 2);
+    assert.strictEqual(contents[1].role, 'model');
+    assert.strictEqual(contents[1].parts.length, 2);
+    assert.deepStrictEqual(contents[1].parts[0], {
+      text: 'Let me think about physics and light scattering...',
+      thought: true,
+    });
+    assert.deepStrictEqual(contents[1].parts[1], {
+      text: 'The sky is blue because of Rayleigh scattering.',
+    });
+  });
+
+  await t.test('_preProcessMessage preserves first-class thoughtSignature on toolCalls and tool responses', async () => {
+    const { Gemini } = await import('../../lib/chat/llm/adapters/lib/geminiHttpClient.js');
+    const gemini = new Gemini({ api_key: 'key', base_url: 'https://mock' });
+
+    const rawSig = 'custom_thought_signature_xyz123';
+    const messages = [
+      {
+        content: 'Check weather',
+        role: 'user',
+      },
+      {
+        content: '',
+        reasoning_content: 'Checking current location weather',
+        role: 'assistant',
+        tool_calls: [
+          {
+            id: 'call_weather_1',
+            function: { name: 'get_weather', arguments: '{"city":"Beijing"}' },
+            thoughtSignature: rawSig,
+          },
+        ],
+      },
+      {
+        content: 'Sunny, 25C',
+        name: 'get_weather',
+        role: 'tool',
+        thoughtSignature: rawSig,
+        tool_call_id: 'call_weather_1',
+      },
+    ];
+
+    const { contents } = await gemini._preProcessMessage(messages);
+    assert.strictEqual(contents.length, 3);
+    // Model turn with thought part and tool call with thoughtSignature
+    assert.strictEqual(contents[1].role, 'model');
+    assert.strictEqual(contents[1].parts.length, 2);
+    assert.deepStrictEqual(contents[1].parts[0], {
+      text: 'Checking current location weather',
+      thought: true,
+    });
+    assert.deepStrictEqual(contents[1].parts[1], {
+      functionCall: { args: { city: 'Beijing' }, id: 'call_weather_1', name: 'get_weather' },
+      thoughtSignature: rawSig,
+    });
+
+    // Tool response turn
+    assert.strictEqual(contents[2].role, 'user');
+    assert.strictEqual(contents[2].parts.length, 1);
+    assert.strictEqual(contents[2].parts[0].functionResponse.name, 'get_weather');
+    assert.strictEqual(contents[2].parts[0].functionResponse.id, 'call_weather_1');
   });
 
   await runGenericAdapterTests(t, GeminiAdapter, config, mocks);
