@@ -30,23 +30,21 @@ test('ParseTool: 多模态图片与外部文档解析统一集成测试', async 
     async () => {
       const existingImageUrl = 'https://example.com/already_attached.png'
       const mockEvent = {
-        body: {
-          settings: {
-            base: { model: 'gemini-2.5-flash' }, // 原生视觉模型
+        messages: [
+          { role: 'system', content: 'You are an AI assistant' },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: '看下这张图' },
+              { type: 'image_url', image_url: { url: existingImageUrl } },
+            ],
           },
-          messages: [
-            { role: 'system', content: 'You are an AI assistant' },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: '看下这张图' },
-                { type: 'image_url', image_url: { url: existingImageUrl } },
-              ],
-            },
-          ],
-        },
+        ],
         params: {
           urls: [existingImageUrl],
+        },
+        settings: {
+          base: { model: 'gemini-2.5-flash' }, // 原生视觉模型
         },
       }
 
@@ -68,15 +66,13 @@ test('ParseTool: 多模态图片与外部文档解析统一集成测试', async 
       const externalImageUrl =
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
       const mockEvent = {
-        body: {
-          settings: {
-            base: { model: 'gpt-4o' }, // 原生视觉模型
-          },
-          messages: [{ role: 'user', content: '解析外部图片' }],
-        },
+        messages: [{ role: 'user', content: '解析外部图片' }],
         params: {
           fileUrls: externalImageUrl,
           prompt: '提取图中的红点',
+        },
+        settings: {
+          base: { model: 'gpt-4o' }, // 原生视觉模型
         },
       }
 

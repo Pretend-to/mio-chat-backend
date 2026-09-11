@@ -48,25 +48,10 @@ describe('Channel Session History & Slash Commands Test', () => {
   })
 
   test('should handle /tools slash command correctly', async () => {
-    const store = new Map()
-    const mockMemory = {
-      getActiveSession: async () => 's_test',
-      getAgentMeta: async (k, def) => store.get(k) ?? def,
-      setAgentMeta: async (k, v) => store.set(k, v),
-    }
-
-    const handler = new SlashCommandHandler({ channel: {}, memory: mockMemory })
-
-    const resLs = await handler.handle('/tools ls')
-    assert.match(resLs.text, /工具状态管理/)
-
-    const resOff = await handler.handle('/tools off bash')
-    assert.match(resOff.text, /已禁用工具/)
-    assert.strictEqual(store.get('tools').includes('bash'), false)
-
-    const resOn = await handler.handle('/tools on bash')
-    assert.match(resOn.text, /已开启工具/)
-    assert.strictEqual(store.get('tools').includes('bash'), true)
+    const handler = new SlashCommandHandler({ channel: {}, memory: {} })
+    const res = await handler.handle('/tools')
+    assert.match(res.text, /Channel 工具策略/)
+    assert.match(res.text, /Channel 固定启用完整 ai-plugin/)
   })
 
   test('should toggle session-scoped yolo and report status', async () => {

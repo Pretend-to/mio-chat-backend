@@ -5,6 +5,7 @@ import {
   applyChannelToolPolicy,
   getPluginToolNames,
 } from '../../lib/chat/llm/toolPolicy.js'
+import { ChatEventFactory } from '../../lib/chat/llm/events/ChatEventFactory.js'
 
 function tool(name, options = {}) {
   return { name, ...options }
@@ -47,7 +48,11 @@ test('Channel policy always exposes the complete context-visible ai-plugin', () 
       tools: ['other_mid_1'],
     })
 
-    const channelEvent = { body: {}, channel: { type: 'weixin-ilink' } }
+    const channelEvent = ChatEventFactory.createMock({
+      body: {},
+      channel: { type: 'weixin-ilink' },
+      source: 'channel',
+    })
     assert.equal(applyChannelToolPolicy(channelEvent), true)
     assert.deepEqual(channelEvent.body.settings.toolCallSettings.tools, [
       'memory_mid_1',
@@ -60,15 +65,14 @@ test('Channel policy always exposes the complete context-visible ai-plugin', () 
 })
 
 test('Task policy keeps its explicit tool allowlist even with channel context', () => {
-  const event = {
-    body: {
-      settings: {
-        toolCallSettings: { mode: 'AUTO', tools: ['task_tool'] },
-      },
-    },
+  const event = ChatEventFactory.createMock({
     channel: { type: 'weixin-ilink' },
-    metaData: { isTask: true, triggerType: 'task' },
-  }
+    settings: {
+      toolCallSettings: { mode: 'AUTO', tools: ['task_tool'] },
+    },
+    source: 'channel',
+    triggerKind: 'task',
+  })
   assert.equal(applyChannelToolPolicy(event), false)
-  assert.deepEqual(event.body.settings.toolCallSettings.tools, ['task_tool'])
+  assert.deepEqual(event.settings.toolCallSettings.tools, ['task_tool'])
 })

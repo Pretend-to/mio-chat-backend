@@ -6,6 +6,7 @@
 深入了解 Agent 操作系统底层的运行逻辑。
 *   [**Hooks 拦截机制**](./core/hooks.md): V3 架构的灵魂，AOP 编程模型。
 *   [**上下文压缩机制**](./core/context-compression.md): 如何实现极致的上下文压缩与 Cache 优化。
+*   [**ChatEvent 领域事件体系重构计划**](./architecture/chat-event-refactor-plan.md): 统一事件契约、身份、场景、输出边界及分阶段迁移方案。
 
 ## 🛠️ 扩展与开发 (Development)
 手把手教你如何为系统增加新能力。

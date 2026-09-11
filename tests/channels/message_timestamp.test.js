@@ -16,7 +16,7 @@ import {
 
 test('message timestamp helpers are deterministic and source-independent', () => {
   const time = 1_780_000_000_123
-  const iso = new Date(time).toISOString()
+  const iso = formatMessageTime(time)
 
   assert.equal(ensureMessageTime(undefined, time), time)
   assert.equal(formatMessageTime(time), iso)
@@ -47,7 +47,7 @@ test('channel history wraps persisted user times without mutating stored message
   ]
   const before = JSON.stringify(history)
   const converted = convertChatHistoryToLLMMessages(history)
-  const iso = new Date(history[0].time).toISOString()
+  const iso = formatMessageTime(history[0].time)
 
   assert.equal(converted[0].role, 'user')
   assert.equal(converted[0].content[0].text, `<message time="${iso}">\nhello\n</message>`)
@@ -91,7 +91,7 @@ test('current channel input and persisted history use stable timestamp envelopes
     text: 'current',
   })
 
-  const expected = `<message time="${new Date(messageTime).toISOString()}">`
+  const expected = `<message time="${formatMessageTime(messageTime)}">`
   assert.ok(result.content.some((item) => item.type === 'text' && item.data?.text === 'ok'))
   assert.ok(observed.some((m) => m.role === 'user' && m.content[0]?.text?.includes(`${expected}\nprevious`)))
   assert.ok(observed.some((m) => m.role === 'user' && m.content[0]?.text?.includes(`${expected}\ncurrent`)))

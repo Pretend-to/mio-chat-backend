@@ -850,6 +850,9 @@ export function createBackendLlm(opts = {}) {
       const auditChannelId =
         ctx.channelId || ctx.channel?.id || ctx.channel?.channelId || null
       const event = {
+        source: 'channel',
+        conversationKind: 'direct',
+        triggerKind: ctx.isTask ? 'task' : 'interactive',
         body: {
           channel: ctx.channel?.channelType || 'channel',
           channelId: auditChannelId,

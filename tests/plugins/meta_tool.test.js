@@ -89,7 +89,7 @@ test('MetaTool - action: list', async () => {
   // 2. Channel context (channelOnly tool should be visible)
   const channelList = await meta._execute({
     params: { action: 'list' },
-    parentEvent: { channel: { id: 'wx' } },
+    parentEvent: { channel: { id: 'wx' }, source: 'channel' },
   })
   assert.strictEqual(channelList.success, true)
   assert.strictEqual(channelList.total, 2)
