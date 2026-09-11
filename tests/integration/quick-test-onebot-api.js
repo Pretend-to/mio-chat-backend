@@ -6,6 +6,7 @@
  */
 
 import logger from '../../utils/logger.js'
+import { discoverTestRuntime } from '../../scripts/utils/test-runtime.js'
 
 // 简单的测试用例
 const tests = [
@@ -30,8 +31,10 @@ const tests = [
 ]
 
 async function quickTest() {
-  const baseUrl = process.env.BASE_URL || 'http://localhost:3080'
-  const adminCode = process.env.ADMIN_CODE || 'test_admin_code'
+  const runtime = await discoverTestRuntime()
+  const baseUrl = runtime.baseUrl
+  const adminCode = runtime.adminCode
+  if (!baseUrl || !adminCode) throw new Error('无法自动发现 MioChat 在线地址或管理员访问码')
   
   logger.info('🚀 OneBot API 快速测试')
   logger.info(`目标地址: ${baseUrl}`)

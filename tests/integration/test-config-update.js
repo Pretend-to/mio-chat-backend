@@ -6,9 +6,12 @@
 
 import fetch from 'node-fetch'
 import logger from '../../utils/logger.js'
+import { discoverTestRuntime } from '../../scripts/utils/test-runtime.js'
 
-const BASE_URL = 'http://127.0.0.1:3001'
-const ADMIN_CODE = 'gb6u1soOivcvg62rz1iuYg=='
+const runtime = await discoverTestRuntime()
+if (!runtime.baseUrl || !runtime.adminCode) throw new Error('无法自动发现 MioChat 在线地址或管理员访问码')
+const BASE_URL = runtime.baseUrl
+const ADMIN_CODE = runtime.adminCode
 
 /**
  * 发送 HTTP 请求
@@ -54,7 +57,7 @@ async function testUpdateFullConfig() {
       debug: !currentConfig.debug, // 切换调试模式
       server: {
         ...currentConfig.server,
-        port: currentConfig.server.port === 3000 ? 3001 : 3000 // 切换端口
+        port: currentConfig.server.port // 在线测试不得改变当前监听端口
       },
       web: {
         ...currentConfig.web,

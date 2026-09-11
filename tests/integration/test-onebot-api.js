@@ -7,9 +7,10 @@
 
 import logger from '../../utils/logger.js'
 import SystemSettingsService from '../../lib/database/services/SystemSettingsService.js'
+import { discoverTestRuntime } from '../../scripts/utils/test-runtime.js'
 
 class OneBotAPITester {
-  constructor(baseUrl = 'http://localhost:3080', adminCode = null) {
+  constructor(baseUrl, adminCode = null) {
     this.baseUrl = baseUrl
     this.adminCode = adminCode
     this.testResults = []
@@ -493,8 +494,10 @@ class OneBotAPITester {
 
 // 主函数
 async function main() {
-  const baseUrl = process.env.BASE_URL || 'http://localhost:3080'
-  const adminCode = process.env.ADMIN_CODE || null
+  const runtime = await discoverTestRuntime()
+  const baseUrl = runtime.baseUrl
+  const adminCode = runtime.adminCode
+  if (!baseUrl || !adminCode) throw new Error('无法自动发现 MioChat 在线地址或管理员访问码')
   
   const tester = new OneBotAPITester(baseUrl, adminCode)
   
