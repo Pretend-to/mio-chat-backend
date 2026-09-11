@@ -520,5 +520,72 @@ test('Gemini Adapter', async (t) => {
     assert.strictEqual(contents[2].parts[0].functionResponse.id, 'call_weather_1');
   });
 
+  await t.test('_executeChatRequest emits toolCall started event immediately on first chunk with functionCall and avoids duplicate started events', async () => {
+    const adapter = new GeminiAdapter({ ...config, is_enabled: true });
+    const updates = [];
+    const mockEvent = {
+      body: {
+        messages: [{ content: 'check weather', role: 'user' }],
+        model: 'gemini-2.0-flash',
+        stream: true,
+      },
+      client: {
+        popConnection() {},
+        popEvent() {},
+        pushConnection() {},
+      },
+      onAbort() {},
+      requestId: 'test-req-direct-toolcall',
+      update(up) {
+        updates.push(up);
+      },
+    };
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      // 首包直接是 functionCall（无思考过程）
+      const chunk1 = 'data: {"candidates":[{"content":{"parts":[' +
+        '{"functionCall":{"id":"fc_direct_1","name":"get_weather","args":{"city":"Tokyo"}}}' +
+        ']}}]}\n';
+      const encoder = new TextEncoder();
+      const chunks = [encoder.encode(chunk1)];
+      let index = 0;
+
+      return {
+        body: {
+          getReader() {
+            return {
+              async read() {
+                if (index < chunks.length) {
+                  return { done: false, value: chunks[index++] };
+                }
+                return { done: true, value: undefined };
+              },
+              releaseLock() {},
+            };
+          },
+        },
+        ok: true,
+      };
+    };
+
+    try {
+      const result = await adapter._executeChatRequest(mockEvent.body, mockEvent);
+      assert.ok(result);
+      assert.strictEqual(result.toolCalls.length, 1);
+      assert.strictEqual(result.toolCalls[0].function.name, 'get_weather');
+
+      // 验证 updates 中包含且仅包含 1 个 action: started 的 toolCall
+      const startedUpdates = updates.filter(
+        (u) => u.type === 'toolCall' && u.content?.action === 'started',
+      );
+      assert.strictEqual(startedUpdates.length, 1);
+      assert.strictEqual(startedUpdates[0].content.name, 'get_weather');
+      assert.strictEqual(startedUpdates[0].content.id, result.toolCalls[0].id);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   await runGenericAdapterTests(t, GeminiAdapter, config, mocks);
 });
