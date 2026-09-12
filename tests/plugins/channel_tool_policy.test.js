@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   applyChannelToolPolicy,
+  getChannelToolNames,
   getPluginToolNames,
 } from '../../lib/chat/llm/toolPolicy.js'
 import { ChatEventFactory } from '../../lib/chat/llm/events/ChatEventFactory.js'
@@ -11,16 +12,38 @@ function tool(name, options = {}) {
   return { name, ...options }
 }
 
-test('Channel policy always exposes the complete context-visible ai-plugin', () => {
+test('Channel policy always exposes complete ai-plugin and terminal-pty tools', () => {
   const previous = global.middleware
   global.middleware = {
     plugins: [
       {
         name: 'ai-plugin',
-        getTools: () => new Map([['ai-plugin', [
-          tool('memory_mid_1'),
-          tool('channel_action_mid_1', { channelOnly: true }),
-        ]]]),
+        getTools: () =>
+          new Map([
+            [
+              'ai-plugin',
+              [
+                tool('memory_mid_1'),
+                tool('channel_action_mid_1', { channelOnly: true }),
+              ],
+            ],
+          ]),
+      },
+      {
+        name: 'terminal-pty',
+        getTools: () =>
+          new Map([
+            [
+              'terminal-pty',
+              [
+                tool('bash_mid_1'),
+                tool('bash_input_mid_1'),
+                tool('read_screen_mid_1'),
+                tool('shell_policy_mid_1'),
+                tool('wait_mid_1'),
+              ],
+            ],
+          ]),
       },
       {
         name: 'other-plugin',
@@ -57,6 +80,20 @@ test('Channel policy always exposes the complete context-visible ai-plugin', () 
     assert.deepEqual(channelEvent.body.settings.toolCallSettings.tools, [
       'memory_mid_1',
       'channel_action_mid_1',
+      'bash_mid_1',
+      'bash_input_mid_1',
+      'read_screen_mid_1',
+      'shell_policy_mid_1',
+      'wait_mid_1',
+    ])
+    assert.deepEqual(getChannelToolNames(channelEvent), [
+      'memory_mid_1',
+      'channel_action_mid_1',
+      'bash_mid_1',
+      'bash_input_mid_1',
+      'read_screen_mid_1',
+      'shell_policy_mid_1',
+      'wait_mid_1',
     ])
     assert.deepEqual(getPluginToolNames('other-plugin'), ['other_mid_1'])
   } finally {

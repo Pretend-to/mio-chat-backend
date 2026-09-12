@@ -409,19 +409,19 @@ export class BaseChannel {
       `1. 你正在通过【${type}】直接与用户私聊，请遵循真实人类聊天习惯：`,
       '   - 避免机械死板的单篇长文排版；',
       '   - 善用自然的分条（发送多个气泡），模拟真实打字发消息的节奏；',
-      '   - 只要你认为需要分成多条消息发送，请显式使用 <msg>内容</msg> 标签包裹每一条独立消息（或在多条内容间使用 <break/> 换行分隔）；',
-      `   - 系统会自动将每个 <msg>...</msg> 拆分为${type}中的独立气泡逐条发送。`,
+      '   - 只要你认为需要分成多条消息发送，请仅在多条内容之间插入 <break/>；',
+      `   - 系统会自动按 <break/> 拆分为${type}中的独立气泡逐条发送。`,
       '2. 工具调用与阶段反馈：',
       '   - 当你要调用耗时工具（如生图、搜索、深度研究）时，先输出一条分条消息告知用户，例如：',
-      '     <msg>好嘞，正在帮你画一张可爱的自画像，可能需要十几秒～</msg>',
+      '     好嘞，正在帮你画一张可爱的自画像，可能需要十几秒～',
       '     (随后执行 draw 工具)',
-      '     <msg>画好啦！你看看喜欢不～</msg>',
+      '     画好啦！你看看喜欢不～',
     ].join('\n')
   }
 
   /**
    * 将一段完整文本块切分为渠道最终落地的独立消息段。
-   * 默认按 <msg>...</msg> / <break/> 拆分为多条气泡。
+   * 默认按 <break/> 拆分为多条气泡。
    */
   splitTextToSegments(text, _ctx = {}) {
     return splitMessageText(text)
@@ -1100,7 +1100,7 @@ export class BaseChannel {
       `【回复要求】：`,
       `1. 这是一次即时插话交互，请以自然、亲切、简短的口吻（1~2 句话）向用户反馈你当前正在全力处理上个任务的最新进度，或对他的临时疑问做快速解答；`,
       `2. 不要重复调用重度工具，直接输出文本；`,
-      `3. 依然可以使用 <msg>...</msg> 分条。`,
+      `3. 需要分条时仅使用 <break/>。`,
     ]
       .filter(Boolean)
       .join('\n')
@@ -1896,44 +1896,16 @@ export class BaseChannel {
 /**
  * 渠道协议文本切分：将 LLM 产出的完整文本切为多条独立消息。
  * 规则：
- *   - `<msg>...</msg>`：每条为一条独立气泡（标签内内容取 trim）
- *   - `<break/>` / `<break></break>` / `<break>`：消息间分隔符
- *   - 标签外的裸文本：按上述分隔符拆分，各自成一条
+ *   - `<break/>`：消息间分隔符
  * 返回去空白的字符串数组（保持原始顺序）。
  */
 export function splitMessageText(text) {
   const t = (text || '').trim()
   if (!t) return []
-
-  // 第一步：按完整 <msg>...</msg> 单元切分，保留 msg 单元与 msg 外裸文本单元
-  const units = []
-  const msgRe = /<msg>([\s\S]*?)<\/msg>/gi
-  let last = 0
-  let m
-  while ((m = msgRe.exec(t)) !== null) {
-    if (m.index > last)
-      units.push({ kind: 'raw', content: t.slice(last, m.index) })
-    units.push({ kind: 'msg', content: m[1].trim() })
-    last = msgRe.lastIndex
-  }
-  if (last < t.length) units.push({ kind: 'raw', content: t.slice(last) })
-  if (units.length === 0) units.push({ kind: 'raw', content: t })
-
-  // 第二步：每个单元各自产出最终段
-  const segments = []
-  for (const u of units) {
-    if (u.kind === 'msg') {
-      if (u.content) segments.push(u.content)
-    } else {
-      // 清理可能残留的半截 <msg>/</msg> 标签后，再按 <break> 拆分
-      const clean = u.content.replace(/<\/?msg>/gi, '')
-      for (const p of clean.split(/<break\s*\/?>|<\/break>/i)) {
-        const seg = p.trim()
-        if (seg) segments.push(seg)
-      }
-    }
-  }
-  return segments
+  return t
+    .split(/<break\s*\/>/i)
+    .map((part) => part.trim())
+    .filter(Boolean)
 }
 
 export default BaseChannel

@@ -13,7 +13,8 @@ import { wrapUserMessageWithTimestamp } from '../lib/chat/messageTimestamp.js'
 import { coalesceCrystallizeEvents } from '../lib/chat/crystallizationContent.js'
 import sessions from '../lib/server/socket.io/services/sessions.js'
 import streamCache from '../lib/server/socket.io/services/streamCache.js'
-import { getPluginToolNames } from '../lib/chat/llm/toolPolicy.js'
+import { getChannelToolNames } from '../lib/chat/llm/toolPolicy.js'
+import CrystallizationService from '../lib/chat/llm/services/CrystallizationService.js'
 
 /**
  * 动态获取当前系统已加载的所有可用工具完整名称（带 _mid_ 实例哈希）
@@ -694,6 +695,60 @@ export function createBackendLlm(opts = {}) {
   const customService = opts.llmService || null
 
   return {
+    compact: async (ctx) => {
+      const svc =
+        customService ||
+        (typeof global !== 'undefined' && global.middleware?.llm)
+      if (!svc) throw new Error('当前没有可用的 LLM 服务')
+
+      const messages = convertChatHistoryToLLMMessages(ctx.chat || [])
+      const keepTurns = Number.isInteger(ctx.keepTurns) ? ctx.keepTurns : 0
+      const boundaryIndex = CrystallizationService.scanFrontendTurns(
+        messages,
+        keepTurns,
+      )
+      if (boundaryIndex <= 0) {
+        return { compacted: false, reason: 'too-short' }
+      }
+
+      const provider =
+        ctx.provider ||
+        (typeof svc._getDefaultProvider === 'function'
+          ? svc._getDefaultProvider()
+          : null)
+      const instanceId =
+        provider && typeof svc._findInstanceIdByDisplayName === 'function'
+          ? svc._findInstanceIdByDisplayName(provider)
+          : provider
+      const adapter = instanceId ? svc.llms?.[instanceId] : null
+      if (!adapter) {
+        throw new Error(`当前模型提供商 ${provider || '默认'} 不可用`)
+      }
+
+      const settings = {
+        base: { model: ctx.model || null, stream: true },
+        pending_memory_events: ctx.pendingMemories || [],
+        previous_summary: ctx.crystal || '',
+      }
+      const event = {
+        body: { messages, settings },
+        settings,
+        update: () => {},
+      }
+      const result = await CrystallizationService.compress(
+        event,
+        adapter,
+        boundaryIndex,
+      )
+      return result
+        ? {
+            compacted: true,
+            keptTurns: keepTurns,
+            summary: result.summary,
+          }
+        : { compacted: false, reason: 'empty-result' }
+    },
+
     getModels: (isAdmin = true) => {
       const svc =
         customService ||
@@ -826,7 +881,7 @@ export function createBackendLlm(opts = {}) {
 
       /**
        * 将累积的完整文本块原样交给渠道，由渠道适配器负责最终发送。
-       * 按自身协议（<msg>/<break/>）统一切分，再经伪队列逐条发送。
+       * 按自身协议（<break/>）统一切分，再经伪队列逐条发送。
        */
       const flushTextBlock = async () => {
         let textToSend = currentTextBlock.trim()
@@ -839,8 +894,9 @@ export function createBackendLlm(opts = {}) {
         }
       }
 
-      const finalTools = getPluginToolNames('ai-plugin', {
+      const finalTools = getChannelToolNames({
         channel: ctx.channel || { type: 'channel' },
+        source: 'channel',
       })
       const savedEffort = ctx.memory
         ? await ctx.memory.getAgentMeta('reasoning_effort', 0)

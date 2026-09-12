@@ -113,6 +113,15 @@ test('DatabaseMemoryStore preserves the MemoryStore contract and archive semanti
   assert.equal((await memory.getChat(session.id)).length, 2)
   assert.equal(await prisma.message.count({ where: { archiveId: { not: null } } }), 2)
 
+  const compactAll = await memory.createSession({ id: 'session-compact-all' })
+  await memory.appendToChat(compactAll.id, user('old', 6000))
+  await memory.appendToChat(compactAll.id, assistant('old answer', 7000))
+  const compactRotation = await memory.rotateChat(compactAll.id, 0)
+  assert.equal(compactRotation.rotated, true)
+  assert.equal(compactRotation.removedCount, 2)
+  assert.equal(compactRotation.keptCount, 0)
+  assert.deepEqual(await memory.getChat(compactAll.id), [])
+
   await memory.createSession({ id: 'session-concurrent' })
   await Promise.all(Array.from({ length: 100 }, (_, index) => memory.appendToChat(
     'session-concurrent',

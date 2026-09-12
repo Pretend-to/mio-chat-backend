@@ -19,7 +19,7 @@ describe('Channel Session History & Slash Commands Test', () => {
       { content: 'Here are your files.', type: 'content' },
     ]
 
-    const toolCallChunk = chunks.find(c => c.type === 'toolCall')
+    const toolCallChunk = chunks.find((c) => c.type === 'toolCall')
     assert.strictEqual(toolCallChunk.content.id, 'call_bash_123')
     assert.strictEqual(toolCallChunk.content.name, 'bash')
     assert.strictEqual(toolCallChunk.content.arguments, '{"command":"ls -la"}')
@@ -51,7 +51,55 @@ describe('Channel Session History & Slash Commands Test', () => {
     const handler = new SlashCommandHandler({ channel: {}, memory: {} })
     const res = await handler.handle('/tools')
     assert.match(res.text, /Channel 工具策略/)
-    assert.match(res.text, /Channel 固定启用完整 ai-plugin/)
+    assert.match(res.text, /Channel 固定启用完整 ai-plugin 与 terminal-pty/)
+  })
+
+  test('should compact and fully archive the active session', async () => {
+    const calls = []
+    const memory = {
+      clearPendingMemories: async (id) => calls.push(['clear', id]),
+      getActiveSession: async () => 's_compact',
+      getCrystal: async () => '<memory_crystal>old</memory_crystal>',
+      getPendingMemories: async () => [{ action: 'add', content: 'fact' }],
+      getSession: async () => ({
+        chat: [
+          { role: 'user', text: 'old question' },
+          { role: 'assistant', text: 'old answer' },
+        ],
+        id: 's_compact',
+      }),
+      rotateChat: async (id, keepTurns) => {
+        calls.push(['rotate', id, keepTurns])
+        return { removedCount: 2, rotated: true }
+      },
+      setCrystal: async (id, value) => calls.push(['crystal', id, value]),
+    }
+    const channel = {
+      activeJobs: new Map(),
+      llm: {
+        compact: async (options) => {
+          calls.push(['compact', options])
+          return {
+            compacted: true,
+            summary: '<memory_crystal>new</memory_crystal>',
+          }
+        },
+      },
+      model: 'test-model',
+      provider: 'test-provider',
+    }
+
+    const handler = new SlashCommandHandler({ channel, memory })
+    const result = await handler.handle('/compact')
+
+    assert.match(result.text, /上下文压缩完成/)
+    assert.equal(calls[0][0], 'compact')
+    assert.equal(calls[0][1].keepTurns, 0)
+    assert.deepEqual(calls.slice(1), [
+      ['crystal', 's_compact', '<memory_crystal>new</memory_crystal>'],
+      ['rotate', 's_compact', 0],
+      ['clear', 's_compact'],
+    ])
   })
 
   test('should toggle session-scoped yolo and report status', async () => {
@@ -85,5 +133,4 @@ describe('Channel Session History & Slash Commands Test', () => {
     await handler.handle('/yolo off')
     assert.deepStrictEqual(store.get('session_yolo'), {})
   })
-
 })

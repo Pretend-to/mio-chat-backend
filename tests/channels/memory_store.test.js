@@ -58,6 +58,18 @@ test('MemoryStore 记忆落盘层', async () => {
     assert.ok((await m.getCrystal(s.id)).includes('长期事实A'))
   })
 
+  await test('rotateChat keepTurns=0 会归档全部原始消息', async () => {
+    const s = await m.createSession({ title: 'compact-all' })
+    await m.appendToChat(s.id, { role: 'user', content: '旧问题' })
+    await m.appendToChat(s.id, { role: 'assistant', content: '旧回答' })
+    const result = await m.rotateChat(s.id, 0)
+    assert.strictEqual(result.rotated, true)
+    assert.strictEqual(result.removedCount, 2)
+    assert.strictEqual(result.keptCount, 0)
+    assert.deepStrictEqual(await m.getChat(s.id), [])
+    assert.strictEqual(fs.existsSync(result.archivePath), true)
+  })
+
   await test('active 会话：set/get + 删除激活会话重置', async () => {
     assert.strictEqual(await m.getActiveSession(), null)
     const s = await m.createSession({ title: 'act' })

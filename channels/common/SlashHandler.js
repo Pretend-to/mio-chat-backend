@@ -13,13 +13,14 @@
  *   - /new 新建并切换会话
  *   - /use 切换会话
  *   - /current 查看当前激活会话
+ *   - /compact 手动压缩并归档当前会话上下文
  *   - /clear 清空当前会话消息
  *   - /soul 灵魂人设查看与修改
  *   - /memory 全局长期记忆查看
  *   - /context 当前话题记忆结晶查看
  *   - /delete 删除会话
  */
-import { getPluginToolNames } from '../../lib/chat/llm/toolPolicy.js'
+import { getChannelToolNames } from '../../lib/chat/llm/toolPolicy.js'
 import { getTriggerService } from '../../lib/triggers/index.js'
 import {
   getSessionYolo,
@@ -63,6 +64,7 @@ export class SlashHandler {
             '  • /new [标题] 新建并切换会话',
             '  • /use <id> 切换会话',
             '  • /current 当前会话信息',
+            '  • /compact 手动压缩上下文并归档原始对话',
             '  • /clear 清空当前会话聊天',
             '  • /delete <id> 删除指定会话',
             '',
@@ -114,15 +116,18 @@ export class SlashHandler {
       }
 
       case 'tools': {
-        const tools = getPluginToolNames('ai-plugin', {
+        const tools = getChannelToolNames({
           channel: this.channel,
+          source: 'channel',
         })
-        return wrap([
-          '【Channel 工具策略】',
-          'Channel 固定启用完整 ai-plugin，不支持按渠道增删工具。',
-          `当前工具数: ${tools.length}`,
-          ...tools.map(tool => `  ✅ ${tool}`),
-        ].join('\n'))
+        return wrap(
+          [
+            '【Channel 工具策略】',
+            'Channel 固定启用完整 ai-plugin 与 terminal-pty，不支持按渠道增删工具。',
+            `当前工具数: ${tools.length}`,
+            ...tools.map((tool) => `  ✅ ${tool}`),
+          ].join('\n'),
+        )
       }
 
       case 'trigger':
@@ -330,8 +335,9 @@ export class SlashHandler {
             ? await this.channel.isSessionYoloEnabled(sid)
             : await getSessionYolo(this.memory, sid)
           : false
-        const tools = getPluginToolNames('ai-plugin', {
+        const tools = getChannelToolNames({
           channel: this.channel,
+          source: 'channel',
         })
         const effort = await this.memory.getAgentMeta('reasoning_effort', 0)
         const provider = this.channel?.provider || '默认'
@@ -461,6 +467,45 @@ export class SlashHandler {
         if (!cur) return wrap('当前无激活会话')
         const s = await this.memory.getSession(cur)
         return wrap(`当前会话 ${cur}${s?.title ? `「${s.title}」` : ''}`)
+      }
+
+      case 'compact': {
+        const cur = await active()
+        if (!cur) return wrap('当前无激活会话，无法压缩上下文')
+        if (this.channel?.activeJobs?.has(cur)) {
+          return wrap('当前会话仍有任务运行，请等待完成或先使用 /abort')
+        }
+        if (typeof this.channel?.llm?.compact !== 'function') {
+          return wrap('当前 LLM 驱动不支持手动上下文压缩')
+        }
+
+        const session = await this.memory.getSession(cur)
+        if (!session?.chat?.length) return wrap('当前会话没有可压缩的对话')
+        const crystal = await this.memory.getCrystal(cur)
+        const pendingMemories =
+          typeof this.memory.getPendingMemories === 'function'
+            ? await this.memory.getPendingMemories(cur)
+            : []
+        const result = await this.channel.llm.compact({
+          chat: session.chat,
+          crystal,
+          keepTurns: 0,
+          model: this.channel.model,
+          pendingMemories,
+          provider: this.channel.provider,
+        })
+        if (!result?.compacted || !result.summary) {
+          return wrap('当前上下文过短或压缩结果为空，未做任何修改')
+        }
+
+        await this.memory.setCrystal(cur, result.summary)
+        const rotation = await this.memory.rotateChat(cur, 0)
+        if (typeof this.memory.clearPendingMemories === 'function') {
+          await this.memory.clearPendingMemories(cur)
+        }
+        return wrap(
+          `✅ 上下文压缩完成：已生成 ${result.summary.length} 字符的会话结晶，归档 ${rotation?.removedCount || 0} 条原始消息。下一轮将不再携带旧对话 few-shot。`,
+        )
       }
 
       case 'clear': {

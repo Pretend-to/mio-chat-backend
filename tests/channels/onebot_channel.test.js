@@ -360,32 +360,23 @@ test('微信 OneBot 合并网关原始元数据并在关闭防抖时等待媒体
   assert.equal(routed.ctx.contextToken, 'ctx-45')
 })
 
-test('OneBotChannel provides system prompt with <msg> convention and dynamic channel type', () => {
+test('OneBotChannel provides the canonical <break/> convention', () => {
   const { channel: wechatChannel } = makeWechatChannel()
   const wechatPrompt = wechatChannel.getChannelPrompt()
   assert.match(wechatPrompt, /【weixin-ilink渠道交互与消息风格规范】/)
-  assert.match(wechatPrompt, /<msg>内容<\/msg>/)
   assert.match(wechatPrompt, /<break\/>/)
+  assert.doesNotMatch(wechatPrompt, /<msg/i)
 
   const { channel: qqChannel } = makeChannel()
   qqChannel.platform = 'qq'
   const qqPrompt = qqChannel.getChannelPrompt()
   assert.match(qqPrompt, /【qq渠道交互与消息风格规范】/)
-  assert.match(qqPrompt, /<msg>内容<\/msg>/)
+  assert.match(qqPrompt, /<break\/>/)
+  assert.doesNotMatch(qqPrompt, /<msg/i)
 })
 
-test('OneBotChannel splitTextToSegments splits by <msg> and <break/> tags', () => {
+test('OneBotChannel splits only by <break/>', () => {
   const { channel } = makeWechatChannel()
-
-  assert.deepEqual(
-    channel.splitTextToSegments('<msg>第一条</msg><msg>第二条</msg>'),
-    ['第一条', '第二条'],
-  )
-
-  assert.deepEqual(
-    channel.splitTextToSegments('<msg>A</msg> 补充说明 <msg>B</msg>'),
-    ['A', '补充说明', 'B'],
-  )
 
   assert.deepEqual(channel.splitTextToSegments('A<break/>B<break/>C'), [
     'A',

@@ -9,6 +9,14 @@ test('Crystallization - scanFrontendTurns', async (t) => {
     assert.strictEqual(scanFrontendTurns([]), 0);
   });
 
+  await t.test('should compact the complete transcript when keepTurns is 0', () => {
+    const messages = [
+      { content: 'hello', role: 'user' },
+      { content: 'hi', role: 'assistant' },
+    ];
+    assert.strictEqual(scanFrontendTurns(messages, 0), messages.length);
+  });
+
   await t.test('should return 0 when there are fewer turns than requested', () => {
     const messages = [
       { content: 'hello', role: 'user' },

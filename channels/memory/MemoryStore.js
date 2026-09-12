@@ -296,14 +296,16 @@ export class MemoryStore {
     }
     const chat = session.chat
     // 计算保留起点：从尾部倒扫 user 轮次（与 scanFrontendTurns 同语义）
-    let keepFrom = 0
+    let keepFrom = keepTurns <= 0 ? chat.length : 0
     let turns = 0
-    for (let i = chat.length - 1; i >= 0; i--) {
-      if (chat[i]?.role === 'user') {
-        turns++
-        if (turns >= keepTurns) {
-          keepFrom = i
-          break
+    if (keepTurns > 0) {
+      for (let i = chat.length - 1; i >= 0; i--) {
+        if (chat[i]?.role === 'user') {
+          turns++
+          if (turns >= keepTurns) {
+            keepFrom = i
+            break
+          }
         }
       }
     }
