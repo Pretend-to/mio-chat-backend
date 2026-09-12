@@ -115,7 +115,9 @@ export class ChannelRuntime {
   }
 
   async dispose() {
-    await this.stopAll()
+    // 进程退出时的停止：只停轮询与 OneBots 账号，不把 status 落库。
+    // 否则“被动停止”会被写成 stopped，下次启动 init() 不会恢复该渠道。
+    await this.stopAll({ persistStatus: false })
     if (this.onebotsGateway && typeof this.onebotsGateway.dispose === 'function') {
       await this.onebotsGateway.dispose()
     }
@@ -256,8 +258,14 @@ export class ChannelRuntime {
     }
   }
 
-  /** 停止渠道（停止长轮询 + notifyStop + 状态落 stopped） */
-  async stop(channelId) {
+  /**
+   * 停止渠道（停止长轮询 + notifyStop + 状态落 stopped）
+   * @param {string} channelId
+   * @param {{persistStatus?: boolean}} [options] persistStatus=false 时只停运行实例、
+   *   不把 status 落库为 stopped —— 供进程退出（dispose）使用，避免重启后 init()
+   *   因 status 已被改写而拒绝恢复该渠道。用户主动停止仍使用默认的 true。
+   */
+  async stop(channelId, { persistStatus = true } = {}) {
     this.logger.info?.(`[ChannelRuntime] 🛑 正在停止渠道 "${channelId}"...`)
     const entry = this.running.get(channelId)
     let channel = entry?.channel
@@ -275,16 +283,20 @@ export class ChannelRuntime {
         if (gateway && typeof gateway.stopAccount === 'function') await gateway.stopAccount(channelId)
       } catch (error) { if (!firstError) firstError = error }
     }
-    await this.channelStore.update(channelId, { status: 'stopped' })
+    if (persistStatus) {
+      await this.channelStore.update(channelId, { status: 'stopped' })
+    }
     if (firstError) {
       this.logger.error?.(`[ChannelRuntime] ⚠️ 停止渠道 "${channelId}" 发生异常:`, firstError)
       throw firstError
     }
-    this.logger.info?.(`[ChannelRuntime] ⏹️ 渠道 "${channelId}" 已停止 (stopped)`)
+    this.logger.info?.(
+      `[ChannelRuntime] ⏹️ 渠道 "${channelId}" 已停止 (${persistStatus ? 'stopped' : '不落库，status 保持 running 以便重启后自动恢复'})`,
+    )
   }
 
-  async stopAll() {
-    for (const id of this.running.keys()) await this.stop(id)
+  async stopAll({ persistStatus = true } = {}) {
+    for (const id of this.running.keys()) await this.stop(id, { persistStatus })
   }
 
   isRunning(channelId) {
