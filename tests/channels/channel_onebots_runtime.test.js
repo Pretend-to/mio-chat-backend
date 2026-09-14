@@ -30,7 +30,7 @@ function makeResponse() {
 
 test('ChannelRuntime uses injected OneBots gateway/factory and stops account', async () => {
   const store = makeStore({
-    id: 'onebot-1', type: 'onebots', platform: 'wechat-clawbot',
+    id: 'onebot-1', type: 'onebots:qq', driver: 'onebots', platform: 'qq', protocol: 'onebot.v12',
     agentId: 'agent', userId: 'user-1', botId: 'bot-1', status: 'bound', token: '',
   })
   const calls = []
@@ -51,7 +51,7 @@ test('ChannelRuntime uses injected OneBots gateway/factory and stops account', a
     onebotChannelFactory: options => {
       assert.equal(options.gateway, gateway)
       assert.equal(options.channel.id, 'onebot-1')
-      assert.equal(options.platform, 'wechat-clawbot')
+      assert.equal(options.platform, 'qq')
       return fakeChannel
     },
     persistenceFactory: async () => makeMemory(),
@@ -69,7 +69,7 @@ test('ChannelRuntime uses injected OneBots gateway/factory and stops account', a
 
 test('ChannelRuntime rolls back a OneBots account when Channel startup fails', async () => {
   const store = makeStore({
-    id: 'onebot-fail', type: 'onebots', platform: 'wechat-clawbot',
+    id: 'onebot-fail', type: 'onebots:qq', driver: 'onebots', platform: 'qq', protocol: 'onebot.v12',
     agentId: 'agent', userId: 'user-1', botId: 'bot-1', status: 'bound', token: '',
   })
   const calls = []
@@ -93,26 +93,22 @@ test('ChannelRuntime rolls back a OneBots account when Channel startup fails', a
   assert.equal(runtime.isRunning('onebot-fail'), false)
 })
 
-test('ChannelRuntime migrates legacy wechat identity and latest context into OneBots', async () => {
+test('ChannelRuntime migrates legacy wechat identity into native iLink', async () => {
   const store = makeStore({
     id: 'legacy-wechat', type: 'wechat', agentId: 'agent',
     token: 'legacy-token', botId: 'legacy-bot', userId: 'legacy-user', status: 'bound',
   })
   let mounted = null
-  let channelOptions = null
-  const gateway = {
-    async init() {},
-    async startAccount(channel) { mounted = channel },
-    async createClient() { return {} },
-    async stopAccount() {},
+  const client = {
+    botId: 'legacy-bot',
+    async getUpdates() {
+      await new Promise(resolve => setTimeout(resolve, 5))
+      return { get_updates_buf: '', msgs: [], ret: 0 }
+    },
   }
   const runtime = new ChannelRuntime({
     channelStore: store,
-    onebotsGateway: gateway,
-    onebotChannelFactory: options => {
-      channelOptions = options
-      return { async start() {}, async stop() {} }
-    },
+    clientFactory: channel => { mounted = channel; return client },
     persistenceFactory: async () => ({
       ...makeMemory(),
       async getAgentMeta(key, fallback) {
@@ -124,14 +120,16 @@ test('ChannelRuntime migrates legacy wechat identity and latest context into One
   await runtime.start('legacy-wechat')
   assert.equal(mounted.token, 'legacy-token')
   assert.equal(mounted.botId, 'legacy-bot')
-  assert.deepEqual(mounted.contextTokens, { 'legacy-user': 'legacy-context' })
-  assert.equal(channelOptions.platform, 'wechat-clawbot')
+  assert.equal(store.snapshot().driver, 'native')
+  assert.equal(store.snapshot().platform, 'weixin-ilink')
+  assert.equal(store.snapshot().protocol, 'weixin.ilink')
+  assert.equal(runtime.running.get('legacy-wechat').chn.latestContextToken, 'legacy-context')
   await runtime.dispose()
 })
 
 test('ChannelRuntime migrates legacy agent model config and persists later channel updates', async () => {
   const store = makeStore({
-    id: 'model-channel', type: 'onebots', platform: 'wechat-clawbot',
+    id: 'model-channel', type: 'onebots:qq', driver: 'onebots', platform: 'qq', protocol: 'onebot.v12',
     agentId: 'shared-agent', userId: 'user', botId: 'bot', status: 'bound',
     provider: 'OldProvider', model: 'old-model',
   })
@@ -181,7 +179,7 @@ test('ChannelRuntime migrates legacy agent model config and persists later chann
 
 test('OneBots QR controller delegates QR and confirmed state to gateway', async () => {
   const store = makeStore({
-    id: 'onebot-qr', type: 'onebots', platform: 'wechat-clawbot',
+    id: 'onebot-qr', type: 'onebots:qq', driver: 'onebots', platform: 'qq', protocol: 'onebot.v12',
     agentId: 'agent', userId: '', botId: '', status: 'unbound', token: '',
   })
   const calls = []

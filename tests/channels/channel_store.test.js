@@ -41,9 +41,9 @@ test('ChannelStore 渠道配置持久化', async () => {
     })
     assert.strictEqual(c.type, 'weixin-ilink')
     assert.strictEqual(c.adapterId, 'weixin-ilink')
-    assert.strictEqual(c.driver, 'onebots')
-    assert.strictEqual(c.platform, 'wechat-clawbot')
-    assert.strictEqual(c.protocol, 'onebot.v12')
+    assert.strictEqual(c.driver, 'native')
+    assert.strictEqual(c.platform, 'weixin-ilink')
+    assert.strictEqual(c.protocol, 'weixin.ilink')
   })
 
   await test('remove 删除', async () => {

@@ -19,52 +19,46 @@ function response() {
 
 const request = (params = {}, body = {}) => ({ body, params })
 
-test('Channel 管理 API 统一通过 OneBots，并兼容旧 wechat 记录', async t => {
-  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'channel-controller-onebots-'))
+test('Channel 管理 API 使用原生 iLink，并兼容旧 wechat 记录', async t => {
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'channel-controller-ilink-'))
   t.after(() => fs.promises.rm(tempDir, { force: true, recursive: true }))
   const store = new ChannelStore({ file: path.join(tempDir, 'channels.json') })
-  const accountStates = new Map()
-  const qrCalls = []
-  const gateway = {
-    async init() {},
-    async requestQrLogin(channel, platform, options) {
-      qrCalls.push({ channel, platform, options })
-      accountStates.set(channel.id, {
-        botId: 'bot-9',
-        status: 'online',
-        token: 'token-9',
-        userId: 'master@im.wechat',
-      })
-      return { qrcode: 'qr-1', qrCodeUrl: 'https://example.com/qr.png' }
+  const qrClient = {
+    async getLoginQrCode() {
+      return { qrcode: 'qr-1', qrcode_img_content: 'https://example.com/qr.png' }
     },
-    getAccountState(id) { return accountStates.get(String(id)) || { status: 'wait' } },
-    async startAccount(channel) {
-      if (!accountStates.has(channel.id)) {
-        accountStates.set(channel.id, {
-          botId: channel.botId,
-          status: 'online',
-          token: channel.token,
-          userId: channel.userId,
-        })
+    async pollQrStatus(qrcode) {
+      assert.equal(qrcode, 'qr-1')
+      return {
+        bot_token: 'token-9',
+        ilink_bot_id: 'bot-9',
+        ilink_user_id: 'master@im.wechat',
+        status: 'confirmed',
       }
     },
-    async createClient() { return { start() {}, stop() {} } },
-    async stopAccount() {},
-    async dispose() {},
+  }
+  const runtimeClient = {
+    botId: 'bot-9',
+    async getUpdates() {
+      await new Promise(resolve => setTimeout(resolve, 5))
+      return { get_updates_buf: '', msgs: [], ret: 0 }
+    },
+    async notifyStart() {},
+    async notifyStop() {},
+    async sendMessage() {},
   }
   const runtime = new ChannelRuntime({
     channelStore: store,
+    clientFactory: () => runtimeClient,
     memoryBase: path.join(tempDir, 'memory'),
-    onebotsGateway: gateway,
-    onebotChannelFactory: () => ({
-      connected: true,
-      async start() {},
-      async stop() {},
-    }),
     llm: { process: async () => ({ text: 'ok' }) },
   })
   t.after(() => runtime.dispose())
-  controller.initChannelController({ channelStore: store, runtime, onebotsGateway: gateway })
+  controller.initChannelController({
+    channelStore: store,
+    ilinkClientFactory: () => qrClient,
+    runtime,
+  })
 
   const catalogResponse = response()
   controller.getChannelPlatformCatalog(request(), catalogResponse)
@@ -82,22 +76,19 @@ test('Channel 管理 API 统一通过 OneBots，并兼容旧 wechat 记录', asy
   const createResponse = response()
   await controller.createChannel(request({}, {
     adapter: {
-      runtime: 'onebots',
-      platform: 'wechat-clawbot',
-      protocol: 'onebot.v12',
+      id: 'weixin-ilink',
+      runtime: 'native',
+      protocol: 'weixin.ilink',
     },
     profile: { name: '结构化创建', agentId: 'wechat-master' },
-    config: { receive_mode: 'manual' },
+    config: {},
   }), createResponse)
   const generic = await store.get(createResponse.body.data.id)
   assert.equal(generic.type, 'weixin-ilink')
-  assert.equal(generic.driver, 'onebots')
-  assert.equal(generic.platform, 'wechat-clawbot')
-  assert.equal(generic.protocol, 'onebot.v12')
-  assert.deepEqual(generic.config, {
-    outbound_text_format: 'markdown',
-    receive_mode: 'manual',
-  })
+  assert.equal(generic.driver, 'native')
+  assert.equal(generic.platform, 'weixin-ilink')
+  assert.equal(generic.protocol, 'weixin.ilink')
+  assert.deepEqual(generic.config, {})
   await store.remove(generic.id)
 
   const created = await store.create({ name: '绑定测试', type: 'wechat' })
@@ -105,7 +96,6 @@ test('Channel 管理 API 统一通过 OneBots，并兼容旧 wechat 记录', asy
   await controller.getChannelQrcode(request({ id: created.id }, { force: true }), qrResponse)
   assert.equal(qrResponse.body.data.qrcode, 'qr-1')
   assert.equal(qrResponse.body.data.img, 'https://example.com/qr.png')
-  assert.equal(qrCalls[0].options.force, true)
 
   const pollResponse = response()
   await controller.pollChannelQr(request({ id: created.id }, { qrcode: 'qr-1' }), pollResponse)

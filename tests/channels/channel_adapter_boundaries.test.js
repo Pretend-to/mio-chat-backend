@@ -6,8 +6,7 @@ import {
   getChannelCatalog,
   resolveChannelAdapter,
 } from '../../channels/ChannelAdapterRegistry.js'
-import { OneBotChannel } from '../../channels/onebots/OneBotChannel.js'
-import { WeixinIlinkChannel } from '../../channels/weixin-ilink/WeixinIlinkChannel.js'
+import { WechatChannel } from '../../channels/wechat/WechatChannel.js'
 
 test('legacy and current Weixin identifiers resolve to the MioChat adapter boundary', () => {
   for (const channel of [
@@ -21,7 +20,7 @@ test('legacy and current Weixin identifiers resolve to the MioChat adapter bound
   assert.equal(resolveChannelAdapter({ type: 'onebots', platform: 'qq' }), null)
 })
 
-test('Weixin iLink owns platform behavior while extending the generic OneBot channel', () => {
+test('Weixin iLink uses the inspectable native channel implementation', () => {
   const adapter = resolveChannelAdapter({ type: 'weixin-ilink' })
   const channel = adapter.createChannel({
     client: {},
@@ -29,9 +28,10 @@ test('Weixin iLink owns platform behavior while extending the generic OneBot cha
     masterId: 'owner',
     llm: {},
   })
-  assert.equal(channel instanceof WeixinIlinkChannel, true)
-  assert.equal(channel instanceof OneBotChannel, true)
-  assert.equal(adapter.onebots.platform, 'wechat-clawbot')
+  assert.equal(channel instanceof WechatChannel, true)
+  assert.equal(adapter.runtime, 'native')
+  assert.equal(adapter.protocol, 'weixin.ilink')
+  assert.equal(adapter.onebots, undefined)
 })
 
 test('OneBots foundation contains no Weixin or iLink implementation details', () => {

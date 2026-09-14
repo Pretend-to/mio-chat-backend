@@ -1,4 +1,4 @@
-import { weixinIlinkAdapter } from './weixin-ilink/index.js'
+import { weixinIlinkAdapter } from './wechat/index.js'
 
 const CATALOG_VERSION = 1
 const definitions = []
@@ -16,10 +16,7 @@ export function registerChannelAdapter(definition) {
   if (!definition?.name || !runtime || !protocol) {
     throw new TypeError(`Channel adapter ${id} requires name, runtime, and protocol`)
   }
-  if (runtime !== 'onebots' || protocol !== 'onebot.v12') {
-    throw new TypeError(`Channel adapter ${id} requires the supported onebots/onebot.v12 runtime`)
-  }
-  if (!normalizeId(definition.onebots?.platform)) {
+  if (runtime === 'onebots' && !normalizeId(definition.onebots?.platform)) {
     throw new TypeError(`Channel adapter ${id} requires onebots.platform`)
   }
   const normalized = {
@@ -38,10 +35,12 @@ export function registerChannelAdapter(definition) {
       ? { ...definition.defaults }
       : {},
     configSchema: Array.isArray(definition.configSchema) ? [...definition.configSchema] : [],
-    onebots: {
-      ...definition.onebots,
-      platform: normalizeId(definition.onebots.platform),
-    },
+    ...(runtime === 'onebots' && {
+      onebots: {
+        ...definition.onebots,
+        platform: normalizeId(definition.onebots.platform),
+      },
+    }),
   }
   const index = definitions.findIndex(item => item.id === id)
   if (index >= 0) definitions[index] = normalized
@@ -75,12 +74,20 @@ export function resolveChannelAdapter(channel = {}) {
 
 export function isOneBotsChannel(channel) {
   if (!channel) return false
+  const driver = normalizeId(channel.driver)
+  if (driver) return driver === 'onebots' || driver === 'onebot'
   const definition = resolveChannelAdapter(channel)
   if (definition) return definition.runtime === 'onebots'
-  const driver = normalizeId(channel.driver)
   const type = normalizeId(channel.type)
-  return driver === 'onebots' || driver === 'onebot' || type === 'onebots' ||
-    type === 'onebot' || /^onebots?[:/-]/.test(type)
+  return type === 'onebots' || type === 'onebot' || /^onebots?[:/-]/.test(type)
+}
+
+export function isNativeIlinkChannel(channel) {
+  if (!channel) return false
+  const driver = normalizeId(channel.driver)
+  if (driver) return driver === 'native' && resolveChannelAdapter(channel)?.protocol === 'weixin.ilink'
+  const definition = resolveChannelAdapter(channel)
+  return definition?.runtime === 'native' && definition?.protocol === 'weixin.ilink'
 }
 
 export function resolveOneBotsPlatform(channel = {}) {
@@ -103,14 +110,19 @@ function publicDefinition(definition) {
 
 export function getChannelCatalog() {
   const adapters = definitions.map(publicDefinition)
+  const runtimes = [...new Set(definitions.map(item => item.runtime))].map(id => ({
+    id,
+    name: id === 'native' ? 'MioChat Native' : id,
+    description: id === 'native'
+      ? 'MioChat 内置、可直接排查的渠道运行时'
+      : '渠道底层运行时',
+    protocols: [...new Set(
+      definitions.filter(item => item.runtime === id).map(item => item.protocol),
+    )],
+  }))
   return {
     version: CATALOG_VERSION,
-    runtimes: [{
-      id: 'onebots',
-      name: 'OneBots',
-      description: '统一 OneBot 多平台底层运行时',
-      protocols: ['onebot.v12'],
-    }],
+    runtimes,
     adapters,
     // Compatibility alias for older frontends. New clients should consume
     // `adapters`: these entries describe MioChat adapters, not OneBots platforms.
@@ -146,7 +158,7 @@ export function normalizeChannelCreatePayload(body = {}) {
     type: definition.id,
     adapterId: definition.id,
     driver: definition.runtime,
-    platform: definition.onebots?.platform || definition.id,
+    platform: definition.platform || definition.onebots?.platform || definition.id,
     protocol,
     name: profile.name || definition.defaults.name || definition.name,
     agentId: profile.agentId || definition.defaults.agentId || 'channel-master',
@@ -166,6 +178,7 @@ export function normalizeChannelCreatePayload(body = {}) {
 export default {
   getChannelAdapterDefinition,
   getChannelCatalog,
+  isNativeIlinkChannel,
   isOneBotsChannel,
   normalizeChannelCreatePayload,
   registerChannelAdapter,

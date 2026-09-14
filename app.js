@@ -370,7 +370,7 @@ async function startApp() {
     const channelRuntime = getChannelRuntime()
     if (!isolatedTest) {
       try {
-        // OneBots 通道需先恢复进程内网关与账号；旧 iLink 通道继续
+        // 先迁移并恢复原生 iLink 渠道；显式 OneBots 渠道仍可按需恢复。
         if (typeof channelRuntime.init === 'function') await channelRuntime.init()
       } catch (e) {
         logger.warn('[ChannelRuntime] 自动恢复渠道时出错:', e.message)

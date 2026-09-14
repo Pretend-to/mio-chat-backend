@@ -19,9 +19,9 @@ import { resolveChannelAdapter } from './ChannelAdapterRegistry.js'
  *     id,            // 唯一 id（如 c_xxx）
  *     name,          // bot 显示名
  *     type,          // MioChat 渠道适配器，如 'weixin-ilink'
- *     driver,        // 底层运行时，如 'onebots'
- *     platform,      // 底层平台 adapter，如 'wechat-clawbot'
- *     protocol,      // 协议标识，如 'onebot.v12'
+ *     driver,        // 底层运行时，如 'native'
+ *     platform,      // 平台适配器，如 'weixin-ilink'
+ *     protocol,      // 协议标识，如 'weixin.ilink'
  *     config,        // adapter 扩展配置
  *     agentId,       // 归属 agent（决定 memory/agents/<id> 与预设）
  *     token,         // bot_token（敏感，落盘）
@@ -227,9 +227,9 @@ export class ChannelStore {
       token: '',
       type: legacyBoundRecord ? 'weixin-ilink' : 'channel',
       adapterId: legacyBoundRecord ? 'weixin-ilink' : '',
-      driver: legacyBoundRecord ? 'onebots' : '',
-      platform: legacyBoundRecord ? 'wechat-clawbot' : '',
-      protocol: legacyBoundRecord ? 'onebot.v12' : '',
+      driver: legacyBoundRecord ? 'native' : '',
+      platform: legacyBoundRecord ? 'weixin-ilink' : '',
+      protocol: legacyBoundRecord ? 'weixin.ilink' : '',
       provider: data.provider || '',
       model: data.model || '',
       updatedAt: now,

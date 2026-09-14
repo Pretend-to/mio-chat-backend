@@ -1,17 +1,25 @@
 import { createSessionPersistence } from '../lib/chat/persistence/createSessionPersistence.js'
 import { createBackendLlm } from './llm.js'
+import { IlinkClient } from './wechat/IlinkClient.js'
+import { WechatChannel } from './wechat/WechatChannel.js'
 import {
+  isNativeIlinkChannel,
   isOneBotsChannel,
   resolveChannelAdapter,
   resolveOneBotsPlatform,
 } from './ChannelAdapterRegistry.js'
+import {
+  isIlinkChannel,
+  migrateOneBotsIlinkToNative,
+  nativeIlinkMetadata,
+} from './migrations/migrateOneBotsIlinkToNative.js'
 import logger from '../utils/logger.js'
 
 /**
  * ChannelRuntime — 渠道运行时管理器（M6 后端）
  *
- * 职责：把「已绑定的渠道配置」挂载到内嵌 OneBots 运行时，
- *       并统一管理启/停 / 运行态。历史 `wechat` 记录作为兼容别名处理。
+ * 职责：把「已绑定的渠道配置」挂载到对应运行时，并统一管理启/停 / 运行态。
+ *       微信 iLink 默认使用 MioChat 原生实现；OneBots 运行时保留但不再承载 iLink。
  * 解耦：llm 可注入（默认 createBackendLlm）；client 可注入（测试用 mock）。
  */
 export class ChannelRuntime {
@@ -61,6 +69,22 @@ export class ChannelRuntime {
     return ChannelRuntime.isOneBotsChannel(channel)
   }
 
+  static isNativeIlinkChannel(channel) {
+    return isNativeIlinkChannel(channel)
+  }
+
+  isNativeIlinkChannel(channel) {
+    return ChannelRuntime.isNativeIlinkChannel(channel)
+  }
+
+  async migrateIlinkChannels() {
+    return migrateOneBotsIlinkToNative({
+      channelStore: this.channelStore,
+      createMemory: agentId => this.createMemory(agentId),
+      logger: this.logger,
+    })
+  }
+
   /**
    * Resolve the optional gateway only when a OneBots channel is actually used.
    * This keeps installations without OneBots (and the legacy iLink path) lazy.
@@ -95,19 +119,28 @@ export class ChannelRuntime {
     return this.onebotChannelFactory
   }
 
-  /** Initialize OneBots and restore persisted running channels. */
+  /** Migrate persisted iLink accounts, then restore all supported channels. */
   async init() {
+    await this.migrateIlinkChannels()
     const channels = typeof this.channelStore.listInternal === 'function'
       ? await this.channelStore.listInternal()
       : []
-    const onebots = channels.filter((channel) => this.isOneBotsChannel(channel))
+    const onebots = channels.filter(channel => (
+      this.isOneBotsChannel(channel) && !isIlinkChannel(channel)
+    ))
     if (onebots.length > 0) await this.getOnebotsGateway({ initialize: true })
 
-    // Restore every supported channel through OneBots.
-    for (const channel of onebots) {
-      if (channel.status !== 'running' || (!channel.userId && !channel.botId)) continue
+    const supported = channels.filter(channel => (
+      this.isNativeIlinkChannel(channel) ||
+      (this.isOneBotsChannel(channel) && !isIlinkChannel(channel))
+    ))
+    for (const channel of supported) {
+      const bound = this.isNativeIlinkChannel(channel)
+        ? Boolean(channel.token && channel.userId)
+        : Boolean(channel.userId || channel.botId)
+      if (channel.status !== 'running' || !bound) continue
       try { await this.start(channel.id) } catch (error) {
-        console.warn(`[ChannelRuntime] OneBots 渠道 "${channel.id}" 恢复失败: ${error.message}`)
+        this.logger.warn?.(`[ChannelRuntime] 渠道 "${channel.id}" 恢复失败: ${error.message}`)
         await this.channelStore.update(channel.id, { status: 'stopped' })
       }
     }
@@ -191,33 +224,58 @@ export class ChannelRuntime {
   async start(channelId) {
     let channel = await this.channelStore.get(channelId)
     if (!channel) throw new Error(`channel ${channelId} not found`)
+    const nativeMetadata = nativeIlinkMetadata()
+    const needsIlinkMigration = isIlinkChannel(channel) && Object.entries(nativeMetadata)
+      .some(([key, value]) => channel[key] !== value)
+    if (needsIlinkMigration) {
+      await this.migrateIlinkChannels()
+      channel = await this.channelStore.get(channelId)
+      if (!this.isNativeIlinkChannel(channel)) {
+        throw new Error(`channel ${channelId} could not migrate to native iLink`)
+      }
+    }
     const adapterDefinition = resolveChannelAdapter(channel)
     const onebots = this.isOneBotsChannel(channel)
-    if (!onebots) throw new Error(`channel type is not supported by OneBots: ${channel.type || 'unknown'}`)
-    if (!channel.userId && !channel.botId) {
+    const nativeIlink = this.isNativeIlinkChannel(channel)
+    if (!onebots && !nativeIlink) {
+      throw new Error(`unsupported channel type: ${channel.type || 'unknown'}`)
+    }
+    if (nativeIlink ? (!channel.token || !channel.userId) : (!channel.userId && !channel.botId)) {
       throw new Error(`channel ${channelId} not bound`)
     }
     if (this.running.has(channelId)) return this.running.get(channelId).chn
 
     const agentId = channel.agentId || adapterDefinition?.defaults?.agentId || 'channel-master'
-    const platform = resolveOneBotsPlatform(channel)
-    if (!platform) throw new Error(`channel adapter has no OneBots platform: ${channel.type || 'unknown'}`)
-    this.logger.info?.(`[ChannelRuntime] 🚀 正在启动渠道 "${channelId}" (type=${channel.type}, platform=${platform}, masterId=${channel.userId || channel.botId})`)
+    const platform = onebots ? resolveOneBotsPlatform(channel) : 'weixin-ilink'
+    if (onebots && !platform) {
+      throw new Error(`channel adapter has no OneBots platform: ${channel.type || 'unknown'}`)
+    }
+    this.logger.info?.(`[ChannelRuntime] 🚀 正在启动渠道 "${channelId}" (type=${channel.type}, driver=${onebots ? 'onebots' : 'native'}, platform=${platform}, masterId=${channel.userId || channel.botId})`)
     const memory = await this.createMemory(agentId, { recover: true })
     channel = await this.migrateLegacyModelConfig(memory, channel)
     let client
     let gateway = null
     try {
-      gateway = await this.getOnebotsGateway({ initialize: true })
-      const latestContextToken = await memory.getAgentMeta('latestContextToken', null)
-      const accountConfig = latestContextToken && channel.userId
-        ? { ...channel, contextTokens: { [channel.userId]: latestContextToken } }
-        : channel
-      await gateway.startAccount(accountConfig, adapterDefinition)
-      if (typeof gateway.createClient !== 'function') {
-        throw new Error('OneBots gateway does not provide createClient(channel)')
+      if (onebots) {
+        gateway = await this.getOnebotsGateway({ initialize: true })
+        const latestContextToken = await memory.getAgentMeta('latestContextToken', null)
+        const accountConfig = latestContextToken && channel.userId
+          ? { ...channel, contextTokens: { [channel.userId]: latestContextToken } }
+          : channel
+        await gateway.startAccount(accountConfig, adapterDefinition)
+        if (typeof gateway.createClient !== 'function') {
+          throw new Error('OneBots gateway does not provide createClient(channel)')
+        }
+        client = await gateway.createClient(channel)
+      } else {
+        client = this.clientFactory
+          ? await this.clientFactory(channel)
+          : new IlinkClient().setAuth({
+            botId: channel.botId,
+            token: channel.token,
+            userId: channel.userId,
+          })
       }
-      client = await gateway.createClient(channel)
       const commonOptions = {
         channelId,
         id: channelId,
@@ -233,8 +291,9 @@ export class ChannelRuntime {
           this.channelStore.update(channelId, { lastActive: Date.now() }).catch(() => {})
         },
       }
-      const factory = this.onebotChannelFactory || adapterDefinition?.createChannel ||
-        await this.getOnebotChannelFactory()
+      const factory = onebots
+        ? this.onebotChannelFactory || await this.getOnebotChannelFactory()
+        : adapterDefinition?.createChannel || (options => new WechatChannel(options))
       const chn = await factory({
         ...commonOptions,
         adapterDefinition,

@@ -78,12 +78,12 @@ function makeApp() {
   }
 }
 
-test('OneBots treats legacy wechat records as a permanent compatibility alias', () => {
-  assert.equal(isOneBotsChannel({ type: 'wechat' }, {}), true)
-  assert.equal(isOneBotsChannel({ type: 'onebots' }, {}), true)
-  assert.equal(isOneBotsChannel({ type: 'wechat' }, { MIO_WECHAT_DRIVER: 'onebots' }), true)
-  assert.equal(resolveOneBotsPlatform({ type: 'wechat' }), 'wechat-clawbot')
-  assert.equal(resolveOneBotsPlatform({ type: 'onebots', platform: 'qq' }), 'qq')
+test('OneBots requires an explicit driver and no longer claims legacy WeChat', () => {
+  assert.equal(isOneBotsChannel({ type: 'wechat' }), false)
+  assert.equal(isOneBotsChannel({ type: 'onebots', driver: 'onebots' }), true)
+  assert.equal(isOneBotsChannel({ type: 'wechat', driver: 'native' }), false)
+  assert.equal(resolveOneBotsPlatform({ type: 'wechat' }), '')
+  assert.equal(resolveOneBotsPlatform({ type: 'onebots', driver: 'onebots', platform: 'qq' }), 'qq')
   assert.equal(resolveOneBotsPlatform({ type: 'onebots:telegram' }), 'telegram')
 })
 
