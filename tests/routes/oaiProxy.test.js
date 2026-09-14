@@ -30,8 +30,11 @@ global.middleware.llm = {
     'gemini-stream-tools': { adapterType: 'gemini', displayName: 'Gemini-Stream-Tools' },
     'openai-1': { adapterType: 'openai', displayName: 'OpenAI-主要' },
     'parallel-tools-stream': { adapterType: 'openai', displayName: 'Parallel-Tools-Stream' },
+    'stream-error': { adapterType: 'test', displayName: 'Stream-Error' },
     'tool-adapter': { adapterType: 'openai', displayName: 'Tools-Instance' },
-    'tools-echo': { adapterType: 'openai', displayName: 'Tools-Echo' }
+    'tool-name-echo': { adapterType: 'test', displayName: 'Tool-Name-Echo' },
+    'tools-echo': { adapterType: 'openai', displayName: 'Tools-Echo' },
+    'usage-stream': { adapterType: 'test', displayName: 'Usage-Stream' },
   },
   llms: {
     'args-echo': {
@@ -164,6 +167,40 @@ global.middleware.llm = {
       models: [
         { owner: 'Test', models: ['tools-echo'] }
       ]
+    },
+    'usage-stream': {
+      guestModels: [],
+      async handleChatRequest(e) {
+        e.update({ type: 'content', content: 'Stream with usage' })
+        e.lastUsage = {
+          completion_tokens: 5,
+          prompt_tokens: 10,
+          total_tokens: 15,
+        }
+        e.complete()
+      },
+      models: [{ owner: 'Test', models: ['usage-stream-model'] }]
+    },
+    'stream-error': {
+      guestModels: [],
+      async handleChatRequest(e) {
+        e.update({ type: 'content', content: 'Partial content before error' })
+        throw new Error('Adapter crashed mid-stream')
+      },
+      models: [{ owner: 'Test', models: ['stream-error-model'] }]
+    },
+    'tool-name-echo': {
+      guestModels: [],
+      async handleChatRequest(e) {
+        const msgs = e.body.messages
+        const toolMsg = msgs.find(m => m.role === 'tool')
+        e.update({
+          content: JSON.stringify({ resolvedName: toolMsg?.name }),
+          type: 'content',
+        })
+        e.complete()
+      },
+      models: [{ owner: 'Test', models: ['tool-name-echo-model'] }]
     }
   }
 }
@@ -195,8 +232,10 @@ function createMockReqRes(body = {}, headers = {}) {
     body: null,
     end() {
       this.ended = true
+      this.writableEnded = true
     },
     ended: false,
+    writableEnded: false,
     flushHeaders() {
       this.headersSent = true
     },
@@ -488,4 +527,172 @@ test('OpenAI Proxy Route - Custom Tools and Tool Choice Passthrough', async (t) 
     assert.strictEqual(toolCall2.function.name, 'toolB')
   })
 })
+
+test('OpenAI Proxy Route - Streaming finish_reason and Usage separation', async (t) => {
+  await t.test('should send finish_reason chunk first and separate usage chunk with empty choices', async () => {
+    const { req, res } = createMockReqRes({
+      messages: [{ role: 'user', content: 'hello' }],
+      model: 'Usage-Stream/usage-stream-model',
+      stream: true
+    })
+
+    await oaiProxyController.chatCompletions(req, res)
+
+    assert.strictEqual(res.headers['Content-Type'], 'text/event-stream')
+    assert.strictEqual(res.ended, true)
+
+    const parsedChunks = res.writeBuffer
+      .filter(chunk => chunk.startsWith('data: ') && !chunk.includes('[DONE]'))
+      .map(chunk => JSON.parse(chunk.substring(6)))
+
+    // Find the finish_reason chunk
+    const finishChunk = parsedChunks.find(c => c.choices?.[0]?.finish_reason === 'stop')
+    assert.ok(finishChunk, 'Should have emitted a chunk with finish_reason: "stop"')
+    assert.deepStrictEqual(finishChunk.choices[0].delta, {})
+
+    // Find the usage chunk
+    const usageChunk = parsedChunks.find(c => c.usage && Array.isArray(c.choices) && c.choices.length === 0)
+    assert.ok(usageChunk, 'Should have emitted a separate usage chunk with choices: []')
+    assert.strictEqual(usageChunk.usage.total_tokens, 15)
+    assert.strictEqual(usageChunk.usage.prompt_tokens, 10)
+    assert.strictEqual(usageChunk.usage.completion_tokens, 5)
+
+    // Verify ordering: finish chunk must come before usage chunk
+    const finishIndex = parsedChunks.indexOf(finishChunk)
+    const usageIndex = parsedChunks.indexOf(usageChunk)
+    assert.ok(finishIndex < usageIndex, 'finish_reason chunk must precede usage chunk')
+
+    // Verify last chunk in writeBuffer is [DONE]
+    assert.strictEqual(res.writeBuffer[res.writeBuffer.length - 1], 'data: [DONE]\n\n')
+  })
+})
+
+test('OpenAI Proxy Route - Streaming Error Handling (after headersSent)', async (t) => {
+  await t.test('should output error SSE chunk and end response cleanly when adapter errors mid-stream', async () => {
+    const { req, res } = createMockReqRes({
+      messages: [{ role: 'user', content: 'trigger stream error' }],
+      model: 'Stream-Error/stream-error-model',
+      stream: true
+    })
+
+    await oaiProxyController.chatCompletions(req, res)
+
+    assert.strictEqual(res.ended, true)
+
+    // The stream should have sent an error payload before terminating with [DONE]
+    const parsedChunks = res.writeBuffer
+      .filter(chunk => chunk.startsWith('data: ') && !chunk.includes('[DONE]'))
+      .map(chunk => JSON.parse(chunk.substring(6)))
+
+    const errorChunk = parsedChunks.find(c => c.error)
+    assert.ok(errorChunk, 'Stream should output an error chunk when error occurs after headersSent')
+    assert.strictEqual(errorChunk.error.code, 'adapter_error')
+    assert.ok(errorChunk.error.message.includes('Adapter crashed mid-stream'))
+
+    assert.strictEqual(res.writeBuffer[res.writeBuffer.length - 1], 'data: [DONE]\n\n')
+  })
+
+  await t.test('should forward 401 status and clean error message when upstream fails before stream starts', async () => {
+    global.middleware.llm.instanceMetadata['upstream-401'] = { adapterType: 'test', displayName: 'Upstream-401' }
+    global.middleware.llm.llms['upstream-401'] = {
+      guestModels: [],
+      models: [{ owner: 'Test', models: ['upstream-401-model'] }],
+      async handleChatRequest() {
+        const err = new Error('Incorrect API key provided')
+        err.status = 401
+        err.code = 'invalid_api_key'
+        throw err
+      }
+    }
+
+    const { req, res } = createMockReqRes({
+      messages: [{ role: 'user', content: 'hello' }],
+      model: 'Upstream-401/upstream-401-model',
+      stream: false
+    })
+
+    await oaiProxyController.chatCompletions(req, res)
+
+    assert.strictEqual(res.statusCode, 401)
+    assert.strictEqual(res.body.error.code, 'invalid_api_key')
+    assert.strictEqual(res.body.error.message, 'Incorrect API key provided')
+    assert.strictEqual(res.body.error.type, 'invalid_request_error')
+  })
+})
+
+test('OpenAI Proxy Route - Multi-turn Tool Message Resolution', async (t) => {
+  await t.test('should backfill missing tool name from preceding assistant tool_calls', async () => {
+    const { req, res } = createMockReqRes({
+      messages: [
+        { role: 'user', content: 'What is the weather in Paris?' },
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            {
+              id: 'call_weather_1',
+              type: 'function',
+              function: { name: 'get_current_weather', arguments: '{"city":"Paris"}' }
+            }
+          ]
+        },
+        {
+          role: 'tool',
+          tool_call_id: 'call_weather_1',
+          content: '{"temp": 22}'
+        }
+      ],
+      model: 'Tool-Name-Echo/tool-name-echo-model',
+      stream: false
+    })
+
+    await oaiProxyController.chatCompletions(req, res)
+
+    assert.strictEqual(res.statusCode, 200)
+    const data = JSON.parse(res.body.choices[0].message.content)
+    assert.strictEqual(data.resolvedName, 'get_current_weather')
+  })
+})
+
+test('Gemini Adapter _preProcessMessage - Tool Response Name Resolution', async (t) => {
+  await t.test('should resolve name in functionResponse when tool message lacks name field', async () => {
+    const { Gemini } = await import('../../lib/chat/llm/adapters/lib/geminiHttpClient.js')
+    const gemini = new Gemini({ api_key: 'mock-key', base_url: 'https://mock' })
+
+    const messages = [
+      { role: 'user', content: 'calculate 2+2' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [
+          {
+            id: 'call_calc_99',
+            type: 'function',
+            function: { name: 'calculator', arguments: '{"expr":"2+2"}' }
+          }
+        ]
+      },
+      {
+        role: 'tool',
+        tool_call_id: 'call_calc_99',
+        content: '{"result": 4}'
+      }
+    ]
+
+    const { contents } = await gemini._preProcessMessage(messages)
+
+    // Contents should have 3 elements: user message, model message, and user (tool response) message
+    assert.strictEqual(contents.length, 3)
+    const toolResponseContent = contents[2]
+    assert.strictEqual(toolResponseContent.role, 'user')
+    assert.strictEqual(toolResponseContent.parts.length, 1)
+
+    const fnResponse = toolResponseContent.parts[0].functionResponse
+    assert.ok(fnResponse, 'Should contain functionResponse part')
+    assert.strictEqual(fnResponse.name, 'calculator')
+    assert.strictEqual(fnResponse.response.name, 'calculator')
+    assert.strictEqual(fnResponse.response.result, 4)
+  })
+})
+
 
