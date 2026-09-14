@@ -4,19 +4,89 @@
     <meta charset="UTF-8" />
     <link rel="icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" href="/static/icons/192x192.png" />
-    <link rel="manifest" href="/manifest.json">
+    <link rel="manifest" href="/manifest.json" />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
     <meta name="renderer" content="webkit" />
+    <meta name="theme-color" content="#f5f5f5" />
+    <script>
+      (() => {
+        let theme = "auto";
+        try {
+          const cached = JSON.parse(
+            localStorage.getItem("client_settings_appearance") || "{}",
+          );
+          theme = cached.theme || "auto";
+        } catch {}
+        const dark =
+          theme === "dark" ||
+          (theme === "auto" &&
+            matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+        document.documentElement.classList.add(dark ? "dark" : "light");
+        document
+          .querySelector('meta[name="theme-color"]')
+          ?.setAttribute("content", dark ? "#222222" : "#f5f5f5");
+      })();
+    </script>
+    <style>
+      html,
+      body,
+      #app {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        background: #f5f5f5;
+      }
+      html[data-theme="dark"],
+      html[data-theme="dark"] body,
+      html[data-theme="dark"] #app {
+        background: #222;
+      }
+      .mio-boot-shell {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+      }
+      .mio-boot-shell::after {
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #409eff;
+        box-shadow: 0 0 0 0 rgb(64 158 255 / 40%);
+        animation: mio-boot-pulse 1.2s ease-out infinite;
+      }
+      @keyframes mio-boot-pulse {
+        70% {
+          box-shadow: 0 0 0 12px rgb(64 158 255 / 0%);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgb(64 158 255 / 0%);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .mio-boot-shell::after {
+          animation: none;
+        }
+      }
+    </style>
     <link rel="dns-prefetch" href="/api" />
     <link rel="preconnect" href="/api" />
     <link rel="canonical" href="https://ai.krumio.com/" />
     <title>MioChat - 下一代 AI 智能对话平台</title>
-    <meta name="description" content="MioChat - 企业级多协议 AI 对话平台与 Agent 操作系统。具备 Agent Skills 技能系统与自演进配置管理能力，支持主流大模型、长时任务调度及 MCP 原生扩展。" />
-    <meta name="keywords" content="MioChat, AI 对话, Agent 操作系统, 自演进配置, Agent Skills, LLM 适配器, DeepSeek, 自动化任务, MCP, 多模态存储" />
+    <meta
+      name="description"
+      content="MioChat - 企业级多协议 AI 对话平台与 Agent 操作系统。具备 Agent Skills 技能系统与自演进配置管理能力，支持主流大模型、长时任务调度及 MCP 原生扩展。"
+    />
+    <meta
+      name="keywords"
+      content="MioChat, AI 对话, Agent 操作系统, 自演进配置, Agent Skills, LLM 适配器, DeepSeek, 自动化任务, MCP, 多模态存储"
+    />
     <meta name="author" content="MioChat Team" />
     <meta name="robots" content="index, follow" />
 
@@ -24,15 +94,27 @@
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://ai.krumio.com/" />
     <meta property="og:title" content="MioChat - 下一代 AI 智能对话平台" />
-    <meta property="og:description" content="企业级多协议 AI 对话平台与 Agent 操作系统。具备 Agent Skills 技能系统与自演进配置管理能力，支持主流大模型及 MCP 原生集成。" />
-    <meta property="og:image" content="https://ai.krumio.com/static/icons/512x512.png" />
+    <meta
+      property="og:description"
+      content="企业级多协议 AI 对话平台与 Agent 操作系统。具备 Agent Skills 技能系统与自演进配置管理能力，支持主流大模型及 MCP 原生集成。"
+    />
+    <meta
+      property="og:image"
+      content="https://ai.krumio.com/static/icons/512x512.png"
+    />
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image" />
     <meta property="twitter:url" content="https://ai.krumio.com/" />
     <meta property="twitter:title" content="MioChat - 下一代 AI 智能对话平台" />
-    <meta property="twitter:description" content="企业级多协议 AI 对话平台与 Agent 操作系统。具备 Agent Skills 技能系统与自演进配置管理能力，支持主流大模型及 MCP 原生集成。" />
-    <meta property="twitter:image" content="https://ai.krumio.com/static/icons/512x512.png" />
+    <meta
+      property="twitter:description"
+      content="企业级多协议 AI 对话平台与 Agent 操作系统。具备 Agent Skills 技能系统与自演进配置管理能力，支持主流大模型及 MCP 原生集成。"
+    />
+    <meta
+      property="twitter:image"
+      content="https://ai.krumio.com/static/icons/512x512.png"
+    />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -75,13 +157,15 @@
         y.parentNode.insertBefore(t, y);
       })(window, document, "clarity", "script", "qdc7jeq81j");
     </script>
-    <script type="module" crossorigin src="/assets/js/index-Cd9_YaLX.js"></script>
+    <script type="module" crossorigin src="/assets/js/index-DMHcEd__.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/css/vendor_element_plus-_kFoW8ho.css">
-    <link rel="stylesheet" crossorigin href="/assets/css/components-YZUMQy2l.css">
-    <link rel="stylesheet" crossorigin href="/assets/css/views-Bhar89t4.css">
-    <link rel="stylesheet" crossorigin href="/assets/css/index-BeLi25lS.css">
+    <link rel="stylesheet" crossorigin href="/assets/css/components-CiC8Ka7u.css">
+    <link rel="stylesheet" crossorigin href="/assets/css/views-BWL2jZF9.css">
+    <link rel="stylesheet" crossorigin href="/assets/css/index-CgPEKIlQ.css">
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div class="mio-boot-shell" aria-label="MioChat 正在启动"></div>
+    </div>
   </body>
 </html>
