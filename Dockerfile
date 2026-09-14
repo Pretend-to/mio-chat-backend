@@ -26,8 +26,11 @@ RUN apk update && apk add --no-cache \
     g++ \
     && npm install -g pnpm@10
 
-# 复制 package.json 和 pnpm-lock.yaml 以及 prisma
+# 复制依赖元数据、pnpm 补丁以及 Prisma schema。
+# patchedDependencies 会在 pnpm install 期间立即读取 patches/，
+# 因此不能等到后面的 COPY . . 才复制。
 COPY package.json pnpm-lock.yaml* ./
+COPY patches/ ./patches/
 COPY prisma/ ./prisma/
 
 # 安装 Node.js 依赖（编译 better-sqlite3 并自动执行 prisma generate）
