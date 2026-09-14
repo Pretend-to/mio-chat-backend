@@ -12,7 +12,7 @@ function tool(name, options = {}) {
   return { name, ...options }
 }
 
-test('Channel policy always exposes complete ai-plugin and terminal-pty tools', () => {
+test('Channel policy always exposes all three pinned plugin tool sets', () => {
   const previous = global.middleware
   global.middleware = {
     plugins: [
@@ -41,6 +41,20 @@ test('Channel policy always exposes complete ai-plugin and terminal-pty tools', 
                 tool('read_screen_mid_1'),
                 tool('shell_policy_mid_1'),
                 tool('wait_mid_1'),
+              ],
+            ],
+          ]),
+      },
+      {
+        name: 'file-editor-plugin',
+        getTools: () =>
+          new Map([
+            [
+              'file-editor-plugin',
+              [
+                tool('read_mid_1'),
+                tool('write_mid_1'),
+                tool('replace_mid_1'),
               ],
             ],
           ]),
@@ -85,6 +99,9 @@ test('Channel policy always exposes complete ai-plugin and terminal-pty tools', 
       'read_screen_mid_1',
       'shell_policy_mid_1',
       'wait_mid_1',
+      'read_mid_1',
+      'write_mid_1',
+      'replace_mid_1',
     ])
     assert.deepEqual(getChannelToolNames(channelEvent), [
       'memory_mid_1',
@@ -94,6 +111,9 @@ test('Channel policy always exposes complete ai-plugin and terminal-pty tools', 
       'read_screen_mid_1',
       'shell_policy_mid_1',
       'wait_mid_1',
+      'read_mid_1',
+      'write_mid_1',
+      'replace_mid_1',
     ])
     assert.deepEqual(getPluginToolNames('other-plugin'), ['other_mid_1'])
   } finally {

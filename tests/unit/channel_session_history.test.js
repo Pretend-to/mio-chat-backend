@@ -51,7 +51,10 @@ describe('Channel Session History & Slash Commands Test', () => {
     const handler = new SlashCommandHandler({ channel: {}, memory: {} })
     const res = await handler.handle('/tools')
     assert.match(res.text, /Channel 工具策略/)
-    assert.match(res.text, /Channel 固定启用完整 ai-plugin 与 terminal-pty/)
+    assert.match(
+      res.text,
+      /Channel 固定启用完整 ai-plugin、terminal-pty 与 file-editor-plugin/,
+    )
   })
 
   test('should compact and fully archive the active session', async () => {

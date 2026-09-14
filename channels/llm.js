@@ -3,7 +3,7 @@
  *
  * 职责：
  * 1. 统一为所有渠道（微信、飞书、钉钉、Telegram 等）构造标准化内部请求事件 (Internal Event)
- * 2. 默认装配注入全量核心工具集（ai-plugin, terminal-pty, channel-manager-plugin）
+ * 2. 默认装配注入全量核心工具集（ai-plugin, terminal-pty, file-editor-plugin）
  * 3. 渐进式披露：技能由 ai-plugin 中的 skill 工具按需发现与加载，保护 Prompt Cache
  * 4. 监听底层流式输出并利用状态机将完成的文本块和原生媒体 (图片等) 实时推送给渠道
  * 5. 精密装配并还原历史消息中的 Tool Calls（ID、入参、运行结果）及思考链，防止多轮对话工具依赖断裂

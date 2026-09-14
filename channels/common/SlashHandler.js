@@ -123,7 +123,7 @@ export class SlashHandler {
         return wrap(
           [
             '【Channel 工具策略】',
-            'Channel 固定启用完整 ai-plugin 与 terminal-pty，不支持按渠道增删工具。',
+            'Channel 固定启用完整 ai-plugin、terminal-pty 与 file-editor-plugin，不支持按渠道增删工具。',
             `当前工具数: ${tools.length}`,
             ...tools.map((tool) => `  ✅ ${tool}`),
           ].join('\n'),
