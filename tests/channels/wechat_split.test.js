@@ -114,12 +114,12 @@ test('splitWechatText：残留半截标签清洗', () => {
 // =============================================================
 // 集成链路：LLM 输出 → WechatChannel 切分 → 伪队列逐条发送
 // =============================================================
-test('微信分条集成：多 <msg> → 多条气泡且 create_time_ms 单调递增', async () => {
+test('微信分条集成：多 <break/> → 多条气泡且 create_time_ms 单调递增', async () => {
   const { channel, mockClient, memory, userMsg, baseDir } = makeHarness()
   await memory.writeSoul('你叫小助手')
   channel.llm = {
     process: async () => ({
-      text: '<msg>第一</msg><msg>第二</msg><msg>第三</msg>',
+      text: '第一<break/>第二<break/>第三',
     }),
   }
   await channel._handleMessage(userMsg('a'))
@@ -135,7 +135,7 @@ test('微信分条集成：多 <msg> → 多条气泡且 create_time_ms 单调�
   fs.rmSync(baseDir, { recursive: true, force: true })
 })
 
-test('微信分条集成：<break/> 与 mixed 场景保序', async () => {
+test('微信分条集成：<break/> 场景保序', async () => {
   const { channel, mockClient, memory, userMsg, baseDir } = makeHarness()
   await memory.writeSoul('你叫小助手')
   channel.llm = {
@@ -149,7 +149,7 @@ test('微信分条集成：<break/> 与 mixed 场景保序', async () => {
 
   mockClient.sendLog.length = 0
   channel.llm = {
-    process: async () => ({ text: '<msg>A</msg>补充<msg>B</msg><break/>C' }),
+    process: async () => ({ text: 'A<break/>补充<break/>B<break/>C' }),
   }
   await channel._handleMessage(userMsg('c'))
   assert.deepStrictEqual(
@@ -177,15 +177,15 @@ test('微信分条集成：流式交错多阶段输出（文字 -> 工具执行 
   await memory.writeSoul('你叫小助手')
   channel.llm = {
     process: async (ctx) => {
-      // 阶段 1：工具调用前进度文字（包含多条 <msg>）
+      // 阶段 1：工具调用前进度文字
       await ctx.onEmitTextBlock(
-        '<msg>收到，正在为你检索中～</msg><msg>已连接服务节点</msg>',
+        '收到，正在为你检索中～<break/>已连接服务节点',
       )
       // 模拟工具耗时
       await new Promise((r) => setTimeout(r, 20))
       // 阶段 2：工具执行后最终文字
       await ctx.onEmitTextBlock(
-        '<msg>查询完毕！</msg>这是详细结果<break/>请确认～',
+        '查询完毕！<break/>这是详细结果<break/>请确认～',
       )
       return { completed: true }
     },
@@ -212,7 +212,7 @@ test('微信分条集成：流式交错多阶段输出（文字 -> 工具执行 
 })
 
 test('微信分条集成：多图连发与图文防抖聚合测试', async () => {
-  const { channel, mockClient, memory, userMsg, baseDir } = makeHarness({
+  const { channel, memory, userMsg, baseDir } = makeHarness({
     debounceConfig: { mediaMs: 300, textMs: 150 },
     debounceEnabled: true,
   })
@@ -227,7 +227,7 @@ test('微信分条集成：多图连发与图文防抖聚合测试', async () =>
   }
 
   // Mock 实例级本地图片转存，避免真实 S3 初始化与上传
-  channel.bufferToImageUrl = async (buf) =>
+  channel.bufferToImageUrl = async (_buf) =>
     `/f/up/image/mock_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.png`
 
   // 模拟微信连续推送（并发触发，不加 await，防止冷启动下载解密耗时拉长发送间隔）
@@ -238,7 +238,7 @@ test('微信分条集成：多图连发与图文防抖聚合测试', async () =>
   channel._handleMessage(userMsg('帮我看看')) // 文本
 
   // 等待防抖定时器触发并执行完成
-  await new Promise((r) => setTimeout(r, 600))
+  await new Promise((r) => setTimeout(r, 1000))
 
   // 验证大模型仅被调用 1 次
   assert.strictEqual(processedCtxs.length, 1)
@@ -261,7 +261,7 @@ test('微信分条集成：多图连发与图文防抖聚合测试', async () =>
 })
 
 test('微信分条集成：文件上传解密与防抖聚合（附带文件 Markdown 链接供 parse 工具消费）', async () => {
-  const { channel, mockClient, memory, userMsg, baseDir } = makeHarness({
+  const { channel, memory, userMsg, baseDir } = makeHarness({
     debounceConfig: { mediaMs: 300, textMs: 150 },
     debounceEnabled: true,
   })
@@ -284,7 +284,7 @@ test('微信分条集成：文件上传解密与防抖聚合（附带文件 Mark
   channel._handleMessage(userMsg('请帮我提取摘要'))
 
   // 等待防抖定时器触发
-  await new Promise((r) => setTimeout(r, 600))
+  await new Promise((r) => setTimeout(r, 1000))
 
   assert.strictEqual(processedCtxs.length, 1)
   const ctx = processedCtxs[0]

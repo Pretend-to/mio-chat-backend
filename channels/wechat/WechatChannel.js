@@ -18,7 +18,6 @@ import {
   buildSendImageMsg,
   buildSendFileMsg,
   buildSendVideoMsg,
-  splitWechatText,
   extractImages,
   extractFiles,
 } from './msgHelper.js'
@@ -40,8 +39,10 @@ export class WechatChannel extends BaseChannel {
   constructor(opts) {
     super({
       ...opts,
-      channelType: 'wechat',
+      channelType: 'weixin-ilink',
     })
+    this.channel = opts?.channel ?? null
+    this.platform = 'weixin-ilink'
     this._buf = ''
     this._typingTickets = new Map() // userId -> typing_ticket（可缓存）
     this._tokenQuotaMap = new Map() // contextToken -> count (微信 24h 内限额回复 10 条消息)
@@ -63,11 +64,11 @@ export class WechatChannel extends BaseChannel {
 
   /**
    * 微信协议文本切分：
-   * 1. 正常情况下解析 <msg>...</msg> / <break/> 切为多条气泡；
+   * 1. 正常情况下按 <break/> 切为多条气泡；
    * 2. 当检测到该 contextToken 额度即将耗尽（已用 >= 7 条）时，智能紧凑化合并为 1 条微信气泡下发。
    */
   splitTextToSegments(text, ctx = {}) {
-    const rawSegments = splitWechatText(text)
+    const rawSegments = super.splitTextToSegments(text, ctx)
     if (rawSegments.length <= 1) return rawSegments
 
     const token = ctx.contextToken || this.latestContextToken

@@ -2,8 +2,7 @@
 
 import axios from 'axios'
 import logger from '../../utils/logger.js'
-import prismaManager from '../../lib/database/prisma.js'
-import SystemSettingsService from '../../lib/database/services/SystemSettingsService.js'
+import { discoverTestRuntime } from '../../scripts/utils/test-runtime.js'
 
 /**
  * 配置接口 CRUD 全面测试脚本
@@ -11,10 +10,9 @@ import SystemSettingsService from '../../lib/database/services/SystemSettingsSer
  */
 
 class ConfigCRUDTester {
-  baseURL = 'http://127.0.0.1:3000';
-constructor() {
-    
-    this.adminCode = 'gb6u1soOivcvg62rz1iuYg==' // 直接使用正确的验证码
+constructor(runtime) {
+    this.baseURL = runtime.baseUrl
+    this.adminCode = runtime.adminCode
     this.testResults = {
       errors: [],
       failed: 0,
@@ -27,10 +25,6 @@ constructor() {
    */
   async getAdminCode() {
     try {
-      // 初始化数据库连接
-      await prismaManager.initialize()
-      await SystemSettingsService.initialize()
-      
       logger.info(`使用管理员访问码: ${this.adminCode.substring(0, 4)}...`)
       return this.adminCode
     } catch (error) {
@@ -545,19 +539,20 @@ constructor() {
 
 // 执行测试
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const tester = new ConfigCRUDTester()
-  
-  tester.runAllTests()
-    .then(() => {
+  discoverTestRuntime()
+    .then(runtime => {
+      if (!runtime.baseUrl || !runtime.adminCode) {
+        throw new Error('无法自动发现 MioChat 在线地址或管理员访问码')
+      }
+      const tester = new ConfigCRUDTester(runtime)
+      return tester.runAllTests().then(() => tester)
+    })
+    .then(tester => {
       process.exit(tester.testResults.failed === 0 ? 0 : 1)
     })
     .catch(error => {
       logger.error('测试执行失败:', error)
       process.exit(1)
-    })
-    .finally(async () => {
-      // 确保数据库连接关闭
-      await prismaManager.disconnect()
     })
 }
 

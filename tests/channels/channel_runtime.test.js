@@ -37,16 +37,16 @@ test('ChannelStore + ChannelRuntime：渠道配置持久化 + 运行时启停', 
 
   await test('渠道配置：create 默认字段 + 脱敏', async () => {
     const c = await store.create({ name: '我的微信' })
-    assert.strictEqual(c.agentId, 'wechat-master')
+    assert.strictEqual(c.agentId, 'channel-master')
     assert.strictEqual(c.status, 'unbound')
     assert.ok(!('token' in c), '对外脱敏')
   })
 
   await test('未绑定渠道拒绝启动, 绑定后可启动/停止 + 状态落库', async () => {
-    const unb = await store.create({ name: '未绑定' })
+    const unb = await store.create({ name: '未绑定', type: 'wechat' })
     await assert.rejects(runtime.start(unb.id), /not bound/)
 
-    const ch = await store.create({ name: '绑定好' })
+    const ch = await store.create({ name: '绑定好', type: 'wechat' })
     await store.update(ch.id, { token: 'tk', botId: 'b1', userId: 'master@im.wechat', agentId: 'wechat-master' })
     const chn = await runtime.start(ch.id)
     assert.ok(chn, 'start 返回 WechatChannel')

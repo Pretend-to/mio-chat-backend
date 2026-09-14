@@ -43,6 +43,7 @@ export class BaseChannel {
    * @param {object} [opts.keepAlive] 保活配置
    * @param {object} [opts.logger=console] 日志输出
    * @param {Function} [opts.onActivity] 活跃状态回调
+   * @param {Function} [opts.onConfigUpdate] 渠道配置持久化回调
    */
   constructor({
     client,
@@ -56,6 +57,7 @@ export class BaseChannel {
     keepAlive = {},
     logger = console,
     onActivity = null,
+    onConfigUpdate = null,
     id = null,
     channelId = null,
     debounceConfig = {},
@@ -80,6 +82,7 @@ export class BaseChannel {
     this.typing = typing
     this.log = logger
     this.onActivity = onActivity
+    this.onConfigUpdate = onConfigUpdate
     this.activeJobs = new Map() // sessionId -> { startTime, text, currentTool, toolCount, lastProgressText }
     this._sessionQueues = new Map() // sessionId -> Promise chain (FIFO 互斥队列兼容)
     this._sessionLocks = new Set() // sessionId -> 互斥单飞锁
@@ -116,6 +119,33 @@ export class BaseChannel {
   /** 兼容性 getter：直接访问 pendingConfirmations Map */
   get pendingConfirmations() {
     return this.confirmations.pendingConfirmations
+  }
+
+  /**
+   * 更新当前渠道的模型配置。ChannelStore 是唯一事实来源，运行时字段只作镜像。
+   */
+  async updateModelConfig(patch = {}) {
+    const next = {}
+    if (Object.hasOwn(patch, 'provider')) next.provider = patch.provider ?? ''
+    if (Object.hasOwn(patch, 'model')) next.model = patch.model ?? ''
+    if (Object.keys(next).length === 0) return {
+      model: this.model,
+      provider: this.provider,
+    }
+
+    const persisted = typeof this.onConfigUpdate === 'function'
+      ? await this.onConfigUpdate(next)
+      : next
+    if (Object.hasOwn(next, 'provider')) {
+      this.provider = persisted?.provider ?? next.provider
+    }
+    if (Object.hasOwn(next, 'model')) {
+      this.model = persisted?.model ?? next.model
+    }
+    return {
+      model: this.model,
+      provider: this.provider,
+    }
   }
 
   // ===============================================================
@@ -370,18 +400,31 @@ export class BaseChannel {
     // 默认空操作，子类按需覆写
   }
 
-  /** 渠道专属回复风格与格式系统提示词（子类按需覆写） */
+  /** 渠道专属回复风格与格式系统提示词（子类可按需覆写） */
   getChannelPrompt() {
-    return ''
+    const type = this.channel?.type || this.platform || this.channelType || 'IM'
+
+    return [
+      `【${type}渠道交互与消息风格规范】`,
+      `1. 你正在通过【${type}】直接与用户私聊，请遵循真实人类聊天习惯：`,
+      '   - 避免机械死板的单篇长文排版；',
+      '   - 善用自然的分条（发送多个气泡），模拟真实打字发消息的节奏；',
+      '   - 只要你认为需要分成多条消息发送，请仅在多条内容之间插入 <break/>；',
+      `   - 系统会自动按 <break/> 拆分为${type}中的独立气泡逐条发送。`,
+      '2. 工具调用与阶段反馈：',
+      '   - 当你要调用耗时工具（如生图、搜索、深度研究）时，先输出一条分条消息告知用户，例如：',
+      '     好嘞，正在帮你画一张可爱的自画像，可能需要十几秒～',
+      '     (随后执行 draw 工具)',
+      '     画好啦！你看看喜欢不～',
+    ].join('\n')
   }
 
   /**
-   * 将一段完整文本块切分为渠道最终落地的独立消息段（默认不切分、整段发送）。
-   * 微信覆写：按 <msg>...</msg> / <break/> 拆分为多条微信气泡。
+   * 将一段完整文本块切分为渠道最终落地的独立消息段。
+   * 默认按 <break/> 拆分为多条气泡。
    */
   splitTextToSegments(text, _ctx = {}) {
-    const t = (text || '').trim()
-    return t ? [t] : []
+    return splitMessageText(text)
   }
 
   /** 渠道主长轮询/接收循环 */
@@ -446,17 +489,22 @@ export class BaseChannel {
   async _safeSend(from, contextToken, text) {
     const targetToken = contextToken || this.latestContextToken || null
     try {
-      for (const seg of this.splitTextToSegments(text, {
+      const segments = this.splitTextToSegments(text, {
         contextToken: targetToken,
         from,
-      })) {
+      })
+      for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i]
         const payload = this.buildSendMsg({
           contextToken: targetToken,
-          fromBot: this.client.botId,
+          fromBot: this.client?.botId,
           text: seg,
           to: from,
         })
         await this.doSendMessage(payload)
+        if (i < segments.length - 1) {
+          await new Promise((r) => setTimeout(r, 300))
+        }
       }
     } catch {}
   }
@@ -498,18 +546,45 @@ export class BaseChannel {
       packet.immediate ||
       isSlash
     ) {
+      let images = packet.images || []
+      let files = packet.files || []
+      if (packet.pendingMediaPromise) {
+        try {
+          const media = await packet.pendingMediaPromise
+          images = [...images, ...(media?.images || [])]
+          files = [...files, ...(media?.files || [])]
+        } catch (err) {
+          this.log?.warn?.(
+            `[${this.channelType}] 媒体异步下载转存异常:`,
+            err.message,
+          )
+        }
+      }
+      let text = packet.text || ''
+      if (files.length > 0) {
+        const fileLinks = files
+          .map((file) => `[文件: ${file.name}](${file.url})`)
+          .join('\n')
+        text =
+          text && !text.startsWith('[文件:')
+            ? `${text}\n${fileLinks}`
+            : fileLinks
+      }
       const activeSid = sid || (await this.memory?.getActiveSession?.())
       const ctx = {
         contextToken: packet.contextToken || this.latestContextToken || null,
-        files: packet.files || [],
+        files,
         from: from || this.masterId,
-        images: packet.images || [],
+        images: [...new Set(images)],
         rawMsg: packet.rawMsg || null,
         sid: activeSid,
-        text: packet.text || '',
+        text,
         ...packet.ctx,
       }
-      return this._route(packet.text || '', ctx)
+      this.log?.info?.(
+        `[${this.channelType}:${this.id}] ⚡ 消息即时直通路由 (跳过防抖) | 来源: ${from} | 内容: "${(text || '').slice(0, 50)}"`,
+      )
+      return this._route(text, ctx)
     }
 
     if (!this._inboundDebounceBuffers) {
@@ -576,6 +651,10 @@ export class BaseChannel {
       ? this.debounceConfig?.mediaMs || 10000
       : this.debounceConfig?.textMs || 5000
 
+    this.log?.info?.(
+      `[${this.channelType}:${this.id}] ⏳ 入站消息进入防抖缓冲桶 | 来源: ${from} | 文本段数: ${buf.textParts.length} | 富媒体: ${buf.hasMedia} | 等待窗口: ${delayMs}ms`,
+    )
+
     if (buf.timer) {
       clearTimeout(buf.timer)
     }
@@ -611,6 +690,10 @@ export class BaseChannel {
             text: mergedText,
             ...packet.ctx,
           }
+
+          this.log?.info?.(
+            `[${this.channelType}:${this.id}] 🚀 防抖窗口触发，启动消息处理 | 来源: ${from} | 会话: ${activeSid} | 聚合文本: "${mergedText.slice(0, 60)}" (图片: ${ctx.images.length}, 文件: ${ctx.files.length})`,
+          )
 
           // 保持并更新 typing 上下文
           this.startTyping(ctx, { sessionId: sid })
@@ -713,6 +796,9 @@ export class BaseChannel {
       sid = s.id
       ctx.sid = sid
     }
+    this.log?.info?.(
+      `[${this.channelType}:${this.id}] 🔀 消息统一路由分发 | 用户: ${ctx.from} | 会话: ${sid} | 文本: "${(text || '').slice(0, 50)}"`,
+    )
     return this._enqueueSession(sid, text.trim(), ctx)
   }
 
@@ -751,6 +837,9 @@ export class BaseChannel {
     // 如果当前会话空闲，立即获取锁并执行
     if (!this._sessionLocks.has(sid)) {
       this._sessionLocks.add(sid)
+      this.log?.info?.(
+        `[${this.channelType}:${this.id}] 🔒 获取会话单飞执行锁，开始处理 | 会话: ${sid}`,
+      )
       if (isFn) {
         return this._runSessionLegacyFn(sid, textOrFn)
       }
@@ -777,6 +866,9 @@ export class BaseChannel {
       }
       queue.push(queueItem)
       const rank = queue.length
+      this.log?.info?.(
+        `[${this.channelType}:${this.id}] ⏳ 会话正在执行其他任务，当前请求已排队 | 会话: ${sid} | 当前排位: [${rank}] | 内容: "${text.slice(0, 40)}"`,
+      )
 
       // 仅对真实活人用户的输入进行实时排位反馈（排除后台任务、哨兵与静默入队）
       if (!ctx.isTask && !ctx.isWake && ctx.from && !ctx.silentQueue && !isFn) {
@@ -813,6 +905,9 @@ export class BaseChannel {
     const queue = this._sessionWaitingQueues?.get(sid)
     if (!queue || queue.length === 0) {
       this._sessionLocks.delete(sid)
+      this.log?.info?.(
+        `[${this.channelType}:${this.id}] 🔓 会话排队已清空，释放单飞执行锁 | 会话: ${sid}`,
+      )
       await this.stopTyping({}, { sessionId: sid })
       return
     }
@@ -1005,7 +1100,7 @@ export class BaseChannel {
       `【回复要求】：`,
       `1. 这是一次即时插话交互，请以自然、亲切、简短的口吻（1~2 句话）向用户反馈你当前正在全力处理上个任务的最新进度，或对他的临时疑问做快速解答；`,
       `2. 不要重复调用重度工具，直接输出文本；`,
-      `3. 依然可以使用 <msg>...</msg> 分条。`,
+      `3. 需要分条时仅使用 <break/>。`,
     ]
       .filter(Boolean)
       .join('\n')
@@ -1068,12 +1163,15 @@ export class BaseChannel {
     }
     const soul = await this.memory.readSoul()
     const globalMem = await this.memory.readAllGlobal()
-    let sid = ctx.sid || (await this.memory.getActiveSession())
+    let sid = ctx.sid || (await this.memory?.getActiveSession())
     if (!sid) {
       const s = await this.memory.createSession({ title: '默认会话' })
       await this.memory.setActiveSession(s.id)
       sid = s.id
     }
+    this.log?.info?.(
+      `[${this.channelType}:${this.id}] 🧠 进入 LLM 推理处理流水线 | 会话: ${sid} | 来源: ${ctx.from} | 模型: ${this.provider || 'default'}/${this.model || 'default'} | 文本长度: ${text.length}`,
+    )
     const crystal = await this.memory.getCrystal(sid)
     const pendingMemories =
       typeof this.memory.getPendingMemories === 'function'
@@ -1509,7 +1607,7 @@ export class BaseChannel {
                     `[${this.channelType}] ⚠️ 结构化卡片发送异常 (${e.message})`,
                   )
                 }
-                await new Promise((r) => setTimeout(r, 100))
+                await new Promise((r) => setTimeout(r, 400))
               }
             }
 
@@ -1534,7 +1632,7 @@ export class BaseChannel {
                 this.log?.info?.(
                   `[${this.channelType}] 📤 实时文本块发送结果: ${JSON.stringify(sendRes)}`,
                 )
-                await new Promise((r) => setTimeout(r, 80))
+                await new Promise((r) => setTimeout(r, 400))
               }
             }
 
@@ -1587,6 +1685,11 @@ export class BaseChannel {
       }
 
       await sendQueue
+
+      const processDuration = Date.now() - activeJobObj.startTime
+      this.log?.info?.(
+        `[${this.channelType}:${this.id}] ✨ LLM 交互完成 (耗时: ${processDuration}ms) | 会话: ${sid} | 下发分块数: ${emittedBlocks.length}`,
+      )
 
       // 会话持久化落盘（包含完整 Tool Calls、参数、运行结果、思考链以及文本节点）
       if (
@@ -1788,6 +1891,21 @@ export class BaseChannel {
   async _recordActivity(token = null) {
     return this.keepAlive.recordActivity(token)
   }
+}
+
+/**
+ * 渠道协议文本切分：将 LLM 产出的完整文本切为多条独立消息。
+ * 规则：
+ *   - `<break/>`：消息间分隔符
+ * 返回去空白的字符串数组（保持原始顺序）。
+ */
+export function splitMessageText(text) {
+  const t = (text || '').trim()
+  if (!t) return []
+  return t
+    .split(/<break\s*\/>/i)
+    .map((part) => part.trim())
+    .filter(Boolean)
 }
 
 export default BaseChannel

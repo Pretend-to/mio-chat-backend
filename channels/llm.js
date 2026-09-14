@@ -3,16 +3,18 @@
  *
  * 职责：
  * 1. 统一为所有渠道（微信、飞书、钉钉、Telegram 等）构造标准化内部请求事件 (Internal Event)
- * 2. 默认装配注入全量核心工具集（ai-plugin, skill-plugin, terminal-pty, channel-manager-plugin）
- * 3. 自动将 SkillService 中的技能目录注册注入到 System Prompt (<skill_registry>)
+ * 2. 默认装配注入全量核心工具集（ai-plugin, terminal-pty, file-editor-plugin）
+ * 3. 渐进式披露：技能由 ai-plugin 中的 skill 工具按需发现与加载，保护 Prompt Cache
  * 4. 监听底层流式输出并利用状态机将完成的文本块和原生媒体 (图片等) 实时推送给渠道
  * 5. 精密装配并还原历史消息中的 Tool Calls（ID、入参、运行结果）及思考链，防止多轮对话工具依赖断裂
  */
 
-import skillService from '../lib/chat/llm/services/SkillService.js'
 import { wrapUserMessageWithTimestamp } from '../lib/chat/messageTimestamp.js'
+import { coalesceCrystallizeEvents } from '../lib/chat/crystallizationContent.js'
 import sessions from '../lib/server/socket.io/services/sessions.js'
 import streamCache from '../lib/server/socket.io/services/streamCache.js'
+import { getChannelToolNames } from '../lib/chat/llm/toolPolicy.js'
+import CrystallizationService from '../lib/chat/llm/services/CrystallizationService.js'
 
 /**
  * 动态获取当前系统已加载的所有可用工具完整名称（带 _mid_ 实例哈希）
@@ -376,6 +378,7 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
 
         const flushAssistant = () => {
           if (currentAssistant) {
+            delete currentAssistant._step
             if (pendingReasoning) {
               currentAssistant.reasoning_content = pendingReasoning
               pendingReasoning = ''
@@ -420,16 +423,33 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
             currentAssistant.content =
               (currentAssistant.content || '') + (elm.data?.text || '')
           } else if (elm.type === 'tool_call') {
+            const currentStep = elm.data?.step
+            if (
+              currentAssistant &&
+              currentAssistant.tool_calls &&
+              currentAssistant.tool_calls.length > 0 &&
+              currentAssistant._step !== undefined &&
+              currentStep !== undefined &&
+              currentAssistant._step !== currentStep
+            ) {
+              flushAssistant()
+            }
             if (!currentAssistant) {
               currentAssistant = { role: 'assistant' }
+              if (currentStep !== undefined) {
+                currentAssistant._step = currentStep
+              }
             }
             if (!currentAssistant.tool_calls) {
               currentAssistant.tool_calls = []
+              if (currentStep !== undefined) {
+                currentAssistant._step = currentStep
+              }
             }
             const args = elm.data.arguments || elm.data.parameters || ''
             const callId =
               elm.data.id || `call_${elm.data.name || 'tool'}_${elmIdx}`
-            currentAssistant.tool_calls.push({
+            const toolCallObj = {
               function: {
                 arguments:
                   typeof args === 'string' ? args : JSON.stringify(args || {}),
@@ -437,9 +457,13 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
               },
               id: callId,
               type: 'function',
-            })
+            }
+            if (elm.data.thoughtSignature) {
+              toolCallObj.thoughtSignature = elm.data.thoughtSignature
+            }
+            currentAssistant.tool_calls.push(toolCallObj)
 
-            pendingToolMessages.push({
+            const toolMsgObj = {
               content:
                 typeof elm.data.result === 'string'
                   ? elm.data.result
@@ -447,7 +471,11 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
               name: elm.data.name,
               role: 'tool',
               tool_call_id: callId,
-            })
+            }
+            if (elm.data.thoughtSignature) {
+              toolMsgObj.thoughtSignature = elm.data.thoughtSignature
+            }
+            pendingToolMessages.push(toolMsgObj)
           } else if (elm.type === 'context_message') {
             // A tool may inject a user message into the recursive request
             // (for example a direct multimodal pass-through).  Flush the
@@ -623,7 +651,7 @@ function assembleStructuredContent(chunks) {
     }
   }
 
-  return content
+  return coalesceCrystallizeEvents(content)
 }
 
 /**
@@ -667,6 +695,60 @@ export function createBackendLlm(opts = {}) {
   const customService = opts.llmService || null
 
   return {
+    compact: async (ctx) => {
+      const svc =
+        customService ||
+        (typeof global !== 'undefined' && global.middleware?.llm)
+      if (!svc) throw new Error('当前没有可用的 LLM 服务')
+
+      const messages = convertChatHistoryToLLMMessages(ctx.chat || [])
+      const keepTurns = Number.isInteger(ctx.keepTurns) ? ctx.keepTurns : 0
+      const boundaryIndex = CrystallizationService.scanFrontendTurns(
+        messages,
+        keepTurns,
+      )
+      if (boundaryIndex <= 0) {
+        return { compacted: false, reason: 'too-short' }
+      }
+
+      const provider =
+        ctx.provider ||
+        (typeof svc._getDefaultProvider === 'function'
+          ? svc._getDefaultProvider()
+          : null)
+      const instanceId =
+        provider && typeof svc._findInstanceIdByDisplayName === 'function'
+          ? svc._findInstanceIdByDisplayName(provider)
+          : provider
+      const adapter = instanceId ? svc.llms?.[instanceId] : null
+      if (!adapter) {
+        throw new Error(`当前模型提供商 ${provider || '默认'} 不可用`)
+      }
+
+      const settings = {
+        base: { model: ctx.model || null, stream: true },
+        pending_memory_events: ctx.pendingMemories || [],
+        previous_summary: ctx.crystal || '',
+      }
+      const event = {
+        body: { messages, settings },
+        settings,
+        update: () => {},
+      }
+      const result = await CrystallizationService.compress(
+        event,
+        adapter,
+        boundaryIndex,
+      )
+      return result
+        ? {
+            compacted: true,
+            keptTurns: keepTurns,
+            summary: result.summary,
+          }
+        : { compacted: false, reason: 'empty-result' }
+    },
+
     getModels: (isAdmin = true) => {
       const svc =
         customService ||
@@ -693,23 +775,14 @@ export function createBackendLlm(opts = {}) {
 
       const messages = []
 
-      // 1. 组装 System Prompt（包含灵魂设定、全局长期记忆、会话结晶、技能目录）
       // 1. 组装 System Prompt（静态前缀优先排列，确保 Prompt Caching inputcache 100% 命中）
       const systemSections = []
-
-      // 静态前缀：Skill 注册表 (与 Web UI 保持一致置顶)
-      const skillsBlock = skillService?.buildSystemPromptBlock
-        ? skillService.buildSystemPromptBlock()
-        : ''
-      if (skillsBlock) {
-        systemSections.push(skillsBlock)
-      }
 
       // 静态前缀：自治与工具说明
       systemSections.push(
         [
           '【工具使用与自治能力】',
-          '你可以使用 `channel_profile` 自主管理自身灵魂，使用 `channel_session` 管理会话历史，使用 `channel_model` 切换底层模型，使用 `toolsmanager` 管理所有工具开闭，使用 `memory` 记录用户事实，使用 `bash` 执行终端命令，使用 `Skill` 加载专家能力。',
+          '你可以使用 `channel_profile` 自主管理自身灵魂，使用 `channel_session` 管理会话历史，使用 `channel_model` 切换底层模型，使用 `meta_tool` 动态查看与调用系统所有工具，使用 `memory` 记录用户事实，使用 `bash` 执行终端命令，使用 `skill` 加载专家能力。',
         ].join('\n'),
       )
 
@@ -807,8 +880,8 @@ export function createBackendLlm(opts = {}) {
       let crystalPersistenceSucceeded = false
 
       /**
-       * 将累积的完整文本块原样交给渠道，由渠道适配器（如 WechatChannel.splitTextToSegments）
-       * 按自身协议（<msg>/<break/>）统一切分，再经伪队列逐条发送。
+       * 将累积的完整文本块原样交给渠道，由渠道适配器负责最终发送。
+       * 按自身协议（<break/>）统一切分，再经伪队列逐条发送。
        */
       const flushTextBlock = async () => {
         let textToSend = currentTextBlock.trim()
@@ -821,26 +894,10 @@ export function createBackendLlm(opts = {}) {
         }
       }
 
-      const defaultChannelTools = getRegisteredSystemToolNames()
-      let savedTools = ctx.memory
-        ? await ctx.memory.getAgentMeta('tools', null)
-        : null
-      if (Array.isArray(savedTools)) {
-        const { migrated, tools: completedTools } = completeToolHashes(
-          savedTools,
-          defaultChannelTools,
-        )
-        if (migrated) {
-          savedTools = completedTools
-          ctx.memory.setAgentMeta('tools', completedTools).catch(() => {})
-        }
-      }
-      const finalTools =
-        Array.isArray(savedTools) && savedTools.length > 0
-          ? savedTools
-          : defaultChannelTools.length > 0
-            ? defaultChannelTools
-            : []
+      const finalTools = getChannelToolNames({
+        channel: ctx.channel || { type: 'channel' },
+        source: 'channel',
+      })
       const savedEffort = ctx.memory
         ? await ctx.memory.getAgentMeta('reasoning_effort', 0)
         : 0
@@ -872,9 +929,16 @@ export function createBackendLlm(opts = {}) {
         // shell hook independently fails closed when it cannot read YOLO.
         sessionYolo = false
       }
+      const auditChannelId =
+        ctx.channelId || ctx.channel?.id || ctx.channel?.channelId || null
       const event = {
+        source: 'channel',
+        conversationKind: 'direct',
+        triggerKind: ctx.isTask ? 'task' : 'interactive',
         body: {
           channel: ctx.channel?.channelType || 'channel',
+          channelId: auditChannelId,
+          contactorId: auditChannelId,
           messages,
           sessionId: ctx.sessionId || null,
           settings: {
@@ -1146,7 +1210,12 @@ export function createBackendLlm(opts = {}) {
           }
 
           if (data.type === 'crystallize') {
-            if (data.content?.status === 'finished' && data.content?.summary) {
+            // UI snapshots and failed compression must never mutate durable memory.
+            if (
+              data.content?.commit === true &&
+              data.content?.status === 'finished' &&
+              data.content?.summary
+            ) {
               const summaryXml = data.content.summary.trim()
               if (summaryXml) {
                 latestCrystal = summaryXml
@@ -1154,11 +1223,6 @@ export function createBackendLlm(opts = {}) {
                   contextPersistenceQueue = contextPersistenceQueue
                     .then(async () => {
                       await ctx.memory.setCrystal(ctx.sessionId, summaryXml)
-                      if (
-                        typeof ctx.memory.clearPendingMemories === 'function'
-                      ) {
-                        await ctx.memory.clearPendingMemories(ctx.sessionId)
-                      }
                       // 上下文压缩闭环：归档 + 裁剪 + 读窗口更新必须在
                       // 下一条排队 user 进入前完成，否则会读到旧上下文。
                       if (typeof ctx.memory.rotateChat === 'function') {
@@ -1176,6 +1240,13 @@ export function createBackendLlm(opts = {}) {
                           )
                         }
                       }
+                      // Clear staged memory only after crystal storage and chat
+                      // rotation both succeeded, otherwise retry on next compression.
+                      if (
+                        typeof ctx.memory.clearPendingMemories === 'function'
+                      ) {
+                        await ctx.memory.clearPendingMemories(ctx.sessionId)
+                      }
                       crystalPersistenceSucceeded = true
                     })
                     .catch((err) => {
@@ -1184,6 +1255,7 @@ export function createBackendLlm(opts = {}) {
                         `[${ctx.channel?.channelType || 'channel'}] 记忆结晶/裁剪落盘失败:`,
                         err,
                       )
+                      throw err
                     })
                 }
               }
@@ -1330,6 +1402,7 @@ export function createBackendLlm(opts = {}) {
           channelType: ctx.channel?.channelType || 'channel',
           id: ctx.from || 'channel_master',
           isAdmin: true,
+          origin: ctx.isWeb ? 'web' : 'channel',
           role: 'admin',
           username: 'ChannelMaster',
         },
@@ -1473,8 +1546,8 @@ export function createBackendLlm(opts = {}) {
         aborted: !!event.aborted,
         completed: !event.aborted,
         content: structuredContent,
-        crystal:
-          latestCrystal || event.body?.settings?.previous_summary || null,
+        // Existing/request-local summaries are not new durable commits.
+        crystal: latestCrystal,
         crystalPersisted: Boolean(latestCrystal) && crystalPersistenceSucceeded,
         recursiveUserMessages: collectRecursiveUserMessages(
           event.body.messages,

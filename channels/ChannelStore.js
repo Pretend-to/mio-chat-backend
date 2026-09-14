@@ -8,6 +8,7 @@ import {
   encryptToken,
   parseEncryptionKey,
 } from '../lib/chat/persistence/TokenCipher.js'
+import { resolveChannelAdapter } from './ChannelAdapterRegistry.js'
 
 /**
  * ChannelStore — 渠道配置持久化（管理面板后端的存储端）
@@ -17,8 +18,12 @@ import {
  *   {
  *     id,            // 唯一 id（如 c_xxx）
  *     name,          // bot 显示名
- *     type,          // 'wechat'
- *     agentId,       // 归属 agent（决定 memory/agents/<id> 与预设）默认 'wechat-master'
+ *     type,          // MioChat 渠道适配器，如 'weixin-ilink'
+ *     driver,        // 底层运行时，如 'native'
+ *     platform,      // 平台适配器，如 'weixin-ilink'
+ *     protocol,      // 协议标识，如 'weixin.ilink'
+ *     config,        // adapter 扩展配置
+ *     agentId,       // 归属 agent（决定 memory/agents/<id> 与预设）
  *     token,         // bot_token（敏感，落盘）
  *     botId, userId, // iLink 登录返回的 bot 账户 id / 绑定者微信 id
  *     avatar,        // 头像链接（可选）
@@ -87,11 +92,26 @@ export class ChannelStore {
   _public(c) {
     // 脱敏对外：token 不返回明文
     const { token, ...rest } = c
-    return { ...rest, hasToken: !!token }
+    const definition = resolveChannelAdapter(c)
+    return {
+      ...rest,
+      ...(definition && {
+        adapterId: c.adapterId || definition.id,
+        driver: c.driver || definition.runtime,
+      }),
+      hasToken: !!token,
+    }
   }
 
   _fromDatabase(row) {
+    let legacy = {}
+    try {
+      legacy = row.legacyJson ? JSON.parse(row.legacyJson) : {}
+    } catch (error) {
+      this.logger?.warn?.(`[ChannelStore] invalid legacy_json for ${row.id}: ${error.message}`)
+    }
     return {
+      ...legacy,
       agentId: row.agentId,
       avatar: row.avatar || '',
       botId: row.botId || '',
@@ -138,7 +158,7 @@ export class ChannelStore {
       provider: channel.provider || null,
       status: channel.status || 'unbound',
       tokenEnc,
-      type: channel.type || 'wechat',
+      type: channel.type || 'channel',
       updatedAt: new Date(channel.updatedAt),
       userId: channel.userId || null,
     }
@@ -191,16 +211,25 @@ export class ChannelStore {
       ? await this._listDatabase()
       : await this._load()
     const now = Date.now()
+    // Before the versioned adapter API, bound WeChat channels were sometimes
+    // written directly without any type metadata. Preserve only that legacy
+    // shape; a new unbound record remains platform-neutral.
+    const legacyBoundRecord = !data.type && !data.adapterId && !data.driver &&
+      !data.platform && Boolean(data.token || data.userId || data.botId)
     const channel = {
-      agentId: 'wechat-master', // 默认归属
+      agentId: 'channel-master',
       avatar: '',
       botId: '',
       createdAt: now,
       id: `c_${Date.now().toString(36)}${crypto.randomBytes(3).toString('hex')}`,
-      name: data.name || '微信助手',
+      name: data.name || '渠道助手',
       status: 'unbound',
       token: '',
-      type: 'wechat',
+      type: legacyBoundRecord ? 'weixin-ilink' : 'channel',
+      adapterId: legacyBoundRecord ? 'weixin-ilink' : '',
+      driver: legacyBoundRecord ? 'native' : '',
+      platform: legacyBoundRecord ? 'weixin-ilink' : '',
+      protocol: legacyBoundRecord ? 'weixin.ilink' : '',
       provider: data.provider || '',
       model: data.model || '',
       updatedAt: now,

@@ -432,13 +432,159 @@ test('Gemini Adapter', async (t) => {
       messages: [{ content: 'draw a cat', role: 'user' }],
       settings: {
         base: { model: 'imagen-3.0-generate-002', stream: true },
-        chatParams: {},
-        extraSettings: {},
         toolCallSettings: { mode: 'AUTO', tools: [] }
       }
     };
     const prepared = await adapter._prepareChatBody(body);
     assert.deepStrictEqual(prepared.responseModalities, ['Text', 'Image']);
+  });
+
+  await t.test('_preProcessMessage correctly translates reasoning_content to thought part', async () => {
+    const { Gemini } = await import('../../lib/chat/llm/adapters/lib/geminiHttpClient.js');
+    const gemini = new Gemini({ api_key: 'key', base_url: 'https://mock' });
+
+    const messages = [
+      {
+        content: 'Why is the sky blue?',
+        role: 'user',
+      },
+      {
+        content: 'The sky is blue because of Rayleigh scattering.',
+        reasoning_content: 'Let me think about physics and light scattering...',
+        role: 'assistant',
+      },
+    ];
+
+    const { contents } = await gemini._preProcessMessage(messages);
+    assert.strictEqual(contents.length, 2);
+    assert.strictEqual(contents[1].role, 'model');
+    assert.strictEqual(contents[1].parts.length, 2);
+    assert.deepStrictEqual(contents[1].parts[0], {
+      text: 'Let me think about physics and light scattering...',
+      thought: true,
+    });
+    assert.deepStrictEqual(contents[1].parts[1], {
+      text: 'The sky is blue because of Rayleigh scattering.',
+    });
+  });
+
+  await t.test('_preProcessMessage preserves first-class thoughtSignature on toolCalls and tool responses', async () => {
+    const { Gemini } = await import('../../lib/chat/llm/adapters/lib/geminiHttpClient.js');
+    const gemini = new Gemini({ api_key: 'key', base_url: 'https://mock' });
+
+    const rawSig = 'custom_thought_signature_xyz123';
+    const messages = [
+      {
+        content: 'Check weather',
+        role: 'user',
+      },
+      {
+        content: '',
+        reasoning_content: 'Checking current location weather',
+        role: 'assistant',
+        tool_calls: [
+          {
+            id: 'call_weather_1',
+            function: { name: 'get_weather', arguments: '{"city":"Beijing"}' },
+            thoughtSignature: rawSig,
+          },
+        ],
+      },
+      {
+        content: 'Sunny, 25C',
+        name: 'get_weather',
+        role: 'tool',
+        thoughtSignature: rawSig,
+        tool_call_id: 'call_weather_1',
+      },
+    ];
+
+    const { contents } = await gemini._preProcessMessage(messages);
+    assert.strictEqual(contents.length, 3);
+    // Model turn with thought part and tool call with thoughtSignature
+    assert.strictEqual(contents[1].role, 'model');
+    assert.strictEqual(contents[1].parts.length, 2);
+    assert.deepStrictEqual(contents[1].parts[0], {
+      text: 'Checking current location weather',
+      thought: true,
+    });
+    assert.deepStrictEqual(contents[1].parts[1], {
+      functionCall: { args: { city: 'Beijing' }, id: 'call_weather_1', name: 'get_weather' },
+      thoughtSignature: rawSig,
+    });
+
+    // Tool response turn
+    assert.strictEqual(contents[2].role, 'user');
+    assert.strictEqual(contents[2].parts.length, 1);
+    assert.strictEqual(contents[2].parts[0].functionResponse.name, 'get_weather');
+    assert.strictEqual(contents[2].parts[0].functionResponse.id, 'call_weather_1');
+  });
+
+  await t.test('_executeChatRequest emits toolCall started event immediately on first chunk with functionCall and avoids duplicate started events', async () => {
+    const adapter = new GeminiAdapter({ ...config, is_enabled: true });
+    const updates = [];
+    const mockEvent = {
+      body: {
+        messages: [{ content: 'check weather', role: 'user' }],
+        model: 'gemini-2.0-flash',
+        stream: true,
+      },
+      client: {
+        popConnection() {},
+        popEvent() {},
+        pushConnection() {},
+      },
+      onAbort() {},
+      requestId: 'test-req-direct-toolcall',
+      update(up) {
+        updates.push(up);
+      },
+    };
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      // 首包直接是 functionCall（无思考过程）
+      const chunk1 = 'data: {"candidates":[{"content":{"parts":[' +
+        '{"functionCall":{"id":"fc_direct_1","name":"get_weather","args":{"city":"Tokyo"}}}' +
+        ']}}]}\n';
+      const encoder = new TextEncoder();
+      const chunks = [encoder.encode(chunk1)];
+      let index = 0;
+
+      return {
+        body: {
+          getReader() {
+            return {
+              async read() {
+                if (index < chunks.length) {
+                  return { done: false, value: chunks[index++] };
+                }
+                return { done: true, value: undefined };
+              },
+              releaseLock() {},
+            };
+          },
+        },
+        ok: true,
+      };
+    };
+
+    try {
+      const result = await adapter._executeChatRequest(mockEvent.body, mockEvent);
+      assert.ok(result);
+      assert.strictEqual(result.toolCalls.length, 1);
+      assert.strictEqual(result.toolCalls[0].function.name, 'get_weather');
+
+      // 验证 updates 中包含且仅包含 1 个 action: started 的 toolCall
+      const startedUpdates = updates.filter(
+        (u) => u.type === 'toolCall' && u.content?.action === 'started',
+      );
+      assert.strictEqual(startedUpdates.length, 1);
+      assert.strictEqual(startedUpdates[0].content.name, 'get_weather');
+      assert.strictEqual(startedUpdates[0].content.id, result.toolCalls[0].id);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   await runGenericAdapterTests(t, GeminiAdapter, config, mocks);

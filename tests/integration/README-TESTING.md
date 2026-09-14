@@ -4,6 +4,27 @@
 
 本目录包含了用于测试 OneBot 配置 API 的脚本和工具。
 
+## 推荐入口
+
+```bash
+# 完整门禁：保留存量实例，另行启动随机端口的隔离新实例
+pnpm test
+
+# 仅执行不需要 HTTP 服务的单元测试
+pnpm test:unit
+
+# 只在隔离新实例上执行在线 API 测试
+pnpm test:integration
+
+# 两类测试都执行
+pnpm test:all
+```
+
+`pnpm test` 与 `pnpm test:integration` 会扫描本机监听端口，并通过 `/api/gateway`
+核验服务身份。已运行的 MioChat 只会被提示并保持在线，绝不会成为本次测试目标。
+启动器始终创建数据库隔离快照、随机端口和临时管理员码，用当前工作区代码拉起新服务；
+测试结束或失败后都会关闭测试进程并删除临时数据库。
+
 ## 测试脚本
 
 ### 1. 完整测试脚本 (`test-onebot-api.js`)
@@ -19,14 +40,14 @@
 
 **使用方法：**
 ```bash
-# 基本使用
-node scripts/test-onebot-api.js
+# 基本使用（自动发现）
+node tests/integration/test-onebot-api.js
 
 # 使用环境变量
-BASE_URL=http://localhost:3080 ADMIN_CODE=your_code node scripts/test-onebot-api.js
+BASE_URL=http://mio-host:4567 ADMIN_CODE=your_code node tests/integration/test-onebot-api.js
 
 # 导出测试结果
-EXPORT_RESULTS=true node scripts/test-onebot-api.js
+EXPORT_RESULTS=true node tests/integration/test-onebot-api.js
 ```
 
 ### 2. 快速测试脚本 (`quick-test-onebot-api.js`)
@@ -35,10 +56,10 @@ EXPORT_RESULTS=true node scripts/test-onebot-api.js
 
 ```bash
 # 快速测试
-node scripts/quick-test-onebot-api.js
+node tests/integration/quick-test-onebot-api.js
 
 # 指定服务器地址
-BASE_URL=http://your-server:3080 ADMIN_CODE=your_code node scripts/quick-test-onebot-api.js
+BASE_URL=http://mio-host:4567 ADMIN_CODE=your_code node tests/integration/quick-test-onebot-api.js
 ```
 
 ### 3. 配置测试脚本 (`test-onebot-config.js`)
@@ -46,7 +67,7 @@ BASE_URL=http://your-server:3080 ADMIN_CODE=your_code node scripts/quick-test-on
 测试 OneBot 配置的加载和一致性：
 
 ```bash
-node scripts/test-onebot-config.js
+node tests/integration/test-onebot-config.js
 ```
 
 ## 环境配置
@@ -54,7 +75,7 @@ node scripts/test-onebot-config.js
 ### 方式 1: 环境变量
 
 ```bash
-export BASE_URL=http://localhost:3080
+export BASE_URL=http://mio-host:4567
 export ADMIN_CODE=your_admin_code
 export EXPORT_RESULTS=true
 ```
@@ -73,7 +94,7 @@ cp scripts/test-config.example.env .env
 ### 方法 1: 使用脚本
 
 ```bash
-node scripts/get-admin-code.js
+node scripts/utils/get-admin-code.js
 ```
 
 ### 方法 2: 查看数据库

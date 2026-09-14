@@ -3,7 +3,7 @@ import assert from 'node:assert'
 import '../adapters/mock-env.js'
 
 import { MioFunction } from '../../lib/function.js'
-import LLMMessageEvent from '../../lib/server/socket.io/utils/LLMMessageEvent.js'
+import { ChatEventFactory } from '../../lib/chat/llm/events/ChatEventFactory.js'
 import streamCache from '../../lib/server/socket.io/services/streamCache.js'
 
 test('MioFunction - requestUserApproval', async (t) => {
@@ -87,7 +87,7 @@ test('MioFunction - requestUserApproval', async (t) => {
   })
 })
 
-test('LLMMessageEvent - update caching rules', async (_t) => {
+test('WebChatEvent - update caching rules', async (_t) => {
   const mockClient = {
     id: 'user_1',
     ip: '127.0.0.1',
@@ -104,7 +104,7 @@ test('LLMMessageEvent - update caching rules', async (_t) => {
     request_id: 'req_123'
   }
 
-  const event = new LLMMessageEvent(req, mockClient)
+  const event = ChatEventFactory.createForWeb({ client: mockClient, req })
 
   // Clear stream cache first
   streamCache.delete('user_1', 'contactor_123')
@@ -133,7 +133,7 @@ test('LLMMessageEvent - update caching rules', async (_t) => {
   streamCache.delete('user_1', 'contactor_123')
 })
 
-test('LLMMessageEvent - triggerType behavior', async (_t) => {
+test('WebChatEvent - triggerType behavior', async (_t) => {
   const mockClient = {
     id: 'user_1',
     ip: '127.0.0.1',
@@ -151,8 +151,8 @@ test('LLMMessageEvent - triggerType behavior', async (_t) => {
     },
     request_id: 'req_123'
   }
-  const eventChat = new LLMMessageEvent(reqChat, mockClient)
-  assert.strictEqual(eventChat.metaData.triggerType, 'chat')
+  const eventChat = ChatEventFactory.createForWeb({ client: mockClient, req: reqChat })
+  assert.strictEqual(eventChat.triggerKind, 'interactive')
 
   // 2. Task event (isTask: true)
   const reqTask = {
@@ -163,18 +163,18 @@ test('LLMMessageEvent - triggerType behavior', async (_t) => {
     },
     request_id: 'req_456'
   }
-  const eventTask = new LLMMessageEvent(reqTask, mockClient)
-  assert.strictEqual(eventTask.metaData.triggerType, 'task')
+  const eventTask = ChatEventFactory.createForWeb({ client: mockClient, req: reqTask })
+  assert.strictEqual(eventTask.triggerKind, 'task')
 
-  // 3. Pre-defined triggerType should be preserved
+  // 3. Pre-defined triggerType should be parsed as task
   const reqPreserved = {
     data: {},
     metaData: {
       contactorId: 'contactor_123',
-      triggerType: 'custom_trigger'
+      triggerType: 'task'
     },
     request_id: 'req_789'
   }
-  const eventPreserved = new LLMMessageEvent(reqPreserved, mockClient)
-  assert.strictEqual(eventPreserved.metaData.triggerType, 'custom_trigger')
+  const eventPreserved = ChatEventFactory.createForWeb({ client: mockClient, req: reqPreserved })
+  assert.strictEqual(eventPreserved.triggerKind, 'task')
 })

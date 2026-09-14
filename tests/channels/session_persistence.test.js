@@ -95,6 +95,7 @@ test('DatabaseMemoryStore preserves the MemoryStore contract and archive semanti
   assert.equal((await memory.getChat(session.id))[0].text, 'one')
 
   await memory.setCrystal(session.id, '<memory_crystal>db</memory_crystal>')
+  await memory.setCrystal(session.id, '<memory_crystal>db</memory_crystal>')
   await memory.appendPendingMemory(session.id, { kind: 'fact' })
 
   assert.equal(await memory.readSoul(), 'database soul')
@@ -104,12 +105,22 @@ test('DatabaseMemoryStore preserves the MemoryStore contract and archive semanti
   assert.equal((await memory.getSession(session.id)).created_at, 1000)
   assert.equal((await memory.getChat(session.id)).length, 4)
   assert.equal((await memory.getPendingMemories(session.id))[0].kind, 'fact')
+  assert.equal(await prisma.crystal.count({ where: { sessionId: session.id } }), 1)
 
   const rotation = await memory.rotateChat(session.id, 1)
   assert.equal(rotation.rotated, true)
   assert.equal(rotation.removedCount, 2)
   assert.equal((await memory.getChat(session.id)).length, 2)
   assert.equal(await prisma.message.count({ where: { archiveId: { not: null } } }), 2)
+
+  const compactAll = await memory.createSession({ id: 'session-compact-all' })
+  await memory.appendToChat(compactAll.id, user('old', 6000))
+  await memory.appendToChat(compactAll.id, assistant('old answer', 7000))
+  const compactRotation = await memory.rotateChat(compactAll.id, 0)
+  assert.equal(compactRotation.rotated, true)
+  assert.equal(compactRotation.removedCount, 2)
+  assert.equal(compactRotation.keptCount, 0)
+  assert.deepEqual(await memory.getChat(compactAll.id), [])
 
   await memory.createSession({ id: 'session-concurrent' })
   await Promise.all(Array.from({ length: 100 }, (_, index) => memory.appendToChat(
@@ -293,14 +304,25 @@ test('ChannelStore mirrors configuration without retaining plaintext tokens in d
   const encryptionKey = '44'.repeat(32)
   const shadow = new ChannelStore({ encryptionKey, file, mode: 'shadow', prisma })
 
-  const created = await shadow.create({ agentId: 'agent-channel-store', name: 'Mirror', token: 'secret' })
+  const created = await shadow.create({
+    agentId: 'agent-channel-store',
+    config: { receive_mode: 'manual' },
+    name: 'Mirror',
+    platform: 'qq',
+    protocol: 'onebot.v12',
+    token: 'secret',
+  })
   await shadow.update(created.id, { status: 'running' })
   const row = await prisma.channel.findUnique({ where: { id: created.id } })
   assert.equal(JSON.parse(row.legacyJson).token, undefined)
   assert.equal(row.status, 'running')
 
   const database = new ChannelStore({ encryptionKey, file, mode: 'database', prisma })
-  assert.equal((await database.get(created.id)).token, 'secret')
+  const restored = await database.get(created.id)
+  assert.equal(restored.token, 'secret')
+  assert.equal(restored.platform, 'qq')
+  assert.equal(restored.protocol, 'onebot.v12')
+  assert.deepEqual(restored.config, { receive_mode: 'manual' })
 
   const databaseShadow = new ChannelStore({ encryptionKey, file, mode: 'database-shadow', prisma })
   await databaseShadow.update(created.id, { model: 'new-model' })

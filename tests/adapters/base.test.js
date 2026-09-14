@@ -101,6 +101,12 @@ test('BaseLLMAdapter shielding mechanism', async (t) => {
 
       assert.strictEqual(adapter.supportsVision('deepseek-chat'), false)
       assert.strictEqual(adapter._shouldFilterVision('deepseek-chat'), true)
+
+      assert.strictEqual(adapter.supportsVision('deepseek-flash'), true)
+      assert.strictEqual(adapter._shouldFilterVision('deepseek-flash'), false)
+
+      assert.strictEqual(adapter.supportsVision('deepseek-v4-pro'), false)
+      assert.strictEqual(adapter._shouldFilterVision('deepseek-v4-pro'), true)
     })
 
     await st.test(

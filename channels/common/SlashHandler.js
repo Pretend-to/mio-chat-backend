@@ -4,7 +4,7 @@
  * 支持通用指令：
  *   - /help 帮助菜单
  *   - /abort /crush /stop /cancel /interrupt /cut /break 任务中止与强插开启新对话
- *   - /tools 工具查看、开启、禁用、重置
+ *   - /tools 查看固定的 Channel 工具策略
  *   - /think /reasoning 思考推理强度调节
  *   - /yolo Shell 审批跳过开关（按当前会话）
  *   - /status 当前会话与执行状态
@@ -13,13 +13,14 @@
  *   - /new 新建并切换会话
  *   - /use 切换会话
  *   - /current 查看当前激活会话
+ *   - /compact 手动压缩并归档当前会话上下文
  *   - /clear 清空当前会话消息
  *   - /soul 灵魂人设查看与修改
  *   - /memory 全局长期记忆查看
  *   - /context 当前话题记忆结晶查看
  *   - /delete 删除会话
  */
-import { getRegisteredSystemToolNames } from '../llm.js'
+import { getChannelToolNames } from '../../lib/chat/llm/toolPolicy.js'
 import { getTriggerService } from '../../lib/triggers/index.js'
 import {
   getSessionYolo,
@@ -63,6 +64,7 @@ export class SlashHandler {
             '  • /new [标题] 新建并切换会话',
             '  • /use <id> 切换会话',
             '  • /current 当前会话信息',
+            '  • /compact 手动压缩上下文并归档原始对话',
             '  • /clear 清空当前会话聊天',
             '  • /delete <id> 删除指定会话',
             '',
@@ -114,77 +116,17 @@ export class SlashHandler {
       }
 
       case 'tools': {
-        const defaultChannelTools = getRegisteredSystemToolNames()
-        const currentTools =
-          (await this.memory.getAgentMeta('tools', null)) || defaultChannelTools
-        const enabledSet = new Set(currentTools)
-
-        if (!arg || arg === 'ls' || arg === 'list') {
-          const allTools = Array.from(
-            new Set([...defaultChannelTools, ...currentTools]),
-          )
-          const lines = [
-            '【工具状态管理】',
-            `当前已激活工具 (共 ${enabledSet.size} 个):`,
-          ]
-          for (const t of allTools) {
-            const status = enabledSet.has(t) ? '✅ [已启用]' : '❌ [已禁用]'
-            lines.push(`  ${status} ${t}`)
-          }
-          lines.push('\n用法：')
-          lines.push('  • /tools on <工具名1,工具名2> 开启工具')
-          lines.push('  • /tools off <工具名1,工具名2> 禁用工具')
-          lines.push('  • /tools reset 恢复默认工具集')
-          return wrap(lines.join('\n'))
-        }
-
-        const [subCmd, ...toolArgs] = arg.split(/\s+/)
-        const toolStr = toolArgs.join(' ')
-
-        if (subCmd === 'reset') {
-          await this.memory.setAgentMeta('tools', defaultChannelTools)
-          return wrap('已将工具集合成功重置为系统默认配置 ✅')
-        }
-
-        if (subCmd === 'on' || subCmd === 'enable') {
-          if (!toolStr) return wrap('用法：/tools on <工具名1,工具名2>')
-          const targets = toolStr.split(/[,，\s]+/).filter(Boolean)
-          for (const target of targets) {
-            const matched = defaultChannelTools.filter(
-              (t) => t === target || t.split('_mid_')[0] === target,
-            )
-            if (matched.length > 0) {
-              matched.forEach((m) => enabledSet.add(m))
-            } else {
-              enabledSet.add(target)
-            }
-          }
-          const newList = Array.from(enabledSet)
-          await this.memory.setAgentMeta('tools', newList)
-          return wrap(
-            `已开启工具 [${targets.join(', ')}]，当前激活工具总计 ${newList.length} 个 ✅`,
-          )
-        }
-
-        if (subCmd === 'off' || subCmd === 'disable') {
-          if (!toolStr) return wrap('用法：/tools off <工具名1,工具名2>')
-          const targets = toolStr.split(/[,，\s]+/).filter(Boolean)
-          for (const target of targets) {
-            for (const t of Array.from(enabledSet)) {
-              if (t === target || t.split('_mid_')[0] === target) {
-                enabledSet.delete(t)
-              }
-            }
-          }
-          const newList = Array.from(enabledSet)
-          await this.memory.setAgentMeta('tools', newList)
-          return wrap(
-            `已禁用工具 [${targets.join(', ')}]，当前激活工具总计 ${newList.length} 个 🚫`,
-          )
-        }
-
+        const tools = getChannelToolNames({
+          channel: this.channel,
+          source: 'channel',
+        })
         return wrap(
-          '未知指令，请使用 /tools ls, /tools on <工具名>, /tools off <工具名> 或 /tools reset',
+          [
+            '【Channel 工具策略】',
+            'Channel 固定启用完整 ai-plugin、terminal-pty 与 file-editor-plugin，不支持按渠道增删工具。',
+            `当前工具数: ${tools.length}`,
+            ...tools.map((tool) => `  ✅ ${tool}`),
+          ].join('\n'),
         )
       }
 
@@ -393,9 +335,10 @@ export class SlashHandler {
             ? await this.channel.isSessionYoloEnabled(sid)
             : await getSessionYolo(this.memory, sid)
           : false
-        const tools =
-          (await this.memory.getAgentMeta('tools', null)) ||
-          getRegisteredSystemToolNames()
+        const tools = getChannelToolNames({
+          channel: this.channel,
+          source: 'channel',
+        })
         const effort = await this.memory.getAgentMeta('reasoning_effort', 0)
         const provider = this.channel?.provider || '默认'
         const model = this.channel?.model || '默认'
@@ -456,20 +399,33 @@ export class SlashHandler {
           )
         }
         if (arg === 'reset') {
-          this.channel.provider = this.channel.defaultProvider
-          this.channel.model = this.channel.defaultModel
+          const patch = {
+            model: this.channel.defaultModel || '',
+            provider: this.channel.defaultProvider || '',
+          }
+          if (typeof this.channel.updateModelConfig === 'function') {
+            await this.channel.updateModelConfig(patch)
+          } else {
+            Object.assign(this.channel, patch)
+          }
           return wrap(
             `已重置为渠道默认模型配置：${this.channel.model || '系统默认'}`,
           )
         }
 
         // 切换模型（支持 provider/model 或直接 model）
+        const patch = {}
         if (arg.includes('/')) {
           const [p, m] = arg.split('/')
-          this.channel.provider = p.trim()
-          this.channel.model = m.trim()
+          patch.provider = p.trim()
+          patch.model = m.trim()
         } else {
-          this.channel.model = arg.trim()
+          patch.model = arg.trim()
+        }
+        if (typeof this.channel.updateModelConfig === 'function') {
+          await this.channel.updateModelConfig(patch)
+        } else {
+          Object.assign(this.channel, patch)
         }
         return wrap(
           `模型已切换为：${this.channel.provider ? `${this.channel.provider}/` : ''}${this.channel.model} ✅`,
@@ -511,6 +467,45 @@ export class SlashHandler {
         if (!cur) return wrap('当前无激活会话')
         const s = await this.memory.getSession(cur)
         return wrap(`当前会话 ${cur}${s?.title ? `「${s.title}」` : ''}`)
+      }
+
+      case 'compact': {
+        const cur = await active()
+        if (!cur) return wrap('当前无激活会话，无法压缩上下文')
+        if (this.channel?.activeJobs?.has(cur)) {
+          return wrap('当前会话仍有任务运行，请等待完成或先使用 /abort')
+        }
+        if (typeof this.channel?.llm?.compact !== 'function') {
+          return wrap('当前 LLM 驱动不支持手动上下文压缩')
+        }
+
+        const session = await this.memory.getSession(cur)
+        if (!session?.chat?.length) return wrap('当前会话没有可压缩的对话')
+        const crystal = await this.memory.getCrystal(cur)
+        const pendingMemories =
+          typeof this.memory.getPendingMemories === 'function'
+            ? await this.memory.getPendingMemories(cur)
+            : []
+        const result = await this.channel.llm.compact({
+          chat: session.chat,
+          crystal,
+          keepTurns: 0,
+          model: this.channel.model,
+          pendingMemories,
+          provider: this.channel.provider,
+        })
+        if (!result?.compacted || !result.summary) {
+          return wrap('当前上下文过短或压缩结果为空，未做任何修改')
+        }
+
+        await this.memory.setCrystal(cur, result.summary)
+        const rotation = await this.memory.rotateChat(cur, 0)
+        if (typeof this.memory.clearPendingMemories === 'function') {
+          await this.memory.clearPendingMemories(cur)
+        }
+        return wrap(
+          `✅ 上下文压缩完成：已生成 ${result.summary.length} 字符的会话结晶，归档 ${rotation?.removedCount || 0} 条原始消息。下一轮将不再携带旧对话 few-shot。`,
+        )
       }
 
       case 'clear': {

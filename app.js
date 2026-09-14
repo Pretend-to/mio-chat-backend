@@ -250,6 +250,19 @@ async function gracefulShutdown(signal) {
     } catch (error) {
       logger.warn('Socket.IO 服务器关闭时出现警告:', error.message)
     }
+
+    // 1.5. 停止渠道轮询、OneBots 账号与进程内协议资源
+    try {
+      const { getChannelRuntime } = await import('./lib/server/http/controllers/channelController.js')
+      const channelRuntime = getChannelRuntime()
+      if (typeof channelRuntime?.dispose === 'function') {
+        logger.info('正在关闭渠道运行时...')
+        await channelRuntime.dispose()
+        logger.info('渠道运行时已关闭')
+      }
+    } catch (error) {
+      logger.warn('渠道运行时关闭时出现警告:', error.message)
+    }
     
     // 2. 停止接受新连接并强制关闭现有连接
     try {
@@ -351,20 +364,26 @@ async function startApp() {
     const { initChannelController, getChannelRuntime } = await import('./lib/server/http/controllers/channelController.js')
     initChannelController({ startTriggers: false }) // 确保 deps 已初始化（幂等）
 
+    const isolatedTest = process.env.MIOCHAT_TEST_ISOLATED === '1'
+
     // 自动恢复上次 running 状态的渠道（持久化开关）
     const channelRuntime = getChannelRuntime()
-    try {
-      const { restoreRunningChannels } = await import('./channels/restoreRunningChannels.js')
-      await restoreRunningChannels(channelRuntime, logger)
-    } catch (e) {
-      logger.warn('[ChannelRuntime] 自动恢复渠道时出错:', e.message)
+    if (!isolatedTest) {
+      try {
+        // 先迁移并恢复原生 iLink 渠道；显式 OneBots 渠道仍可按需恢复。
+        if (typeof channelRuntime.init === 'function') await channelRuntime.init()
+      } catch (e) {
+        logger.warn('[ChannelRuntime] 自动恢复渠道时出错:', e.message)
+      }
+
+      // 渠道恢复完成后再启动哨兵，避免启动窗口把目标 Channel 误判为不可用。
+      const { getTriggerService } = await import('./lib/triggers/index.js')
+      await getTriggerService().startScheduler()
+
+      await taskScheduler.initialize(global.middleware.llm, channelRuntime)
+    } else {
+      logger.info('[Test] 隔离测试模式：跳过渠道恢复、哨兵与定时任务')
     }
-
-    // 渠道恢复完成后再启动哨兵，避免启动窗口把目标 Channel 误判为不可用。
-    const { getTriggerService } = await import('./lib/triggers/index.js')
-    await getTriggerService().startScheduler()
-
-    await taskScheduler.initialize(global.middleware.llm, channelRuntime)
     
     // 启动服务器并保存实例
     httpServer = await dependencies.startServer()

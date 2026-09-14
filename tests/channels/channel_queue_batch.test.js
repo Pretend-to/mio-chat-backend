@@ -281,9 +281,16 @@ test('BaseChannel: 渠道无关 typing 状态：防抖中即时反馈、任务�
     immediate: true,
     text: '慢速长任务',
   })
-  await new Promise((r) => setTimeout(r, 30))
+  let isBusy = false
+  for (let i = 0; i < 20; i++) {
+    if (channel.isSessionBusy(sid, { from: MASTER })) {
+      isBusy = true
+      break
+    }
+    await new Promise((r) => setTimeout(r, 10))
+  }
   assert.equal(
-    channel.isSessionBusy(sid, { from: MASTER }),
+    isBusy,
     true,
     '任务执行期间会话必须处于繁忙状态',
   )

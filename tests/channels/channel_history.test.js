@@ -151,3 +151,34 @@ test('全无时间戳的会话仍可翻页（fallback 锚点）', () => {
   }
   assert.strictEqual(seen.size, 45)
 })
+
+test('历史接口收敛存量消息中的累计结晶碎片', () => {
+  const chat = [{
+    content: [
+      {
+        data: { status: 'running', summary: '<' },
+        type: 'crystallize_event',
+      },
+      {
+        data: { status: 'running', summary: '<long' },
+        type: 'crystallize_event',
+      },
+      {
+        data: { status: 'finished', summary: '<long_term>ok</long_term>' },
+        type: 'crystallize_event',
+      },
+    ],
+    role: 'assistant',
+    time: 1787986000000,
+  }]
+
+  const result = buildChannelHistory(chat, {}, CTX)
+  const events = result.messages[0].content.filter(
+    item => item.type === 'crystallize_event',
+  )
+  assert.strictEqual(events.length, 1)
+  assert.deepStrictEqual(events[0].data, {
+    status: 'finished',
+    summary: '<long_term>ok</long_term>',
+  })
+})
