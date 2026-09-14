@@ -2,8 +2,7 @@
 
 import axios from 'axios'
 import logger from '../../utils/logger.js'
-import prismaManager from '../../lib/database/prisma.js'
-import SystemSettingsService from '../../lib/database/services/SystemSettingsService.js'
+import { discoverTestRuntime } from '../../scripts/utils/test-runtime.js'
 
 /**
  * LLM 适配器管理测试
@@ -11,21 +10,15 @@ import SystemSettingsService from '../../lib/database/services/SystemSettingsSer
 
 async function testLLMAdapter() {
   try {
-    // 获取管理员访问码
-    await prismaManager.initialize()
-    await SystemSettingsService.initialize()
-    
-    const adminCode = await SystemSettingsService.get('admin_code')
-    if (!adminCode || !adminCode.value) {
-      throw new Error('未找到管理员访问码')
-    }
+    const runtime = await discoverTestRuntime()
+    if (!runtime.baseUrl || !runtime.adminCode) throw new Error('无法自动发现 MioChat 在线地址或管理员访问码')
     
     const headers = {
       'Content-Type': 'application/json',
-      'x-admin-code': adminCode.value
+      'x-admin-code': runtime.adminCode
     }
     
-    logger.info(`使用管理员访问码: ${adminCode.value.substring(0, 4)}...`)
+    logger.info(`使用管理员访问码: ${runtime.adminCode.substring(0, 4)}...`)
     
     // 测试添加 LLM 实例
     logger.info('测试添加 LLM 实例...')
@@ -36,7 +29,7 @@ async function testLLMAdapter() {
       name: `测试实例_${Date.now()}`
     }
     
-    const addResponse = await axios.post('http://localhost:3000/api/config/llm/openai', instanceConfig, { headers })
+    const addResponse = await axios.post(`${runtime.baseUrl}/api/config/llm/openai`, instanceConfig, { headers })
     logger.info(`添加实例状态码: ${addResponse.status}`)
     console.log('添加实例响应:', JSON.stringify(addResponse.data, null, 2))
     
@@ -54,7 +47,7 @@ async function testLLMAdapter() {
       name: `更新测试实例_${Date.now()}`
     }
     
-    const updateResponse = await axios.put(`http://localhost:3000/api/config/llm/openai/${instanceIndex}`, updateConfig, { headers })
+    const updateResponse = await axios.put(`${runtime.baseUrl}/api/config/llm/openai/${instanceIndex}`, updateConfig, { headers })
     logger.info(`更新实例状态码: ${updateResponse.status}`)
     console.log('更新实例响应:', JSON.stringify(updateResponse.data, null, 2))
     
@@ -66,7 +59,7 @@ async function testLLMAdapter() {
     
     // 测试删除 LLM 实例
     logger.info('\n测试删除 LLM 实例...')
-    const deleteResponse = await axios.delete(`http://localhost:3000/api/config/llm/openai/${instanceIndex}`, { headers })
+    const deleteResponse = await axios.delete(`${runtime.baseUrl}/api/config/llm/openai/${instanceIndex}`, { headers })
     logger.info(`删除实例状态码: ${deleteResponse.status}`)
     console.log('删除实例响应:', JSON.stringify(deleteResponse.data, null, 2))
     
@@ -84,8 +77,6 @@ async function testLLMAdapter() {
       logger.error(`状态码: ${error.response.status}`)
       console.log('错误响应数据:', JSON.stringify(error.response.data, null, 2))
     }
-  } finally {
-    await prismaManager.disconnect()
   }
 }
 

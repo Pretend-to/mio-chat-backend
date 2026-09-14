@@ -25,8 +25,8 @@ const CTX = { sessionId: 's1', channel: { name: '测试渠道', avatar: 'a.png' 
 function buildChat(total, realCount = 21) {
   const firstReal = total - realCount
   return Array.from({ length: total }, (_, i) => ({
+    content: [{ data: { text: `msg${i}` }, type: 'text' }],
     role: i % 2 ? 'assistant' : 'user',
-    text: `msg${i}`,
     ...(i >= firstReal ? { time: 1787986000000 + (i - firstReal) * 60000 } : {}),
   }))
 }
@@ -106,7 +106,11 @@ test('锚点稳定：追加新消息不影响已返回消息的 time/id', () => 
   const before1 = buildChannelHistory(chat, { limit: 20 }, CTX).messages.map((m) => [m.id, m.time])
   // 渠道收到 5 条新消息（带更大真实时间戳）
   chat.push(
-    ...Array.from({ length: 5 }, (_, i) => ({ role: 'user', text: `new${i}`, time: 1787990000000 + i })),
+    ...Array.from({ length: 5 }, (_, i) => ({
+      content: [{ data: { text: `new${i}` }, type: 'text' }],
+      role: 'user',
+      time: 1787990000000 + i,
+    })),
   )
   const after2 = buildChannelHistory(chat, { limit: 20 }, CTX).messages.map((m) => [m.id, m.time])
   const map1 = new Map(before1)
@@ -133,7 +137,10 @@ test('健壮性：空会话 / 字符串 limit / 非法 before', () => {
 })
 
 test('全无时间戳的会话仍可翻页（fallback 锚点）', () => {
-  const chat = Array.from({ length: 45 }, (_, i) => ({ role: 'user', text: `m${i}` }))
+  const chat = Array.from({ length: 45 }, (_, i) => ({
+    content: [{ data: { text: `m${i}` }, type: 'text' }],
+    role: 'user',
+  }))
   const seen = new Set()
   let before = null
   for (;;) {
@@ -143,4 +150,35 @@ test('全无时间戳的会话仍可翻页（fallback 锚点）', () => {
     before = r.messages[0].time
   }
   assert.strictEqual(seen.size, 45)
+})
+
+test('历史接口收敛存量消息中的累计结晶碎片', () => {
+  const chat = [{
+    content: [
+      {
+        data: { status: 'running', summary: '<' },
+        type: 'crystallize_event',
+      },
+      {
+        data: { status: 'running', summary: '<long' },
+        type: 'crystallize_event',
+      },
+      {
+        data: { status: 'finished', summary: '<long_term>ok</long_term>' },
+        type: 'crystallize_event',
+      },
+    ],
+    role: 'assistant',
+    time: 1787986000000,
+  }]
+
+  const result = buildChannelHistory(chat, {}, CTX)
+  const events = result.messages[0].content.filter(
+    item => item.type === 'crystallize_event',
+  )
+  assert.strictEqual(events.length, 1)
+  assert.deepStrictEqual(events[0].data, {
+    status: 'finished',
+    summary: '<long_term>ok</long_term>',
+  })
 })

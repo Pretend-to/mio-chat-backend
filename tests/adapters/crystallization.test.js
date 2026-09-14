@@ -9,6 +9,14 @@ test('Crystallization - scanFrontendTurns', async (t) => {
     assert.strictEqual(scanFrontendTurns([]), 0);
   });
 
+  await t.test('should compact the complete transcript when keepTurns is 0', () => {
+    const messages = [
+      { content: 'hello', role: 'user' },
+      { content: 'hi', role: 'assistant' },
+    ];
+    assert.strictEqual(scanFrontendTurns(messages, 0), messages.length);
+  });
+
   await t.test('should return 0 when there are fewer turns than requested', () => {
     const messages = [
       { content: 'hello', role: 'user' },
@@ -51,6 +59,25 @@ test('Crystallization - scanFrontendTurns', async (t) => {
 
     // Keep 3 turns -> should protect from 'run tool' (index 0) onwards
     assert.strictEqual(scanFrontendTurns(messages, 3), 0);
+  });
+
+  await t.test('should treat recursive post messages as part of the current turn', () => {
+    const recursivePostMessage = { content: 'image context', role: 'user' };
+    Object.defineProperty(recursivePostMessage, '_is_recursive_context', {
+      enumerable: false,
+      value: true,
+    });
+    const messages = [
+      { content: 'previous', role: 'user' },
+      { content: 'previous answer', role: 'assistant' },
+      { content: 'current', role: 'user' },
+      { role: 'assistant', tool_calls: [{ id: 'call_1' }] },
+      { content: 'result', role: 'tool', tool_call_id: 'call_1' },
+      recursivePostMessage,
+    ];
+
+    assert.strictEqual(scanFrontendTurns(messages, 1), 2);
+    assert.strictEqual(scanFrontendTurns(messages, 2), 0);
   });
 });
 
@@ -149,31 +176,78 @@ test('Crystallization - Memory Tool integration', async (t) => {
     };
     await assert.rejects(
       async () => { await tool.recordMemory(event); },
-      /记忆管理工具仅在开启记忆结晶功能时可用/
+      /本地会话记忆结晶工具仅在开启结晶功能时可用/
     );
   });
 
   await t.test('should execute successfully when crystallization is enabled', async () => {
     const tool = new Memory();
+    const pending = [];
     const event = {
       body: {
         settings: {
           crystallization_token_watermark: 500, // enabled
+          pending_memory_events: [],
           previous_summary: '',
         }
       },
-      params: { action: 'add', content: 'User is a developer', zone: 'long_term_profile' }
+      memory: {
+        appendPendingMemory: async (_sessionId, entry) => pending.push(entry),
+      },
+      params: { action: 'add', content: 'User is a developer', zone: 'long_term_profile' },
+      sessionId: 'session-memory-buffer',
     };
     const result = await tool.recordMemory(event);
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.action, 'add');
     assert.strictEqual(result.zone, 'long_term_profile');
     assert.ok(result.summary.includes('<long_term_profile>\nUser is a developer\n</long_term_profile>'));
-    assert.strictEqual(event.body.settings.previous_summary, result.summary);
+    assert.strictEqual(event.body.settings.previous_summary, '');
+    assert.strictEqual(event.body.settings.pending_memory_preview, result.summary);
+    assert.deepStrictEqual(pending, [{
+      action: 'add', content: 'User is a developer', target: '', zone: 'long_term_profile',
+    }]);
+    assert.deepStrictEqual(event.body.settings.pending_memory_events, pending);
+  });
+
+  await t.test('multiple memory calls compose only in the request-local preview', async () => {
+    const tool = new Memory();
+    const pending = [];
+    const committed = '<long_term_profile>Existing fact</long_term_profile>';
+    const event = {
+      body: { settings: {
+        crystallization_token_watermark: 'auto',
+        pending_memory_events: [],
+        previous_summary: committed,
+      } },
+      memory: { appendPendingMemory: async (_sessionId, entry) => pending.push(entry) },
+      sessionId: 'session-memory-buffer-multiple',
+    };
+    event.params = { action: 'add', content: 'Fact A', zone: 'long_term_profile' };
+    await tool.recordMemory(event);
+    event.params = { action: 'add', content: 'Fact B', zone: 'long_term_profile' };
+    const result = await tool.recordMemory(event);
+
+    assert.strictEqual(event.body.settings.previous_summary, committed);
+    assert.ok(result.summary.includes('Existing fact\nFact A\nFact B'));
+    assert.strictEqual(pending.length, 2);
+    assert.strictEqual(event.body.settings.pending_memory_events.length, 2);
   });
 });
 
 test('Crystallization - compress process', async (t) => {
+  const makeEvent = () => ({
+    body: {
+      messages: [
+        { content: 'old question', role: 'user' },
+        { content: 'old answer', role: 'assistant' },
+        { content: 'current question', role: 'user' },
+      ],
+      settings: { previous_summary: '<memory_crystal>old</memory_crystal>' },
+    },
+    update: () => {},
+  });
+
   await t.test('should run compression successfully and reconstruct message chain', async () => {
     const updates = [];
     const mockEvent = {
@@ -186,6 +260,12 @@ test('Crystallization - compress process', async (t) => {
         ],
         settings: {
           crystallization_keep_turns: 1, // Keep 'hello 2' and 'hi 2'
+          pending_memory_events: [{
+            action: 'add',
+            content: 'User deploys on Friday',
+            target: '',
+            zone: 'short_term_goals',
+          }],
           previous_summary: '<long_term_profile>\nUser likes Rust\n</long_term_profile>',
         }
       },
@@ -196,6 +276,9 @@ test('Crystallization - compress process', async (t) => {
 
     const mockLlm = {
       handleChatRequest: async (compressEvent) => {
+        const compressionPrompt = compressEvent.body.messages.at(-1).content;
+        assert.ok(compressionPrompt.includes('<pending_memory_events>'));
+        assert.ok(compressionPrompt.includes('[add -> short_term_goals] User deploys on Friday'));
         compressEvent.update({
           type: 'content',
           content: '<long_term_profile>\nUser likes JavaScript\n</long_term_profile>',
@@ -225,5 +308,22 @@ test('Crystallization - compress process', async (t) => {
     assert.strictEqual(updates[0].content.status, 'running');
     assert.strictEqual(updates[0].content.summary, '<long_term_profile>\nUser likes JavaScript\n</long_term_profile>');
   });
-});
 
+  await t.test('should reject an empty mocked LLM response', async () => {
+    const result = await compress(makeEvent(), {
+      handleChatRequest: async () => {},
+      models: [{ models: ['mock-model'] }],
+    }, 2);
+
+    assert.strictEqual(result, null);
+  });
+
+  await t.test('should reject a thrown mocked LLM response', async () => {
+    const result = await compress(makeEvent(), {
+      handleChatRequest: async () => { throw new Error('mock upstream timeout'); },
+      models: [{ models: ['mock-model'] }],
+    }, 2);
+
+    assert.strictEqual(result, null);
+  });
+});

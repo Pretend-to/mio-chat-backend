@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import yaml from 'js-yaml'
+import { load as yamlLoad } from 'js-yaml'
 import { execSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import prismaManager from '../../lib/database/prisma.js'
@@ -287,7 +287,7 @@ class DataMigrator {
   async migrateMainConfig(configPath) {
     try {
       const configContent = fs.readFileSync(configPath, 'utf8')
-      const config = yaml.load(configContent)
+      const config = yamlLoad(configContent)
       
       const systemConfigs = []
       
@@ -442,7 +442,7 @@ class DataMigrator {
   async migrateOwnersConfig(ownersPath) {
     try {
       const ownersContent = fs.readFileSync(ownersPath, 'utf8')
-      const owners = yaml.load(ownersContent)
+      const owners = yamlLoad(ownersContent)
       
       if (Array.isArray(owners)) {
         const exists = await SystemSettingsService.exists('model_owners')
@@ -510,7 +510,7 @@ class DataMigrator {
           config = JSON.parse(content)
         } else if (file.endsWith('.yaml') || file.endsWith('.yml')) {
           const content = fs.readFileSync(filePath, 'utf8')
-          config = yaml.load(content)
+          config = yamlLoad(content)
         } else {
           continue // 跳过不支持的文件类型
         }

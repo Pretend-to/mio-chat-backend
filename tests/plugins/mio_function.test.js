@@ -3,7 +3,7 @@ import assert from 'node:assert'
 import '../adapters/mock-env.js'
 
 import { MioFunction } from '../../lib/function.js'
-import LLMMessageEvent from '../../lib/server/socket.io/utils/LLMMessageEvent.js'
+import { ChatEventFactory } from '../../lib/chat/llm/events/ChatEventFactory.js'
 import streamCache from '../../lib/server/socket.io/services/streamCache.js'
 
 test('MioFunction - requestUserApproval', async (t) => {
@@ -44,9 +44,50 @@ test('MioFunction - requestUserApproval', async (t) => {
     assert.strictEqual(result.approved, true)
     assert.strictEqual(result.reason, 'ok')
   })
+
+  await t.test('should expose only first two command words to approval UI', async () => {
+    let action
+    let callback
+    const event = {
+      registerInteraction(id, cb) { callback = cb; return id },
+      update(chunk) { action = chunk.content },
+    }
+
+    const approvalPromise = myFunc.requestUserApproval(event, '请确认命令', {
+      command: 'okx list --limit 100 --cursor dynamic-token',
+      rememberable: true,
+    })
+    assert.equal(action.meta.command, 'okx list')
+    assert.equal(action.meta.commandPreview, 'okx list')
+    assert.equal(action.meta.commandPrefix1, 'okx')
+    assert.equal(action.meta.commandPrefix2, 'okx list')
+    assert.doesNotMatch(JSON.stringify(action.meta), /dynamic-token/)
+    callback({ approved: true, rememberType: 'prefix2' })
+    const result = await approvalPromise
+    assert.equal(result.rememberType, 'prefix2')
+  })
+
+  await t.test('should expose the complete non-rememberable command to approval UI', async () => {
+    let action
+    let callback
+    const event = {
+      registerInteraction(id, cb) { callback = cb; return id },
+      update(chunk) { action = chunk.content },
+    }
+
+    const approvalPromise = myFunc.requestUserApproval(event, '请确认危险命令', {
+      command: 'okx list\nrm -rf /tmp/important',
+      rememberable: false,
+    })
+    assert.equal(action.meta.command, 'okx list\nrm -rf /tmp/important')
+    assert.equal(action.meta.commandPreview, 'okx list\nrm -rf /tmp/important')
+    assert.equal(action.meta.commandPrefix1, undefined)
+    callback({ approved: true })
+    assert.equal((await approvalPromise).approved, true)
+  })
 })
 
-test('LLMMessageEvent - update caching rules', async (_t) => {
+test('WebChatEvent - update caching rules', async (_t) => {
   const mockClient = {
     id: 'user_1',
     ip: '127.0.0.1',
@@ -63,7 +104,7 @@ test('LLMMessageEvent - update caching rules', async (_t) => {
     request_id: 'req_123'
   }
 
-  const event = new LLMMessageEvent(req, mockClient)
+  const event = ChatEventFactory.createForWeb({ client: mockClient, req })
 
   // Clear stream cache first
   streamCache.delete('user_1', 'contactor_123')
@@ -92,7 +133,7 @@ test('LLMMessageEvent - update caching rules', async (_t) => {
   streamCache.delete('user_1', 'contactor_123')
 })
 
-test('LLMMessageEvent - triggerType behavior', async (_t) => {
+test('WebChatEvent - triggerType behavior', async (_t) => {
   const mockClient = {
     id: 'user_1',
     ip: '127.0.0.1',
@@ -110,8 +151,8 @@ test('LLMMessageEvent - triggerType behavior', async (_t) => {
     },
     request_id: 'req_123'
   }
-  const eventChat = new LLMMessageEvent(reqChat, mockClient)
-  assert.strictEqual(eventChat.metaData.triggerType, 'chat')
+  const eventChat = ChatEventFactory.createForWeb({ client: mockClient, req: reqChat })
+  assert.strictEqual(eventChat.triggerKind, 'interactive')
 
   // 2. Task event (isTask: true)
   const reqTask = {
@@ -122,18 +163,18 @@ test('LLMMessageEvent - triggerType behavior', async (_t) => {
     },
     request_id: 'req_456'
   }
-  const eventTask = new LLMMessageEvent(reqTask, mockClient)
-  assert.strictEqual(eventTask.metaData.triggerType, 'task')
+  const eventTask = ChatEventFactory.createForWeb({ client: mockClient, req: reqTask })
+  assert.strictEqual(eventTask.triggerKind, 'task')
 
-  // 3. Pre-defined triggerType should be preserved
+  // 3. Pre-defined triggerType should be parsed as task
   const reqPreserved = {
     data: {},
     metaData: {
       contactorId: 'contactor_123',
-      triggerType: 'custom_trigger'
+      triggerType: 'task'
     },
     request_id: 'req_789'
   }
-  const eventPreserved = new LLMMessageEvent(reqPreserved, mockClient)
-  assert.strictEqual(eventPreserved.metaData.triggerType, 'custom_trigger')
+  const eventPreserved = ChatEventFactory.createForWeb({ client: mockClient, req: reqPreserved })
+  assert.strictEqual(eventPreserved.triggerKind, 'task')
 })

@@ -1,9 +1,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { ensureMessageTime } from '../../lib/chat/messageTimestamp.js'
 
 /**
- * MemoryStore — 渠道无关记忆落盘层
+ * MemoryStore — 渠道无关的 legacy 文件落盘层
+ *
+ * 仅供显式 legacy/shadow 诊断、回滚和一次性迁移使用；生产运行时由
+ * DatabaseMemoryStore 提供规范消息读写，不在这里做旧消息格式适配。
  *
  * 定位：扮演「无前端 store 的渠道（微信等）」的客户端持久化端。
  *   - soul.md            人格/灵魂（用户可定制，markdown）
@@ -103,7 +107,7 @@ export class MemoryStore {
     const dir = path.join(this._agentDir(), 'global')
     try {
       const files = await fs.promises.readdir(dir)
-      return files.filter((f) => f.endsWith('.md')).map((f) => f.slice(0, -3))
+      return files.filter((f) => f.endsWith('.md')).map((f) => f.slice(0, -3)).toSorted()
     } catch {
       return []
     }
@@ -119,6 +123,11 @@ export class MemoryStore {
       if (body) blocks.push(`## ${c}\n${body}`)
     }
     return blocks.join('\n\n')
+  }
+  /** 整体替换一个分类文档（与数据库兼容层共用的管理 API） */
+  async writeGlobal(category, content) {
+    await this._writeFile(this._globalFile(category), String(content ?? ''))
+    return true
   }
   /** add：追加一条事实 */
   async addGlobal(category, content) {
@@ -181,11 +190,15 @@ export class MemoryStore {
     const raw = await this._readFile(this._sessionFile(id), null)
     return raw ? JSON.parse(raw) : null
   }
-  async createSession({ id = `s_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, title = '' } = {}) {
+  async createSession({
+    createdAt = Date.now(),
+    id = `s_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+    title = '',
+  } = {}) {
     await this._ensureAgentDir()
     const session = {
       chat: [],
-      created_at: Date.now(),
+      created_at: createdAt,
       crystal: '', // <memory_crystal> / previous_summary
       id: this._safeSegment(id),
       title,
@@ -208,9 +221,7 @@ export class MemoryStore {
   async appendToChat(id, msg) {
     const session = (await this.getSession(id)) || (await this.createSession({ id }))
     session.chat = session.chat || []
-    if (!msg.time) {
-      msg.time = Date.now()
-    }
+    msg.time = ensureMessageTime(msg.time)
     session.chat.push(msg)
     await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
     return session
@@ -222,7 +233,9 @@ export class MemoryStore {
   /** 设置/清除该会话的结晶摘要（memory_crystal / previous_summary） */
   async setCrystal(id, crystalXml = '') {
     const session = (await this.getSession(id)) || (await this.createSession({ id }))
-    session.crystal = crystalXml ?? ''
+    const nextCrystal = crystalXml ?? ''
+    if ((session.crystal || '') === nextCrystal) return false
+    session.crystal = nextCrystal
     await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
     return true
   }
@@ -230,12 +243,92 @@ export class MemoryStore {
     const s = await this.getSession(id)
     return s?.crystal || ''
   }
+  /** 追加一条待压缩归档的记忆事件（保护日常对话 Prefix Cache） */
+  async appendPendingMemory(id, event) {
+    const session = (await this.getSession(id)) || (await this.createSession({ id }))
+    session.pending_memories = Array.isArray(session.pending_memories) ? session.pending_memories : []
+    session.pending_memories.push({
+      ...event,
+      timestamp: Date.now(),
+    })
+    await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
+    return session.pending_memories
+  }
+  /** 获取当前会话积累的待压缩记忆事件 */
+  async getPendingMemories(id) {
+    const s = await this.getSession(id)
+    return Array.isArray(s?.pending_memories) ? s.pending_memories : []
+  }
+  /** 压缩完成后清空已固化的待压缩记忆 */
+  async clearPendingMemories(id) {
+    const session = await this.getSession(id)
+    if (session) {
+      session.pending_memories = []
+      await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
+    }
+    return true
+  }
   /** 清空会话聊天（保留人格注入用不到的 history 之外——这里只清 chat，保留 crystal） */
   async clearChat(id) {
     const session = (await this.getSession(id)) || (await this.createSession({ id }))
     session.chat = []
     await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
     return true
+  }_sessionArchiveDir(id) {
+    return path.join(this._agentDir(), 'archives', this._safeSegment(id))
+  }
+
+  /**
+   * 上下文压缩后的「归档 + 裁剪」闭环（仿前端：压缩节点索引更新）
+   *
+   * 压缩结晶落盘后调用：把当前聊天记录完整复制归档到 archives/<sessionId>/<时间戳>.json，
+   * 然后仅保留最近 keepTurns 轮交互（轮 = 以 role==='user' 为起点，与前端 scanFrontendTurns 语义一致），
+   * 其余历史全部清空，实现会话 chat 的索引更新与裁剪。
+   *
+   * @param {string} id 会话 ID
+   * @param {number} [keepTurns=1] 保留最近几轮交互（默认 1 轮 = 最近一轮 user+assistant）
+   * @returns {Promise<object>} { rotated, archivePath?, removedCount?, keptCount? }
+   */
+  async rotateChat(id, keepTurns = 1) {
+    const session = await this.getSession(id)
+    if (!session || !Array.isArray(session.chat) || session.chat.length === 0) {
+      return { rotated: false, reason: 'empty' }
+    }
+    const chat = session.chat
+    // 计算保留起点：从尾部倒扫 user 轮次（与 scanFrontendTurns 同语义）
+    let keepFrom = keepTurns <= 0 ? chat.length : 0
+    let turns = 0
+    if (keepTurns > 0) {
+      for (let i = chat.length - 1; i >= 0; i--) {
+        if (chat[i]?.role === 'user') {
+          turns++
+          if (turns >= keepTurns) {
+            keepFrom = i
+            break
+          }
+        }
+      }
+    }
+    if (keepFrom <= 0) {
+      // 没有足够的轮次要裁剪，跳过（保持原样）
+      return { rotated: false, reason: 'too-short' }
+    }
+    const removed = chat.slice(0, keepFrom)
+    const kept = chat.slice(keepFrom)
+    // 1. 归档：完整复制被裁剪的历史到独立归档文件
+    await this._ensureAgentDir()
+    const dir = this._sessionArchiveDir(id)
+    await fs.promises.mkdir(dir, { recursive: true })
+    const archivedAt = Date.now()
+    const archivePath = path.join(dir, `${archivedAt}.json`)
+    await this._writeFile(
+      archivePath,
+      JSON.stringify({ archivedAt, sessionId: id, chat: removed }, null, 2),
+    )
+    // 2. 裁剪：仅保留最近 N 轮写回
+    session.chat = kept
+    await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
+    return { rotated: true, archivePath, removedCount: removed.length, keptCount: kept.length }
   }
 
   // ===============================================================

@@ -4,14 +4,21 @@
  * 插件管理 API 测试脚本
  * 
  * 使用方法:
- *   node scripts/test-plugin-api.js [admin_code] [base_url]
- * 
- * 示例:
- *   node scripts/test-plugin-api.js your_admin_code http://localhost:3000
+ *   node tests/integration/test-plugin-api.js [admin_code] [base_url]
  */
 
-const ADMIN_CODE = process.argv[2] || 'admin123'
-const BASE_URL = process.argv[3] || 'http://localhost:3000'
+import { discoverTestRuntime } from '../../scripts/utils/test-runtime.js'
+
+const runtime = await discoverTestRuntime({
+  env: {
+    ...process.env,
+    ADMIN_CODE: process.argv[2] || process.env.ADMIN_CODE,
+    BASE_URL: process.argv[3] || process.env.BASE_URL,
+  },
+})
+if (!runtime.baseUrl || !runtime.adminCode) throw new Error('无法自动发现 MioChat 在线地址或管理员访问码')
+const ADMIN_CODE = runtime.adminCode
+const BASE_URL = runtime.baseUrl
 
 console.log(`\n🧪 测试插件管理 API`)
 console.log(`📍 服务器: ${BASE_URL}`)

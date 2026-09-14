@@ -16,12 +16,13 @@ test('ProfileTool - read, update, clear and client system message emission', asy
           }
         }
       },
+      contactorId: 'group_123',
+      conversationKind: 'group',
+      member: {
+        id: 'member_456',
+        name: '问候'
+      },
       params: { action: 'read' },
-      metaData: {
-        contactorId: 'group_123',
-        memberId: 'member_456',
-        memberName: '问候'
-      }
     }
 
     const result = await tool.execute(e)
@@ -41,23 +42,24 @@ test('ProfileTool - read, update, clear and client system message emission', asy
           }
         }
       },
-      params: {
-        action: 'update',
-        name: '小顾',
-        title: '综合顾问·小顾',
-        duty: '负责综合咨询与创意支持',
-        prompt: '你是群里的综合顾问「小顾」'
-      },
-      metaData: {
-        contactorId: 'group_123',
-        memberId: 'member_456',
-        memberName: '问候'
-      },
       client: {
         sendSystemMessage: (type, data) => {
           systemMessages.push({ type, data })
         }
-      }
+      },
+      contactorId: 'group_123',
+      conversationKind: 'group',
+      member: {
+        id: 'member_456',
+        name: '问候'
+      },
+      params: {
+        action: 'update',
+        duty: '负责综合咨询与创意支持',
+        name: '小顾',
+        prompt: '你是群里的综合顾问「小顾」',
+        title: '综合顾问·小顾',
+      },
     }
 
     const result = await tool.execute(e)
@@ -93,17 +95,18 @@ test('ProfileTool - read, update, clear and client system message emission', asy
           }
         }
       },
-      params: { action: 'clear' },
-      metaData: {
-        contactorId: 'group_123',
-        memberId: 'member_456',
-        memberName: '小顾'
-      },
       client: {
         sendSystemMessage: (type, data) => {
           systemMessages.push({ type, data })
         }
-      }
+      },
+      contactorId: 'group_123',
+      conversationKind: 'group',
+      member: {
+        id: 'member_456',
+        name: '小顾'
+      },
+      params: { action: 'clear' },
     }
 
     const result = await tool.execute(e)
@@ -112,5 +115,9 @@ test('ProfileTool - read, update, clear and client system message emission', asy
     assert.strictEqual(systemMessages[0].type, 'agent_profile_updated')
     assert.strictEqual(systemMessages[0].data.action, 'clear')
     assert.strictEqual(systemMessages[0].data.opening, '')
+  })
+
+  await t.test('should be marked as groupOnly tool', () => {
+    assert.strictEqual(tool.groupOnly, true)
   })
 })

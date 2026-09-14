@@ -84,7 +84,7 @@
 - `reason`：思考链增量（`data.data = { text: "...", duration: 0 }`）
 - `content`：正文流式输出（`data.content = "..."`）
 - `toolCall`：工具调用生命周期状态（`data.content = { action: 'running'|'finished', name: '...', ... }`）
-- `action`：二次审批拦截卡片（`data.content = { actionType: 'REQUEST_APPROVAL', interactionId: '...', prompt: '...' }`）
+- `action`：二次审批拦截卡片（`data.content = { actionType: 'REQUEST_APPROVAL', interactionId: '...', prompt: '...', meta: { commandPreview, commandPrefix1, commandPrefix2, rememberable } }`）。可记住的 Shell 命令只展示前两个词作为白名单粒度；不可记住的危险/不安全命令通过 `commandPreview` 展示完整 payload。渠道来源的审批只在渠道侧消费，不广播为 Web 可交互卡片。
 
 ---
 

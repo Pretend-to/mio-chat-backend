@@ -54,11 +54,6 @@ export function parseAesKey(aesKeyStr) {
   return buf
 }
 
-function aesEcbPaddedSize(plaintextSize) {
-  return Math.ceil((plaintextSize + 1) / 16) * 16
-}
-
-
 const DEFAULT_LONG_POLL_TIMEOUT_MS = 35_000
 const DEFAULT_API_TIMEOUT_MS = 15_000
 const DEFAULT_CONFIG_TIMEOUT_MS = 10_000

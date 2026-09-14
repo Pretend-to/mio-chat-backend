@@ -231,6 +231,15 @@ async function gracefulShutdown(signal) {
       logger.warn('广播进行中请求中断状态时出现警告:', error.message)
     }
 
+    // 0.5 清理哨兵子进程（避免重启后残留孤儿哨兵 / 双进程）
+    try {
+      const { getTriggerService } = await import('./lib/triggers/index.js')
+      getTriggerService().stopScheduler()
+      logger.info('哨兵子进程已清理')
+    } catch (error) {
+      logger.warn('清理哨兵进程时警告:', error.message)
+    }
+
     // 1. 关闭 Socket.IO 服务器
     try {
       if (global.middleware && global.middleware.socketServer) {
@@ -240,6 +249,19 @@ async function gracefulShutdown(signal) {
       }
     } catch (error) {
       logger.warn('Socket.IO 服务器关闭时出现警告:', error.message)
+    }
+
+    // 1.5. 停止渠道轮询、OneBots 账号与进程内协议资源
+    try {
+      const { getChannelRuntime } = await import('./lib/server/http/controllers/channelController.js')
+      const channelRuntime = getChannelRuntime()
+      if (typeof channelRuntime?.dispose === 'function') {
+        logger.info('正在关闭渠道运行时...')
+        await channelRuntime.dispose()
+        logger.info('渠道运行时已关闭')
+      }
+    } catch (error) {
+      logger.warn('渠道运行时关闭时出现警告:', error.message)
     }
     
     // 2. 停止接受新连接并强制关闭现有连接
@@ -340,31 +362,28 @@ async function startApp() {
     // 初始化定时任务调度器
     const taskScheduler = (await import('./lib/cron.js')).default
     const { initChannelController, getChannelRuntime } = await import('./lib/server/http/controllers/channelController.js')
-    initChannelController() // 确保 deps 已初始化（幂等）
+    initChannelController({ startTriggers: false }) // 确保 deps 已初始化（幂等）
+
+    const isolatedTest = process.env.MIOCHAT_TEST_ISOLATED === '1'
 
     // 自动恢复上次 running 状态的渠道（持久化开关）
     const channelRuntime = getChannelRuntime()
-    try {
-      const allChannels = await channelRuntime.channelStore._load()
-      const toRestore = allChannels.filter(c => c.status === 'running' && c.token && c.userId)
-      if (toRestore.length > 0) {
-        logger.info(`[ChannelRuntime] 自动恢复 ${toRestore.length} 个运行中渠道...`)
-        for (const ch of toRestore) {
-          try {
-            await channelRuntime.start(ch.id)
-            logger.info(`[ChannelRuntime] 渠道 "${ch.name}" (${ch.id}) 已恢复运行`)
-          } catch (e) {
-            logger.warn(`[ChannelRuntime] 渠道 "${ch.name}" (${ch.id}) 恢复失败: ${e.message}`)
-            // 恢复失败时把状态标回 stopped，避免下次继续尝试
-            await channelRuntime.channelStore.update(ch.id, { status: 'stopped' })
-          }
-        }
+    if (!isolatedTest) {
+      try {
+        // 先迁移并恢复原生 iLink 渠道；显式 OneBots 渠道仍可按需恢复。
+        if (typeof channelRuntime.init === 'function') await channelRuntime.init()
+      } catch (e) {
+        logger.warn('[ChannelRuntime] 自动恢复渠道时出错:', e.message)
       }
-    } catch (e) {
-      logger.warn('[ChannelRuntime] 自动恢复渠道时出错:', e.message)
-    }
 
-    await taskScheduler.initialize(global.middleware.llm, channelRuntime)
+      // 渠道恢复完成后再启动哨兵，避免启动窗口把目标 Channel 误判为不可用。
+      const { getTriggerService } = await import('./lib/triggers/index.js')
+      await getTriggerService().startScheduler()
+
+      await taskScheduler.initialize(global.middleware.llm, channelRuntime)
+    } else {
+      logger.info('[Test] 隔离测试模式：跳过渠道恢复、哨兵与定时任务')
+    }
     
     // 启动服务器并保存实例
     httpServer = await dependencies.startServer()
