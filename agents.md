@@ -7,7 +7,8 @@
 - `lib/chat/` holds LLM adapters, task execution, OneBot, ACP, and memory services. Cross-cutting lifecycle logic belongs in `lib/hooks/`.
 - Built-in plugins live in `lib/plugins/`; third-party workspace plugins belong in `plugins/custom/<name>/`.
 - Channel integrations are under `channels/`; shared helpers are in `utils/`; operational scripts are in `scripts/`.
-- The Prisma schema is `prisma/schema.prisma`. Tests are organized under `tests/{adapters,channels,integration,plugins,push,routes,triggers,unit}/`. Treat `dist/` as generated output.
+- The Prisma schema is `prisma/schema.prisma`. Tests are organized under `tests/{adapters,agents,channels,database,hooks,image,integration,plugins,push,routes,subagents,triggers,unit}/`, with shared fixtures in `tests/fixtures/`. Treat `dist/` as generated output.
+- Agent / Session / Channel domain model lives in `lib/agents/`, `lib/subagents/`, `lib/chat/sessions/` and `lib/triggers/`; the authoritative spec is `docs/architecture/channel-agent-refactor/Spec.md`. `CLAUDE.md` has the deeper architectural notes.
 
 ## Build, Test, and Development Commands
 
@@ -36,11 +37,11 @@ Tests use Node's built-in `node:test` API; there is no third-party test framewor
 
 ## Security & Configuration
 
-Do not commit `.env` files, database files, runtime channel data, or credentials. Application configuration is persisted in SQLite (`data/app.db`) and exposed through the existing services/API. After schema changes, update the relevant service layer and run `pnpm db:push` locally.
+Do not commit `.env` files, database files, runtime channel data, or credentials. Application configuration is persisted in SQLite (`data/app.db`, resolved by `lib/database/databasePath.js`) and exposed through the existing services/API. After schema changes, update the relevant service layer and run `pnpm db:push` locally.
 
 ## Commit & Pull Request Guidelines
 
-Follow the repository's history with concise Conventional Commit-style messages such as `feat(channel): ...`, `fix: ...`, or `docs: ...`. Keep commits focused. The project notes allow direct work on `master`; when a pull request is used, describe behavior changes, test commands/results, schema or configuration impact, and any required frontend protocol coordination.
+Follow the repository's history with concise Conventional Commit-style messages such as `feat(channel): ...`, `fix: ...`, or `docs: ...`. Keep commits focused. The mainline is `dev`; refactors are done on `codex/*` feature branches with no PR flow. (Older notes mentioning direct work on `master` no longer apply.) When a pull request is used, describe behavior changes, test commands/results, schema or configuration impact, and any required frontend protocol coordination.
 
 > [!IMPORTANT]
 > **Upstream Dependency & Branch Release Gate (OneBots Patch)**:

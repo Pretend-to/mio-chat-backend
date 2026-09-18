@@ -9,7 +9,7 @@ Mio-Chat 的后端，自称 "Agent OS"：不只是 API 转发，而是带 Hook �
 这是作者自用的个人项目，仍在开发阶段，**没有外部用户**。因此：
 
 - 数据结构可以直接改到对的形态，不必为兼容旧数据写迁移分支（真需要迁移时走 `lib/migration/`，启动时自动检测执行）。
-- CI 只构建 Docker 镜像，不卡合并。直接提交到 `master`，无 PR 流程。
+- CI 只构建 Docker 镜像，不卡合并。主干是 `dev`（工作分支跟踪 `origin/dev`），重构类改动走 `codex/*` 功能分支，无 PR 流程。早年文档写的"直接提交到 master"已不再适用。
 - 有测试但覆盖不全，**不要假设改动会被测试拦住**。
 
 ## 命令
@@ -21,10 +21,13 @@ pnpm lint         # oxlint
 pnpm lint:fix     # oxlint --fix
 pnpm format       # prettier --write .
 
-pnpm test         # bash scripts/utils/run-tests.sh
-pnpm test:unit    # node --test tests/**/*.test.js
-node --test tests/adapters/openai.test.js    # 跑单个测试文件
+pnpm test         # node scripts/utils/run-tests.js —— 完整套件（内部驱动 test:unit）
+pnpm test:unit    # node --test tests/**/*.test.js —— 最常用，跑测试文件
+pnpm test:integration  # 只跑集成用例，需要服务跑在 http://localhost:3080（BASE_URL / ADMIN_CODE 可覆盖）
+pnpm test:all     # 全部
+```
 
+> 已知失败：`tests/channels/wechat_channel.test.js` 目前在全量套件中是红的，与本次改动无关，先别当成回归信号。
 pnpm db:push      # prisma db push（改完 schema 用这个，开发阶段够了）
 pnpm db:migrate   # prisma migrate dev
 pnpm db:studio    # 可视化查看 data/app.db
@@ -42,15 +45,23 @@ pnpm docker:up / docker:down / docker:logs
 performFullInitialization()   # 确保 .env 存在、数据库目录存在、schema 已同步
   → prismaManager.initialize()
   → 各 Service.initialize()（Preset / SystemSettings / PluginConfig / Task）
-  → initializeDefaults()
-  → AutoMigrationDetector.checkAndMigrate()
-  → config.reload()
-  → statusCheck()               # lib/check.js，在这里创建 global.middleware
+  → imageService / searchService / visionService .initialize()
+  → initializeDefaults()         # scripts/initialize-defaults.js
+  → checkAndPerformAutoMigration(AutoMigrationDetector)
+  → config.reload()              # 同步刚写入的默认值，避免状态检查重复生成访问码
+  → statusCheck()                # lib/check.js，在这里创建 global.middleware
   → taskScheduler.initialize()
-  → startServer()               # lib/server/http/index.js
+  → startServer()                # lib/server/http/index.js
 ```
 
-`app.js` 还实现了优雅关闭（SIGINT/SIGTERM，10s 强制超时），改启动/关闭逻辑时注意别破坏这条链。
+> 以上是导航性的，**精确顺序以 `app.js` 为准**。
+
+`app.js` 还实现了优雅关闭（SIGINT/SIGTERM，10s 强制超时）。关闭时会：
+
+- 广播 `streamCache` 中仍在执行中的工具调用为 failed 终态（`notifyInFlightInterrupted`）——否则前端那个 bash tool 会永远停在"执行中"；
+- 依次释放 socket sessions、streamCache、TriggerService、ChannelRuntime。
+
+改启动/关闭逻辑时注意别破坏这条链。
 
 ## 两个全局
 
@@ -64,17 +75,43 @@ lib/
 ├── server/
 │   ├── http/          Express 5：routes(index.js) + controllers/ + middleware/
 │   └── socket.io/     实时层，与前端的主通道
+├── agents/            AgentService —— Agent 是主体（人格 / 模型 / 工具 / 记忆 / Session 列表）
+├── subagents/         SubAgent 编排：Dispatcher / RunService / Executor / StateMachine / ResourcePolicy
+├── approvals/         ApprovalNotificationBroker —— 工具挂起的通知与唤醒
+├── triggers/          TriggerRegistry / TriggerRunner / WakeInjector / WakeProtocol
 ├── chat/
-│   ├── llm/           适配器、Skills、结晶服务、任务执行
-│   ├── onebot/        OneBot v11（反向 WS 客户端）
-│   └── acp/           Agent Client Protocol，带独立进程管理
-├── hooks/             全局 Hook 架构（V3）
-├── plugins/           内置插件
+│   ├── llm/           适配器、Skills、结晶服务、ChatEvent 流
+│   ├── sessions/      SessionTurnService —— 单轮执行
+│   ├── persistence/   SessionPersistence —— 消息链落库
+│   ├── search/        搜索调度（两层降级 + 适配器注册表）
+│   ├── image/ vision/ 多模态服务
+│   └── onebot/        OneBot v11（反向 WS 客户端）
+├── hooks/             全局 Hook 架构（V3，16 个挂载点）
+├── plugins/           内置插件（ai / web / terminal-pty / agent-manager / mcp / config / ...）
 ├── database/          Prisma 封装 + Service 层
+├── storage/           本地 / S3 兼容存储适配
+├── ratelimit/ push/   限流与推送
 ├── initialization/    首次启动自愈
 └── migration/         自动迁移检测
-plugins/custom/        第三方插件（pnpm workspace）
+
+channels/              渠道适配层（BaseChannel / ChannelRuntime / ChannelStore /
+                       ChannelAdapterRegistry + wechat / weixin-ilink / onebots / bindings / triggers）
+plugins/               独立成包的插件：custom/、email-plugin/、note-plugin/（pnpm workspace）
 ```
+
+> 注：旧文档里的 `lib/chat/acp/`（Agent Client Protocol）**已不存在**，由下面的 Agent / Session / SubAgent 体系取代。
+
+### Agent / Session / SubAgent 领域模型（重构核心）
+
+这是当前重构的中心，权威规格是 [`docs/architecture/channel-agent-refactor/Spec.md`](./docs/architecture/channel-agent-refactor/Spec.md)。只要改动涉及 Agent、Session、Channel、定时任务、Trigger 或 SubAgent，**先读那份规格**。
+
+三条最容易踩错的语义：
+
+1. **Agent 是可配置、可执行、可持久化的主体**；Session 是它的会话上下文，Message / Chunk / ToolCall / Crystal / PendingMemory 都**通过 Session 归属 Agent**。
+2. **Channel 只是 I/O 入口** —— 只存平台、凭据、连接状态和协议能力，**不拥有 Agent、模型、人格或聊天记录**。Agent 与 Channel 是多对多。旧假设"Channel 拥有且只拥有一个 Agent""Agent 必须通过 Channel 才能执行"已被废除。
+3. **Session 可派生子 Session**，通过 `parentSessionId` 形成有向树。子 Session 承载 SubAgent 与隔离执行上下文，子与父共享 Agent 与 Channel，但**各自独立持有** MessageChain、运行 FIFO 与锁、LLM 调用历史、工具调用记录、超时与取消信号。
+
+相关的领域身份字段边界（`agentId` / `sessionId` / `channelId` / `bindingId` / `contactorId` / 已废弃的 `preset`）在 Spec 的 2.2 节，别在表单或 API 里混用。
 
 ### 配置存储
 
@@ -119,11 +156,11 @@ lib/server/socket.io/
 
 ### Hook 架构
 
-`lib/hooks/types.js` 定义所有挂载点，分三类：
+`lib/hooks/types.js` 定义所有挂载点，**共 16 个**，分三类：
 
-- **工具生命周期** — `tool:beforeLoad` / `notFound` / `beforeExecute` / `afterExecute` / `onError` / `onTimeout`
-- **插件生命周期** — `plugin:beforeInit` / `afterInit` / `toolsLoaded` / `beforeDestroy` / `afterDestroy`、`plugins:updated`
-- **LLM 对话拦截** — `llm:beforeChat` / `afterChat` / `toolResults`
+- **工具生命周期（6）** — `tool:beforeLoad` / `notFound` / `beforeExecute` / `afterExecute` / `onError` / `onTimeout`
+- **插件生命周期（6）** — `plugin:beforeInit` / `afterInit` / `toolsLoaded` / `beforeDestroy` / `afterDestroy`、`plugins:updated`
+- **LLM 对话拦截（4）** — `llm:beforeChat` / `beforeRecursion` / `afterChat` / `toolResults`
 
 内置 Hook 在 `lib/hooks/builtins/`（鉴权、审计、模型权限、工具解析、响应长度限制等）。加新的横切逻辑优先考虑 Hook，而不是改核心代码。
 
@@ -131,9 +168,20 @@ lib/server/socket.io/
 
 三层：
 
-1. **Native Plugins** — `lib/plugins/*`（内置）和 `plugins/custom/*`（第三方，pnpm workspace）。插件类须 export default 并实现 `initialize()` 和 `getTools()`。支持热重载。
+1. **Native Plugins** — `lib/plugins/*`（内置，10 个）和 `plugins/*`（独立成包：`custom/`、`email-plugin/`、`note-plugin/`，pnpm workspace）。插件类须 export default 并实现 `initialize()` 和 `getTools()`。
 2. **Skills** — `lib/chat/llm/skills/*`，专家包形态，由 `SkillService.js` 管理。
 3. **MCP** — 通过 `lib/plugins/mcp-plugin` 接标准协议。
+
+**热重载范围（极易踩坑）**：`Plugin._setupWatchers()` 只用 chokidar 监听四个子路径，且 `depth: 0`（不递归）：
+
+| 会热重载 | 不会热重载（必须重启进程） |
+| --- | --- |
+| `tools/` | 插件根目录的 `index.js` |
+| `hooks/` | 插件的 `lib/` 子目录 |
+| `presets/` | **核心 lib**（`lib/chat/**`、`lib/agents/**`、`lib/triggers/**` …） |
+| `skills/`（depth 2） | |
+
+典型症状是"一半新一半旧"：改了 `plugins/x/tools/a.js` 立即生效，同时改了 `lib/chat/y.js` 却没生效，很容易被误判成 bug。判断标准就一条：**文件是否落在上表左侧四个目录里**。`reload` 工具能热重载插件，但也覆盖不到核心 `lib/`。
 
 插件通过 `pathToFileURL(...)` + `await import(url)` 动态加载，加载失败是 catch + log + 继续，新增动态加载代码时保持这个策略。
 
@@ -162,5 +210,25 @@ lib/server/socket.io/
 | 加插件 | `plugins/custom/<name>/index.js`，export default 类实现 `initialize()` / `getTools()` |
 | 加 Hook | `lib/hooks/builtins/` + 在 `types.js` 确认挂载点 |
 | 改数据库结构 | `prisma/schema.prisma` → `pnpm db:push` → 相应 Service |
+| 改 Agent 领域模型 | `lib/agents/AgentService.js` + schema，**先读 Spec.md** |
+| 改 SubAgent 编排 | `lib/subagents/`（Dispatcher / RunService / Executor / StateMachine / ResourcePolicy） |
+| 改渠道接入 | `channels/` 下对应适配器 + `ChannelAdapterRegistry.js` 注册 |
+| 改定时 / 唤醒 | `lib/triggers/`（Registry / Runner / WakeInjector）+ `lib/cron.js` |
+| 改搜索通道 | `lib/chat/search/`：适配器放 `implementations/`，在 `SearchRegistry.js` 注册 |
+| 改命令执行 / 审批挂起 | `lib/plugins/terminal-pty/` + `lib/approvals/` |
 
 改前后端交互的消息格式时，**两个仓库要同步改** —— socket 层和 `lib/chat/*` 的协议适配器都可能涉及。
+
+## 文档索引
+
+| 想了解 | 看哪 |
+| --- | --- |
+| **Agent / Session / Channel 领域模型（权威）** | `docs/architecture/channel-agent-refactor/Spec.md` |
+| SubAgent 异步编排实施计划 | `docs/architecture/channel-agent-refactor/SubAgentAsyncDevelopmentPlan.md` |
+| 定时任务与 Trigger | `docs/architecture/trigger-system.md` |
+| Session 持久化 | `docs/architecture/session-persistence.md` |
+| 渠道架构 | `docs/architecture/channel-v1.0.md` |
+| 会话中止与操控 UX | `docs/architecture/steering-and-abort-ux-spec.md` |
+| 整体特性与架构图 | `README.md` / `docs/README.md` |
+
+> `docs/architecture/subagent-system.md` 是**早期设计稿**，开头已声明以 Spec.md 和实施计划为准 —— 别照它实现。
