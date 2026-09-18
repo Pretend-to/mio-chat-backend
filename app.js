@@ -368,6 +368,8 @@ async function startApp() {
 
     // 自动恢复上次 running 状态的渠道（持久化开关）
     const channelRuntime = getChannelRuntime()
+    const { initAgentController } = await import('./lib/server/http/controllers/agentController.js')
+    initAgentController({ runtime: channelRuntime })
     if (!isolatedTest) {
       try {
         // 先迁移并恢复原生 iLink 渠道；显式 OneBots 渠道仍可按需恢复。

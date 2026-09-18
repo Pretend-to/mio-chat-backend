@@ -111,20 +111,8 @@ async function initializeDefaultSystemSettings() {
       category: 'system',
       description: '系统任务专用 LLM 渠道 (留空则默认使用第一个可用渠道)',
       key: 'system_llm_channel',
-      value: ''
+      value: '',
     },
-    {
-      category: 'system',
-      description: '系统任务专用 LLM 模型 (留空则使用所选渠道的首选模型)',
-      key: 'system_llm_model',
-      value: ''
-    },
-    {
-      category: 'system',
-      description: '对话标题自动生成的提示词',
-      key: 'system_llm_title_prompt',
-      value: '请根据这段对话内容，为这个会话起一个极其简短、精准的标题（不超过 6 个字）。注意：你的回答只能包含标题本身，不要包含任何标点符号、解释或引用。'
-    }
   ]
 
   for (const setting of defaultSettings) {

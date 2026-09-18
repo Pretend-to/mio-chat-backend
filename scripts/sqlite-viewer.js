@@ -9,9 +9,10 @@
 import http from 'http'
 import path from 'path'
 import BetterSqlite3 from 'better-sqlite3'
+import { resolveDatabasePath } from '../lib/database/databasePath.js'
 
 const PORT = parseInt(process.argv[2], 10) || 5555
-const DB_PATH = path.resolve(process.cwd(), 'prisma/data/app.db')
+const DB_PATH = resolveDatabasePath()
 
 const db = new BetterSqlite3(DB_PATH)
 db.pragma('journal_mode = WAL')

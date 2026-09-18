@@ -3,13 +3,11 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import net from 'node:net'
-import os from 'node:os'
 import path from 'node:path'
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import Database from 'better-sqlite3'
 
-import { resolveDatabasePath } from '../../lib/database/databasePath.js'
 import { discoverTestRuntime, probeMioChat } from './test-runtime.js'
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
@@ -47,26 +45,18 @@ async function reservePort() {
 }
 
 async function prepareIsolatedDatabase(destination, { adminCode, port, userCode }) {
-  const source = resolveDatabasePath({ env: {}, rootDir: projectRoot })
-  try {
-    await fs.access(source)
-  } catch {
-    throw new Error(`找不到可用于创建隔离测试快照的数据库：${source}`)
-  }
-
-  const sourceDatabase = new Database(source, { readonly: true })
-  try {
-    await sourceDatabase.backup(destination)
-  } finally {
-    sourceDatabase.close()
-  }
-
+  execFileSync(path.join(projectRoot, 'node_modules/.bin/prisma'), [
+    'db', 'push', '--schema', path.join(projectRoot, 'prisma/schema.prisma'), '--url', `file:${destination}`,
+  ], { env: { ...process.env, RUST_LOG: 'debug' }, stdio: 'ignore' })
   const database = new Database(destination)
   try {
-    const update = database.prepare('UPDATE system_settings SET value = ? WHERE key = ?')
-    update.run(JSON.stringify(adminCode), 'admin_code')
-    update.run(JSON.stringify(userCode), 'user_code')
-    update.run(JSON.stringify(port), 'server_port')
+    const schema = await fs.readFile(path.join(projectRoot, 'prisma/schema.prisma'), 'utf8')
+    const schemaHash = crypto.createHash('md5').update(schema).digest('hex')
+    const upsert = database.prepare('INSERT INTO system_settings (key, value, category, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP')
+    upsert.run('admin_code', JSON.stringify(adminCode), 'system')
+    upsert.run('user_code', JSON.stringify(userCode), 'system')
+    upsert.run('server_port', JSON.stringify(port), 'server')
+    upsert.run('_schema_hash', JSON.stringify(schemaHash), 'system')
   } finally {
     database.close()
   }
@@ -128,7 +118,7 @@ async function main() {
     console.log(`检测到存量 MioChat ${existingService}；它将保持在线，测试会使用独立实例。`)
   }
 
-  const temporaryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'miochat-test-'))
+  const temporaryRoot = await fs.mkdtemp('/tmp/miochat-test-')
   const databasePath = path.join(temporaryRoot, 'app.db')
   const port = await reservePort()
   const adminCode = crypto.randomBytes(24).toString('base64url')
