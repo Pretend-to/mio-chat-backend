@@ -24,7 +24,7 @@ services:
 
     # 数据持久化
     volumes:
-      - ./data:/app/prisma/data  # SQLite 数据库
+      - ./data:/app/data         # SQLite 数据库及运行时数据
       - ./output:/app/output     # 生成的文件、截图等
 
     # 健康检查（支持动态端口）

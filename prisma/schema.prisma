@@ -120,28 +120,27 @@ model LogStat {
 
 // 定时任务表
 model Task {
-  id            String    @id // 任务唯一 ID (taskId)
-  name          String?
-  cron          String // Cron 表达式，或者 "once"
-  runAt         DateTime? @map("run_at") // 指定运行时间（用于一次性延迟任务）
-  preset        String // 绑定的 Agent 预设名
-  systemPrompt  String?   @map("system_prompt") // 可选的系统提示词覆盖
-  tools         String?   @default("[]") // 可选的工具列表覆盖 (JSON)
-  triggerPrompt String?   @default("") @map("prompt") // 任务唤起/触发提示词
-  userId        String?   @map("user_id") // 结果推送的目标用户
-  contactorId   String?   @map("contactor_id") // 前端对话框 ID
-  provider      String? // LLM 渠道 (快照)
-  model         String? // 模型名称 (快照)
-  status        String    @default("active") // 'active' | 'disabled' | 'finished'
-  history       String?   @default("[]") // 存储任务运行的连续前端格式对话历史
-  lastRunAt     DateTime? @map("last_run_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id                String    @id
+  name              String?
+  cron              String
+  runAt             DateTime? @map("run_at")
+  agentId           String    @map("agent_id")
+  sessionId         String    @map("session_id")
+  deliveryBindingId String?   @map("delivery_binding_id")
+  triggerPrompt     String?   @default("") @map("prompt")
+  status            String    @default("active")
+  lastRunAt         DateTime? @map("last_run_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  executions TaskExecution[]
+  agent           Agent                @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  session         Session              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  deliveryBinding AgentChannelBinding? @relation(fields: [deliveryBindingId], references: [id], onDelete: SetNull)
+  executions      TaskExecution[]
 
-  @@index([userId])
-  @@index([status])
+  @@index([agentId, status])
+  @@index([sessionId])
+  @@index([deliveryBindingId])
   @@map("tasks")
 }
 
@@ -150,24 +149,26 @@ model TaskExecution {
   id                Int       @id @default(autoincrement())
   taskId            String    @map("task_id")
   round             Int       @default(1)
-  userId            String?   @map("user_id")
-  contactorId       String?   @map("contactor_id")
-  provider          String?
-  model             String?
+  agentId           String    @map("agent_id")
+  sessionId         String    @map("session_id")
+  deliveryBindingId String?   @map("delivery_binding_id")
   triggerPrompt     String?   @map("trigger_prompt")
   inputMessages     String    @map("input_messages") // JSON: 发送给 LLM 的完整 messages 数组
   outputChunks      String    @default("[]") @map("output_chunks") // JSON: 原始 streamCache chunks 全量
   finalAssistantMsg String?   @map("final_assistant_msg") // JSON: 组装后的 assistant 消息
   status            String    @default("running") // running | completed | failed
+  deliveryStatus    String    @default("not_requested") @map("delivery_status")
+  deliveryError     String?   @map("delivery_error")
   synced            Boolean   @default(false) // 是否已推送到前端
   startedAt         DateTime  @default(now()) @map("started_at")
   finishedAt        DateTime? @map("finished_at")
   errorMessage      String?   @map("error_message")
 
-  task Task @relation(fields: [taskId], references: [id])
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([taskId])
   @@index([taskId, round])
+  @@index([agentId, sessionId])
   @@index([status])
   @@map("task_executions")
 }
@@ -276,22 +277,31 @@ model ShellAutoApproveRule {
   @@map("shell_auto_approve_rules")
 }
 
-// Channel agent and persistence models. See
-// docs/architecture/session-persistence.md for lifecycle and migration rules.
+// Agent, Session and Channel models. Breaking reset policy is documented in
+// docs/architecture/channel-agent-refactor/Spec.md.
 model Agent {
-  id              String   @id
-  soul            String?
-  activeSessionId String?  @map("active_session_id")
-  provider        String?
-  model           String?
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id               String   @id
+  name             String   @default("Agent")
+  avatar           String?
+  description      String?
+  soul             String?
+  defaultSessionId String?  @map("default_session_id")
+  provider         String?
+  model            String?
+  status           String   @default("active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
-  metas    AgentMeta[]
-  channels Channel[]
-  sessions Session[]
-  memories GlobalMemory[]
-  triggers Trigger[]
+  metas                AgentMeta[]
+  channelBindings      AgentChannelBinding[]
+  channelConversations ChannelConversation[]
+  sessions             Session[]
+  memories             GlobalMemory[]
+  tasks                Task[]
+  triggers             Trigger[]
+  subAgentRunGroups    SubAgentRunGroup[]
+  subAgentRuns         SubAgentRun[]
+  sessionInboxEvents   SessionInboxEvent[]
 
   @@map("agents")
 }
@@ -309,65 +319,375 @@ model AgentMeta {
 
 model Channel {
   id         String    @id
-  agentId    String    @map("agent_id")
   type       String
   name       String?
   tokenEnc   String?   @map("token_enc")
   botId      String?   @map("bot_id")
   userId     String?   @map("user_id")
   avatar     String?
-  provider   String?
-  model      String?
   status     String    @default("unbound")
   lastActive DateTime? @map("last_active")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
   legacyJson String?   @map("legacy_json")
 
-  agent    Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  triggers Trigger[]
+  bindings       AgentChannelBinding[]
+  routes         ChannelRoute[]
+  conversations  ChannelConversation[]
+  principals     ChannelPrincipal[]
+  adminClaims    ChannelAdminClaim[]
+  sourceTriggers Trigger[]             @relation("TriggerSourceChannel")
 
-  @@index([agentId, type])
+  @@index([type, status])
   @@map("channels")
 }
 
-model Session {
+model ChannelPrincipal {
   id             String   @id
-  agentId        String   @map("agent_id")
-  title          String?
-  nextSeq        Int      @default(0) @map("next_seq")
+  channelId      String   @map("channel_id")
+  externalUserId String   @map("external_user_id")
+  role           String   @default("system_admin")
+  displayName    String?  @map("display_name")
+  claimedAt      DateTime @default(now()) @map("claimed_at")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
-  legacyMetadata String?  @map("legacy_metadata")
 
-  agent           Agent            @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  messages        Message[]
-  crystals        Crystal[]
-  archives        SessionArchive[]
-  pendingMemories PendingMemory[]
-  triggers        Trigger[]
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
+  @@unique([channelId, externalUserId])
+  @@index([externalUserId])
+  @@index([channelId, role])
+  @@map("channel_principals")
+}
+
+model ChannelAdminClaim {
+  id           String    @id
+  channelId    String    @unique @map("channel_id")
+  codeHash     String    @map("code_hash")
+  expiresAt    DateTime  @map("expires_at")
+  attemptCount Int       @default(0) @map("attempt_count")
+  claimedAt    DateTime? @map("claimed_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("channel_admin_claims")
+}
+
+model AgentChannelBinding {
+  id               String   @id
+  agentId          String   @map("agent_id")
+  channelId        String   @map("channel_id")
+  defaultSessionId String?  @map("default_session_id")
+  enabled          Boolean  @default(true)
+  inboundPolicy    String   @default("routed") @map("inbound_policy")
+  outboundEnabled  Boolean  @default(true) @map("outbound_enabled")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  agent            Agent          @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  channel          Channel        @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  routes           ChannelRoute[]
+  deliveryTasks    Task[]
+  deliveryTriggers Trigger[]      @relation("TriggerDeliveryBinding")
+  subAgentRunGroups SubAgentRunGroup[]
+
+  @@unique([agentId, channelId])
+  @@index([channelId, enabled])
+  @@map("agent_channel_bindings")
+}
+
+model ChannelRoute {
+  id                     String   @id
+  channelId              String   @map("channel_id")
+  externalConversationId String   @map("external_conversation_id")
+  bindingId              String   @map("binding_id")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  channel Channel             @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  binding AgentChannelBinding @relation(fields: [bindingId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, externalConversationId])
+  @@index([bindingId])
+  @@map("channel_routes")
+}
+
+model ChannelConversation {
+  id                     String    @id
+  channelId              String    @map("channel_id")
+  agentId                String    @map("agent_id")
+  conversationType       String    @map("conversation_type")
+  externalConversationId String    @map("external_conversation_id")
+  externalThreadId       String?   @map("external_thread_id")
+  activeSessionId        String?   @map("active_session_id")
+  lastActiveAt           DateTime? @map("last_active_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  channel       Channel                     @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  agent         Agent                       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  activeSession Session?                    @relation("ActiveChannelSession", fields: [activeSessionId], references: [id], onDelete: SetNull)
+  members       ChannelConversationMember[]
+  sessions      ChannelSessionLink[]
+
+  @@unique([channelId, agentId, externalConversationId])
+  @@index([agentId, activeSessionId])
+  @@map("channel_conversations")
+}
+
+model ChannelConversationMember {
+  channelConversationId String    @map("channel_conversation_id")
+  externalUserId        String    @map("external_user_id")
+  displayName           String?   @map("display_name")
+  role                  String?
+  lastActiveAt          DateTime? @map("last_active_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  conversation ChannelConversation @relation(fields: [channelConversationId], references: [id], onDelete: Cascade)
+
+  @@id([channelConversationId, externalUserId])
+  @@index([externalUserId])
+  @@map("channel_conversation_members")
+}
+
+model ChannelSessionLink {
+  channelConversationId String   @map("channel_conversation_id")
+  sessionId             String   @map("session_id")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  conversation ChannelConversation @relation(fields: [channelConversationId], references: [id], onDelete: Cascade)
+  session      Session             @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@id([channelConversationId, sessionId])
+  @@index([sessionId])
+  @@map("channel_session_links")
+}
+
+model Session {
+  id              String    @id
+  agentId         String    @map("agent_id")
+  parentSessionId String?   @map("parent_session_id")
+  kind            String    @default("conversation")
+  title           String?
+  visible         Boolean   @default(true)
+  nextSeq         Int       @default(0) @map("next_seq")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  legacyMetadata  String?   @map("legacy_metadata")
+  subagentKey     String?   @map("subagent_key")
+  subagentRole    String?   @map("subagent_role")
+  retentionPolicy String?   @map("retention_policy")
+  lastRunAt       DateTime? @map("last_run_at")
+
+  agent                      Agent                 @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  parent                     Session?              @relation("SessionTree", fields: [parentSessionId], references: [id], onDelete: Cascade)
+  children                   Session[]             @relation("SessionTree")
+  messages                   Message[]
+  crystals                   Crystal[]
+  archives                   SessionArchive[]
+  pendingMemories            PendingMemory[]
+  activeChannelConversations ChannelConversation[] @relation("ActiveChannelSession")
+  channelLinks               ChannelSessionLink[]
+  tasks                      Task[]
+  triggers                   Trigger[]
+  subAgentRunGroups          SubAgentRunGroup[]    @relation("SubAgentRunGroupParentSession")
+  subAgentRuns               SubAgentRun[]         @relation("SubAgentRunSession")
+  parentedSubAgentRuns       SubAgentRun[]         @relation("SubAgentRunParentSession")
+  sessionInboxEvents         SessionInboxEvent[]
+
+  @@unique([agentId, parentSessionId, subagentKey])
   @@index([agentId, updatedAt])
+  @@index([parentSessionId])
   @@map("sessions")
 }
 
+model SubAgentRunGroup {
+  id                String    @id
+  agentId           String    @map("agent_id")
+  parentSessionId   String    @map("parent_session_id")
+  parentMessageId   String?   @map("parent_message_id")
+  originType        String    @default("interactive") @map("origin_type")
+  originTaskId      String?   @map("origin_task_id")
+  originTriggerId   String?   @map("origin_trigger_id")
+  status            String    @default("planning")
+  completionPolicy  String    @default("all") @map("completion_policy")
+  quorum            Int?
+  deliveryBindingId String?   @map("delivery_binding_id")
+  // Completion automatically wakes the parent Agent. The wake only carries
+  // group/run identifiers; the parent reads persisted results via the tool.
+  resumeParent      Boolean   @default(true) @map("resume_parent")
+  contextVersion    Int?      @map("context_version")
+  budgetJson        String    @default("{}") @map("budget_json")
+  resultSummaryJson String?   @map("result_summary_json")
+  idempotencyKey    String?   @map("idempotency_key")
+  deadlineAt        DateTime? @map("deadline_at")
+  revision          Int       @default(1)
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  finishedAt        DateTime? @map("finished_at")
+
+  agent         Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  deliveryBinding AgentChannelBinding? @relation(fields: [deliveryBindingId], references: [id], onDelete: SetNull)
+  parentSession Session       @relation("SubAgentRunGroupParentSession", fields: [parentSessionId], references: [id], onDelete: Cascade)
+  runs          SubAgentRun[]
+
+  @@unique([agentId, idempotencyKey])
+  @@index([parentSessionId, createdAt])
+  @@index([deliveryBindingId])
+  @@index([agentId, status])
+  @@map("subagent_run_groups")
+}
+
+model SubAgentRun {
+  id                  String    @id
+  groupId             String    @map("group_id")
+  agentId             String    @map("agent_id")
+  sessionId           String    @map("session_id")
+  parentSessionId     String    @map("parent_session_id")
+  revisionOfRunId     String?   @map("revision_of_run_id")
+  jobKey              String    @map("job_key")
+  taskType            String    @default("research") @map("task_type")
+  objective           String
+  inputJson           String    @default("{}") @map("input_json")
+  outputContractJson  String    @default("{}") @map("output_contract_json")
+  status              String    @default("queued")
+  reviewStatus        String    @default("not_required") @map("review_status")
+  resultJson          String?   @map("result_json")
+  resultText          String?   @map("result_text")
+  errorJson           String?   @map("error_json")
+  toolNamesJson       String    @default("[]") @map("tool_names_json")
+  toolDefinitionsHash String?   @map("tool_definitions_hash")
+  provider            String?
+  model               String?
+  reasoningEffort     Int?      @map("reasoning_effort")
+  budgetJson          String    @default("{}") @map("budget_json")
+  attempt             Int       @default(1)
+  leaseOwner          String?   @map("lease_owner")
+  leaseExpiresAt      DateTime? @map("lease_expires_at")
+  heartbeatAt         DateTime? @map("heartbeat_at")
+  cancelRequestedAt   DateTime? @map("cancel_requested_at")
+  cancelReason        String?   @map("cancel_reason")
+  startedAt           DateTime? @map("started_at")
+  finishedAt          DateTime? @map("finished_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  group         SubAgentRunGroup        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  agent         Agent                   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  session       Session                 @relation("SubAgentRunSession", fields: [sessionId], references: [id], onDelete: Cascade)
+  parentSession Session                 @relation("SubAgentRunParentSession", fields: [parentSessionId], references: [id], onDelete: Cascade)
+  revisionOf    SubAgentRun?            @relation("SubAgentRunRevision", fields: [revisionOfRunId], references: [id], onDelete: SetNull)
+  revisions     SubAgentRun[]           @relation("SubAgentRunRevision")
+  dependencies  SubAgentRunDependency[] @relation("RunDependencies")
+  dependents    SubAgentRunDependency[] @relation("DependsOnRun")
+  events        SubAgentEvent[]
+  artifacts     SubAgentArtifact[]
+
+  @@unique([groupId, jobKey, attempt])
+  @@index([groupId, status])
+  @@index([sessionId, createdAt])
+  @@index([parentSessionId, createdAt])
+  @@index([status, leaseExpiresAt])
+  @@map("subagent_runs")
+}
+
+model SubAgentRunDependency {
+  runId          String @map("run_id")
+  dependsOnRunId String @map("depends_on_run_id")
+  condition      String @default("success")
+
+  run       SubAgentRun @relation("RunDependencies", fields: [runId], references: [id], onDelete: Cascade)
+  dependsOn SubAgentRun @relation("DependsOnRun", fields: [dependsOnRunId], references: [id], onDelete: Cascade)
+
+  @@id([runId, dependsOnRunId])
+  @@index([dependsOnRunId])
+  @@map("subagent_run_dependencies")
+}
+
+model SubAgentEvent {
+  id          String   @id
+  runId       String   @map("run_id")
+  type        String
+  payloadJson String   @default("{}") @map("payload_json")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  run SubAgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, createdAt])
+  @@map("subagent_events")
+}
+
+model SubAgentArtifact {
+  id        String   @id
+  runId     String   @map("run_id")
+  type      String
+  name      String
+  uri       String?
+  path      String?
+  mimeType  String?  @map("mime_type")
+  size      Int?
+  hash      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  run SubAgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, createdAt])
+  @@map("subagent_artifacts")
+}
+
+// Legacy compatibility table. SubAgent results are no longer delivered through
+// this Inbox; keep the table until a deliberate schema cleanup/migration.
+model SessionInboxEvent {
+  id                String    @id
+  agentId           String    @map("agent_id")
+  sessionId         String    @map("session_id")
+  type              String
+  payloadJson       String    @map("payload_json")
+  status            String    @default("pending")
+  availableAt       DateTime  @default(now()) @map("available_at")
+  claimedAt         DateTime? @map("claimed_at")
+  consumedAt        DateTime? @map("consumed_at")
+  consumedMessageId String?   @map("consumed_message_id")
+  attempts          Int       @default(0)
+  lastError         String?   @map("last_error")
+  idempotencyKey    String    @unique @map("idempotency_key")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  agent   Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, status, availableAt])
+  @@index([agentId, status])
+  @@map("session_inbox_events")
+}
+
 model Message {
-  id           String    @id
-  sessionId    String    @map("session_id")
-  seq          Int
-  role         String
-  status       String    @default("final")
-  revision     Int       @default(0)
-  text         String?
-  content      String
-  fromUserId   String?   @map("from_user_id")
-  businessTime DateTime? @map("business_time")
-  archivedAt   DateTime? @map("archived_at")
-  archiveId    String?   @map("archive_id")
-  legacySource String?   @unique @map("legacy_source")
-  legacyJson   String?   @map("legacy_json")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id                     String    @id
+  sessionId              String    @map("session_id")
+  seq                    Int
+  role                   String
+  status                 String    @default("final")
+  revision               Int       @default(0)
+  text                   String?
+  content                String
+  fromUserId             String?   @map("from_user_id")
+  sourceType             String?   @map("source_type")
+  channelId              String?   @map("channel_id")
+  externalConversationId String?   @map("external_conversation_id")
+  externalMessageId      String?   @map("external_message_id")
+  metadata               String?
+  businessTime           DateTime? @map("business_time")
+  archivedAt             DateTime? @map("archived_at")
+  archiveId              String?   @map("archive_id")
+  legacySource           String?   @unique @map("legacy_source")
+  legacyJson             String?   @map("legacy_json")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
 
   session   Session         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   archive   SessionArchive? @relation(fields: [archiveId], references: [id], onDelete: SetNull)
@@ -375,9 +695,11 @@ model Message {
   chunks    MessageChunk[]
 
   @@unique([sessionId, seq])
+  @@unique([channelId, externalMessageId])
   @@index([sessionId, status])
   @@index([sessionId, archivedAt, seq])
   @@index([sessionId, businessTime])
+  @@index([channelId, externalConversationId])
   @@map("messages")
 }
 
@@ -479,8 +801,9 @@ model GlobalMemory {
 model Trigger {
   id                String    @id
   agentId           String    @map("agent_id")
-  channelId         String?   @map("channel_id")
-  sessionId         String?   @map("session_id")
+  sessionId         String    @map("session_id")
+  deliveryBindingId String?   @map("delivery_binding_id")
+  sourceChannelId   String?   @map("source_channel_id")
   type              String
   mode              String    @default("persistent")
   cronExpr          String?   @map("cron_expr")
@@ -499,12 +822,16 @@ model Trigger {
   updatedAt         DateTime  @updatedAt @map("updated_at")
   legacyJson        String?   @map("legacy_json")
 
-  agent      Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  channel    Channel?           @relation(fields: [channelId], references: [id], onDelete: SetNull)
-  session    Session?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  executions TriggerExecution[]
+  agent           Agent                @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  session         Session              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  deliveryBinding AgentChannelBinding? @relation("TriggerDeliveryBinding", fields: [deliveryBindingId], references: [id], onDelete: SetNull)
+  sourceChannel   Channel?             @relation("TriggerSourceChannel", fields: [sourceChannelId], references: [id], onDelete: SetNull)
+  executions      TriggerExecution[]
 
   @@index([agentId, enabled, deletedAt])
+  @@index([sessionId])
+  @@index([deliveryBindingId])
+  @@index([sourceChannelId])
   @@index([type, enabled])
   @@map("triggers")
 }
@@ -525,7 +852,7 @@ model TriggerExecution {
   createdAt  DateTime  @default(now()) @map("created_at")
   legacyJson String?   @map("legacy_json")
 
-  trigger Trigger? @relation(fields: [triggerId], references: [id], onDelete: SetNull)
+  trigger Trigger? @relation(fields: [triggerId], references: [id], onDelete: Cascade)
 
   @@index([triggerKey, createdAt])
   @@index([status, createdAt])
