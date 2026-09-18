@@ -291,14 +291,28 @@ test('MetaTool - action: call without extraRender duplication', async () => {
   assert.strictEqual(extraRenderCallCount, 1)
 })
 
-test('MetaTool cannot call a tool outside the parent execution allowlist', async () => {
+test('MetaTool cannot call a tool not exposed to meta or when meta_tool is not allowed in parent allowlist', async () => {
   const meta = new MetaTool()
   let invoked = false
   class HiddenTool extends MioFunction {
     constructor() {
       super({
+        access: { exposure: ['schema'] },
         description: 'Hidden tool',
         name: 'hidden_tool',
+        parameters: { properties: {}, type: 'object' },
+      })
+      this.func = async () => {
+        invoked = true
+        return { success: true }
+      }
+    }
+  }
+  class PublicTool extends MioFunction {
+    constructor() {
+      super({
+        description: 'Public tool',
+        name: 'public_tool',
         parameters: { properties: {}, type: 'object' },
       })
       this.func = async () => {
@@ -310,20 +324,111 @@ test('MetaTool cannot call a tool outside the parent execution allowlist', async
   global.middleware = {
     plugins: [
       {
-        getTools: () => new Map([['hidden', [new HiddenTool()]]]),
-        name: 'hidden-plugin',
+        getTools: () =>
+          new Map([
+            ['hidden', [new HiddenTool()]],
+            ['public', [new PublicTool()]],
+          ]),
+        name: 'test-plugin',
       },
     ],
   }
-  const result = await meta._execute({
+
+  // 1. Tool with exposure: ['schema'] cannot be called via meta_tool
+  const resNotExposed = await meta._execute({
     params: { action: 'call', tool_name: 'hidden_tool' },
     parentEvent: {
       settings: { toolCallSettings: { tools: ['meta_tool'] } },
     },
   })
-  assert.equal(result.success, false)
-  assert.match(result.error, /not found/)
+  assert.equal(resNotExposed.success, false)
+  assert.match(resNotExposed.error, /not found/)
   assert.equal(invoked, false)
+
+  // 2. When meta_tool itself is not in parent allowlist, call is rejected
+  const resMetaDisallowed = await meta._execute({
+    params: { action: 'call', tool_name: 'public_tool' },
+    parentEvent: {
+      settings: { toolCallSettings: { tools: ['other_tool'] } },
+    },
+  })
+  assert.equal(resMetaDisallowed.success, false)
+  assert.match(resMetaDisallowed.error, /not found/)
+  assert.equal(invoked, false)
+})
+
+test('MetaTool can discover and call universal tools (like tts_speech) when parentEvent has core channel tool allowlist', async () => {
+  const meta = new MetaTool()
+  let ttsInvoked = false
+  class UniversalTtsTool extends MioFunction {
+    constructor() {
+      super({
+        description: 'Text to speech synthesis',
+        name: 'tts_speech',
+        parameters: {
+          properties: { text: { type: 'string' } },
+          required: ['text'],
+          type: 'object',
+        },
+      })
+      this.func = async () => {
+        ttsInvoked = true
+        return { audioUrl: 'https://example.com/audio.mp3', success: true }
+      }
+    }
+  }
+
+  global.middleware = {
+    plugins: [
+      {
+        getTools: () => new Map([['edge-tts', [new UniversalTtsTool()]]]),
+        name: 'edge-tts-plugin',
+      },
+    ],
+  }
+
+  // Channel Agent parent event has core channel tool allowlist (ai-plugin, meta_tool, etc.)
+  const channelParentEvent = {
+    channel: { type: 'weixin-ilink' },
+    settings: {
+      toolCallSettings: {
+        mode: 'AUTO',
+        tools: ['meta_tool', 'agent_profile', 'bash', 'read'],
+      },
+    },
+    source: 'channel',
+  }
+
+  // 1. list discovers tts_speech from edge-tts-plugin
+  const listRes = await meta._execute({
+    params: { action: 'list' },
+    parentEvent: channelParentEvent,
+  })
+  assert.equal(listRes.success, true)
+  assert.ok(listRes.tools.some((t) => t.name === 'tts_speech'))
+  assert.ok(listRes.groups['edge-tts-plugin'] || listRes.groups['edge-tts'])
+
+  // 2. query returns tts_speech schema
+  const queryRes = await meta._execute({
+    params: { action: 'query', tools: ['tts_speech'] },
+    parentEvent: channelParentEvent,
+  })
+  assert.equal(queryRes.success, true)
+  assert.equal(queryRes.tools[0].name, 'tts_speech')
+  assert.ok(queryRes.tools[0].parameters.properties.text)
+
+  // 3. call executes tts_speech successfully through meta bridge
+  const callRes = await meta._execute({
+    params: {
+      action: 'call',
+      schema: { text: '你好，我是服务端Agent' },
+      tool_name: 'tts_speech',
+    },
+    parentEvent: channelParentEvent,
+  })
+  assert.equal(callRes.success, true)
+  assert.equal(ttsInvoked, true)
+  assert.equal(callRes.audioUrl, 'https://example.com/audio.mp3')
 })
 
 test('MetaTool - text display echo (getDisplayName)', () => {

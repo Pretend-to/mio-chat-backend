@@ -992,14 +992,19 @@ export function createBackendLlm(opts = {}) {
         agentId: executionAgentId,
         subagentRunId: ctx.subagentRunId || null,
         actorId: ctx.principal?.externalUserId || ctx.from || 'channel_user',
+        principal: ctx.principal || null,
         principalId:
           ctx.principal?.id ||
           `channel:${auditChannelId || 'unknown'}:${ctx.from || 'channel_user'}`,
         sessionScope: ctx.sessionScope || null,
-        source: 'channel',
+        source: ctx.source || 'channel',
+        isWake: Boolean(ctx.isWake),
         conversationKind:
           ctx.envelope?.conversation?.type === 'group' ? 'group' : 'direct',
-        triggerKind: ctx.isTask ? 'task' : 'interactive',
+        // Wake is an audit/detail flag, not a new policy scene. Keep the
+        // canonical trigger dimension as task so tool policy and event
+        // validators do not reject the parent wake turn.
+        triggerKind: ctx.isTask || ctx.isWake ? 'task' : 'interactive',
         body: {
           channel: ctx.channel?.channelType || 'channel',
           channelId: auditChannelId,

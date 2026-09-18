@@ -329,6 +329,7 @@ export class ChannelRuntime {
               },
               where: { id: binding.agentId },
             })
+            this.syncAgentCompatibilityMirror(agent.id, agent)
             return { model: agent.model || '', provider: agent.provider || '' }
           },
           outboundEnabled: binding.outboundEnabled,
@@ -367,7 +368,9 @@ export class ChannelRuntime {
             this.channelStore
               .update(channelId, { lastActive: Date.now() })
               .catch(() => {}),
-          outboundEnabled: false,
+          // No Agent is bound, but the transport must still be able to send
+          // routing/control notices such as "no available Agent".
+          outboundEnabled: true,
           platform,
           provider: null,
           routeTargetResolver: (...args) => routeTargetResolver(...args),
@@ -497,6 +500,34 @@ export class ChannelRuntime {
         }
         context.chn?.activeJobs?.clear?.()
         entry.agents.delete(bindingId)
+      }
+    }
+  }
+
+  /**
+   * Keep legacy realtime Channel executors aligned after an Agent update.
+   * These fields are compatibility mirrors only; SessionTurnService always
+   * reloads the Agent and never reads model/provider from this runtime state.
+   */
+  syncAgentCompatibilityMirror(agentId, patch = {}) {
+    const target = String(agentId)
+    for (const entry of this.running.values()) {
+      for (const context of entry.agents?.values?.() || []) {
+        if (String(context.binding?.agentId) !== target) continue
+        if (Object.hasOwn(patch, 'model')) {
+          context.chn.model = patch.model || null
+        }
+        if (Object.hasOwn(patch, 'provider')) {
+          context.chn.provider = patch.provider || null
+        }
+        if (context.agent) {
+          if (Object.hasOwn(patch, 'model')) {
+            context.agent.model = patch.model || null
+          }
+          if (Object.hasOwn(patch, 'provider')) {
+            context.agent.provider = patch.provider || null
+          }
+        }
       }
     }
   }

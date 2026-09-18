@@ -45,6 +45,42 @@ function inboundEnvelope({
   })
 }
 
+test('AgentService notifies runtime compatibility listeners after model updates', async () => {
+  let row = {
+    channelBindings: [],
+    id: 'agent-a',
+    model: 'old-model',
+    name: 'A',
+    provider: 'old-provider',
+    status: 'active',
+  }
+  const observed = []
+  const service = new AgentService({
+    prisma: {
+      $transaction: async (callback) =>
+        callback({
+          agent: {
+            update: async ({ data }) => {
+              row = { ...row, ...data }
+              return row
+            },
+          },
+        }),
+      agent: { findUnique: async () => ({ ...row }) },
+    },
+  })
+  service.onUpdated((agent) => observed.push(agent))
+
+  const updated = await service.update('agent-a', {
+    model: 'fresh-model',
+    provider: 'fresh-provider',
+  })
+
+  assert.equal(updated.model, 'fresh-model')
+  assert.equal(observed.length, 1)
+  assert.equal(observed[0].provider, 'fresh-provider')
+})
+
 test('create Agent atomically creates initial Session and Web binding without client identity fields', async t => {
   const prisma = await fixture(t)
   await prisma.channel.create({ data: { id: 'wechat', name: '微信', type: 'weixin-ilink' } })

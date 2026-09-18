@@ -251,6 +251,7 @@ test('dispatcher executes dependency DAG asynchronously and persists results for
     },
   }
   const wakes = []
+  const wakeAttempts = []
   let parentWakeAttempts = 0
   const dispatcher = new SubAgentDispatcher({
     executor,
@@ -259,6 +260,7 @@ test('dispatcher executes dependency DAG asynchronously and persists results for
     sessionTurnService: {
       runTurn: async (request) => {
         parentWakeAttempts += 1
+        wakeAttempts.push(request)
         if (parentWakeAttempts === 1) {
           throw new Error('transient parent session failure')
         }
@@ -306,6 +308,8 @@ test('dispatcher executes dependency DAG asynchronously and persists results for
   })
   assert.equal(wakes.length, 1)
   assert.equal(parentWakeAttempts, 2)
+  assert.notEqual(wakeAttempts[0].messageId, wakeAttempts[1].messageId)
+  assert.match(wakeAttempts[1].messageId, /_retry_1$/)
   assert.equal(wakes[0].agentId, agentId)
   assert.equal(wakes[0].sessionId, parentSessionId)
   assert.equal(wakes[0].isWake, true)

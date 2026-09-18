@@ -41,6 +41,7 @@ export class BaseChannel {
    * @param {string} [opts.channelType='base'] 渠道标识（如 'wechat', 'feishu', 'dingtalk'）
    * @param {string} [opts.provider] 大模型提供商
    * @param {string} [opts.model]    大模型名称
+   * @param {boolean} [opts.outboundEnabled=true] 是否允许向绑定渠道发送消息
    * @param {boolean} [opts.typing=true] 是否启用打字中状态反馈
    * @param {object} [opts.keepAlive] 保活配置
    * @param {object} [opts.logger=console] 日志输出
@@ -55,6 +56,7 @@ export class BaseChannel {
     channelType = 'base',
     provider = null,
     model = null,
+    outboundEnabled = true,
     typing = true,
     keepAlive = {},
     logger = console,
@@ -80,6 +82,7 @@ export class BaseChannel {
     this.channelType = channelType
     this.provider = provider
     this.model = model
+    this.outboundEnabled = outboundEnabled !== false
     this.defaultProvider = provider
     this.defaultModel = model
     this.typing = typing
@@ -126,7 +129,8 @@ export class BaseChannel {
   }
 
   /**
-   * 更新当前渠道的模型配置。ChannelStore 是唯一事实来源，运行时字段只作镜像。
+   * 更新 Agent 的模型配置。provider/model 是兼容实时 Channel 入站与
+   * Slash /model 的运行时镜像；持久化 Agent 才是唯一事实来源。
    */
   async updateModelConfig(patch = {}) {
     const next = {}
@@ -301,6 +305,14 @@ export class BaseChannel {
    */
   startTyping(ctx = {}, { sessionId = null } = {}) {
     if (!ctx || ctx.isWeb) return
+    const outputPort = this._resolveOutputPort(ctx)
+    if (!outputPort) return
+    if (outputPort !== this) {
+      const delegatedCtx = { ...ctx }
+      delete delegatedCtx.outputPort
+      outputPort.startTyping?.(delegatedCtx, { sessionId })
+      return
+    }
     const sid = sessionId || ctx.sid || null
     const from = ctx.from || null
     const key = sid || from || 'default'
@@ -369,6 +381,14 @@ export class BaseChannel {
    */
   async stopTyping(ctx = {}, { sessionId = null, force = false } = {}) {
     if (!ctx || ctx.isWeb) return
+    const outputPort = this._resolveOutputPort(ctx)
+    if (!outputPort) return
+    if (outputPort !== this) {
+      const delegatedCtx = { ...ctx }
+      delete delegatedCtx.outputPort
+      await outputPort.stopTyping?.(delegatedCtx, { force, sessionId })
+      return
+    }
     const sid = sessionId || ctx.sid || null
     const from = ctx.from || null
 
@@ -404,6 +424,19 @@ export class BaseChannel {
   /** 发送打字中状态反馈 */
   async doSendTyping(_ctx, _status) {
     // 默认空操作，子类按需覆写
+  }
+
+  /**
+   * Resolve the protocol output for one execution turn. SessionTurnService
+   * supplies an explicit outputPort for background execution; realtime
+   * Channel ingress keeps using the Channel itself. A disabled port resolves
+   * to null so execution and persistence continue without external output.
+   */
+  _resolveOutputPort(ctx = {}) {
+    const outputPort = Object.hasOwn(ctx || {}, 'outputPort')
+      ? ctx.outputPort
+      : this
+    return outputPort?.outboundEnabled === false ? null : outputPort
   }
 
   /** 渠道专属回复风格与格式系统提示词（子类可按需覆写） */
@@ -489,22 +522,29 @@ export class BaseChannel {
   // ===============================================================
   // 消息路由、确认拦截与临时插话处理
   // ===============================================================
-  async _safeSend(from, contextToken, text) {
-    const targetToken = contextToken || this.latestContextToken || null
+  async _safeSend(from, contextToken, text, explicitOutputPort = undefined) {
+    const outputPort =
+      explicitOutputPort === undefined
+        ? this._resolveOutputPort()
+        : explicitOutputPort?.outboundEnabled === false
+          ? null
+          : explicitOutputPort
+    if (!outputPort) return null
+    const targetToken = contextToken || outputPort.latestContextToken || null
     try {
-      const segments = this.splitTextToSegments(text, {
+      const segments = outputPort.splitTextToSegments(text, {
         contextToken: targetToken,
         from,
       })
       for (let i = 0; i < segments.length; i++) {
         const seg = segments[i]
-        const payload = this.buildSendMsg({
+        const payload = outputPort.buildSendMsg({
           contextToken: targetToken,
-          fromBot: this.client?.botId,
+          fromBot: outputPort.client?.botId,
           text: seg,
           to: from,
         })
-        await this.doSendMessage(payload)
+        await outputPort.doSendMessage(payload)
         if (i < segments.length - 1) {
           await new Promise((r) => setTimeout(r, 300))
         }
@@ -1190,6 +1230,7 @@ export class BaseChannel {
     // session 持久化和 LLM 请求必须复用同一个值，保证跨轮次输入稳定。
     ctx.messageTime = ensureMessageTime(ctx.messageTime)
     text = appendFileReferences(text, ctx.files)
+    const outputPort = this._resolveOutputPort(ctx)
 
     if (this.onActivity) {
       this.onActivity()
@@ -1419,6 +1460,20 @@ export class BaseChannel {
           // Web 客户端已通过 Socket 实时流推送，无需向第三方 IM 网关重复发送
           return Promise.resolve()
         }
+        if (!outputPort) {
+          // Offline/disabled delivery must not suppress execution or
+          // persistence. Keep text blocks for the assistant message while
+          // intentionally skipping every protocol send.
+          if (textBlock?.trim()) {
+            emittedBlocks.push(
+              ...this.splitTextToSegments(textBlock.trim(), ctx),
+            )
+          }
+          if (meta.soulDraft) {
+            return this.memory.writeSoul(meta.soulDraft)
+          }
+          return Promise.resolve()
+        }
         sendQueue = sendQueue
           .then(async () => {
             const rawRender = meta.extraRender
@@ -1443,7 +1498,7 @@ export class BaseChannel {
                 `[${this.channelType}] 🖼️ 正在发送原生图片: ${imgUrl || localPath || 'buffer'}`,
               )
               try {
-                await this.doSendImage({
+                await outputPort.doSendImage({
                   buffer: imgBuffer,
                   contextToken: ctx.contextToken,
                   localPath,
@@ -1457,13 +1512,13 @@ export class BaseChannel {
                 if (imgUrl) {
                   const noticeText = `🖼️ [图片已生成]\n查看原图: ${imgUrl}`
                   emittedBlocks.push(noticeText)
-                  const payload = this.buildSendMsg({
+                  const payload = outputPort.buildSendMsg({
                     contextToken: ctx.contextToken,
-                    fromBot: this.client.botId,
+                    fromBot: outputPort.client?.botId,
                     text: noticeText,
                     to: ctx.from,
                   })
-                  await this.doSendMessage(payload).catch(() => {})
+                  await outputPort.doSendMessage(payload).catch(() => {})
                 }
               }
               await new Promise((r) => setTimeout(r, 100))
@@ -1488,7 +1543,7 @@ export class BaseChannel {
                 `[${this.channelType}] 🎙️ 正在发送原生语音: ${audioUrl || localPath || 'buffer'}`,
               )
               try {
-                await this.doSendVoice({
+                await outputPort.doSendVoice({
                   buffer: audioBuffer,
                   contextToken: ctx.contextToken,
                   durationMs,
@@ -1506,13 +1561,13 @@ export class BaseChannel {
                 if (audioUrl) {
                   const noticeText = `🎙️ [语音消息]\n音频链接: ${audioUrl}`
                   emittedBlocks.push(noticeText)
-                  const payload = this.buildSendMsg({
+                  const payload = outputPort.buildSendMsg({
                     contextToken: ctx.contextToken,
-                    fromBot: this.client.botId,
+                    fromBot: outputPort.client?.botId,
                     text: noticeText,
                     to: ctx.from,
                   })
-                  await this.doSendMessage(payload).catch(() => {})
+                  await outputPort.doSendMessage(payload).catch(() => {})
                 }
               }
               await new Promise((r) => setTimeout(r, 100))
@@ -1537,7 +1592,7 @@ export class BaseChannel {
                 `[${this.channelType}] 📁 正在发送原生文件: ${fileName}`,
               )
               try {
-                await this.doSendFile({
+                await outputPort.doSendFile({
                   buffer: fileBuffer,
                   contextToken: ctx.contextToken,
                   fileName,
@@ -1552,13 +1607,13 @@ export class BaseChannel {
                 if (fileUrl) {
                   const noticeText = `📁 [文件分享: ${fileName}]\n下载链接: ${fileUrl}`
                   emittedBlocks.push(noticeText)
-                  const payload = this.buildSendMsg({
+                  const payload = outputPort.buildSendMsg({
                     contextToken: ctx.contextToken,
-                    fromBot: this.client.botId,
+                    fromBot: outputPort.client?.botId,
                     text: noticeText,
                     to: ctx.from,
                   })
-                  await this.doSendMessage(payload).catch(() => {})
+                  await outputPort.doSendMessage(payload).catch(() => {})
                 }
               }
               await new Promise((r) => setTimeout(r, 100))
@@ -1580,7 +1635,7 @@ export class BaseChannel {
                 `[${this.channelType}] 🎬 正在发送原生视频: ${videoUrl || localPath || 'buffer'}`,
               )
               try {
-                await this.doSendVideo({
+                await outputPort.doSendVideo({
                   buffer: videoBuffer,
                   contextToken: ctx.contextToken,
                   durationMs,
@@ -1595,13 +1650,13 @@ export class BaseChannel {
                 if (videoUrl) {
                   const noticeText = `🎬 [视频消息]\n视频链接: ${videoUrl}`
                   emittedBlocks.push(noticeText)
-                  const payload = this.buildSendMsg({
+                  const payload = outputPort.buildSendMsg({
                     contextToken: ctx.contextToken,
-                    fromBot: this.client.botId,
+                    fromBot: outputPort.client?.botId,
                     text: noticeText,
                     to: ctx.from,
                   })
-                  await this.doSendMessage(payload).catch(() => {})
+                  await outputPort.doSendMessage(payload).catch(() => {})
                 }
               }
               await new Promise((r) => setTimeout(r, 100))
@@ -1635,7 +1690,7 @@ export class BaseChannel {
                     `[${this.channelType}] 🔗 正在下发结构化链接: ${linkUrl}`,
                   )
                   try {
-                    const sendRes = await this.doSendLink({
+                    const sendRes = await outputPort.doSendLink({
                       contextToken: ctx.contextToken,
                       description: item.description || null,
                       extraRender: item,
@@ -1670,7 +1725,7 @@ export class BaseChannel {
                   `[${this.channelType}] 🃏 正在下发结构化卡片: ${item.title || item.type}`,
                 )
                 try {
-                  const sendRes = await this.doSendCard({
+                  const sendRes = await outputPort.doSendCard({
                     card: item,
                     contextToken: ctx.contextToken,
                     extraRender: item,
@@ -1691,7 +1746,10 @@ export class BaseChannel {
 
             // 7. 普通文本分条下发
             if (textBlock?.trim()) {
-              const segments = this.splitTextToSegments(textBlock.trim(), ctx)
+              const segments = outputPort.splitTextToSegments(
+                textBlock.trim(),
+                ctx,
+              )
               for (const seg of segments) {
                 emittedBlocks.push(seg)
                 this.log?.info?.(
@@ -1699,14 +1757,14 @@ export class BaseChannel {
                 )
                 const now = Date.now()
                 lastSendTimeMs = Math.max(now, lastSendTimeMs + 10)
-                const payload = this.buildSendMsg({
+                const payload = outputPort.buildSendMsg({
                   contextToken: ctx.contextToken,
-                  fromBot: this.client.botId,
+                  fromBot: outputPort.client?.botId,
                   text: seg,
                   to: ctx.from,
                 })
                 payload.create_time_ms = lastSendTimeMs
-                const sendRes = await this.doSendMessage(payload)
+                const sendRes = await outputPort.doSendMessage(payload)
                 this.log?.info?.(
                   `[${this.channelType}] 📤 实时文本块发送结果: ${JSON.stringify(sendRes)}`,
                 )
@@ -1727,7 +1785,7 @@ export class BaseChannel {
       // 调用底层 LLM
       const reply = await this.llm.process({
         agentId: this.memory.agentId,
-        channel: this,
+        channel: outputPort || this,
         channelId: ctx.channelId,
         chat,
         contextToken: ctx.contextToken,
@@ -1900,6 +1958,7 @@ export class BaseChannel {
           ctx.from,
           ctx.contextToken || this.latestContextToken,
           channelErrorText,
+          outputPort,
         ).catch(() => {})
       }
 

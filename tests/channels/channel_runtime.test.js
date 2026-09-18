@@ -47,6 +47,59 @@ const identityService = {
   }),
 }
 
+test('ChannelRuntime keeps realtime model fields as synchronized Agent compatibility mirrors', () => {
+  const runtime = new ChannelRuntime({ channelStore: {}, llm: {} })
+  const first = { model: 'old-a', provider: 'old-provider' }
+  const second = { model: 'old-b', provider: 'old-provider' }
+  const other = { model: 'other', provider: 'other-provider' }
+  runtime.running.set('channel-a', {
+    agents: new Map([
+      [
+        'binding-a',
+        {
+          agent: { id: 'agent-a', model: 'old-a', provider: 'old-provider' },
+          binding: { agentId: 'agent-a' },
+          chn: first,
+        },
+      ],
+      [
+        'binding-other',
+        {
+          agent: { id: 'agent-other' },
+          binding: { agentId: 'agent-other' },
+          chn: other,
+        },
+      ],
+    ]),
+  })
+  runtime.running.set('channel-b', {
+    agents: new Map([
+      [
+        'binding-b',
+        {
+          agent: { id: 'agent-a', model: 'old-b', provider: 'old-provider' },
+          binding: { agentId: 'agent-a' },
+          chn: second,
+        },
+      ],
+    ]),
+  })
+
+  runtime.syncAgentCompatibilityMirror('agent-a', {
+    model: 'fresh-model',
+    provider: 'fresh-provider',
+  })
+
+  assert.deepEqual(
+    [first, second].map(({ model, provider }) => ({ model, provider })),
+    [
+      { model: 'fresh-model', provider: 'fresh-provider' },
+      { model: 'fresh-model', provider: 'fresh-provider' },
+    ],
+  )
+  assert.deepEqual(other, { model: 'other', provider: 'other-provider' })
+})
+
 test('ChannelStore + ChannelRuntime：渠道配置持久化 + 运行时启停', async (t) => {
   const file = path.join(os.tmpdir(), `ch-${Date.now()}.json`)
   const base = path.join(os.tmpdir(), `mem-${Date.now()}`)
