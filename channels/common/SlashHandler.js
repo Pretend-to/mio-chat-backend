@@ -9,6 +9,7 @@
  *   - /yolo Shell 审批跳过开关（按当前会话）
  *   - /status 当前会话与执行状态
  *   - /model 模型查看、列表检索、实时切换、重置
+ *   - /agents /agent 查看或切换当前渠道对话的 Agent
  *   - /sessions /ls 历史话题查看
  *   - /new 新建并切换会话
  *   - /use 切换会话
@@ -41,19 +42,70 @@ export class SlashHandler {
   async handle(cmd, ctx = {}) {
     const [name, ...rest] = cmd.slice(1).trim().split(/\s+/)
     const arg = rest.join(' ').trim()
-    const active = () => this.memory.getActiveSession()
+    const sessionScope = ctx.sessionScope || null
+    // Web/API turns target an explicit Session and must never fall back to the
+    // Agent-wide active Session. Channel conversations provide a scope because
+    // their active Session can be switched independently with /use.
+    const active = () =>
+      ctx.sid ||
+      ctx.sessionId ||
+      (sessionScope ? sessionScope.getActive() : this.memory.getActiveSession())
     const wrap = (s) => ({ text: s })
+    const isAdmin = ctx.principal?.isAdmin === true
+    const isGroup = ctx.envelope?.conversation?.type === 'group'
 
     switch (name) {
+      case 'admin': {
+        if (!ctx.channelIdentityScope) {
+          return wrap('当前入口不支持渠道管理员认证。')
+        }
+        const [operation = 'status', code = ''] = rest
+        if (operation.toLocaleLowerCase() === 'status') {
+          const principal = await ctx.channelIdentityScope.status()
+          return wrap(
+            principal.isAdmin
+              ? `✅ 当前渠道身份已认证为系统管理员（${principal.externalUserId}）`
+              : `当前渠道身份为普通用户（${principal.externalUserId}）`,
+          )
+        }
+        if (operation.toLocaleLowerCase() !== 'claim' || !code) {
+          return wrap('用法：/admin claim <一次性管理员码>')
+        }
+        try {
+          const principal = await ctx.channelIdentityScope.claim(code)
+          ctx.principal = principal
+          return wrap(
+            '✅ 管理员身份认证成功。此渠道账号现在拥有系统管理员权限，认领码已失效。',
+          )
+        } catch (error) {
+          const messages = {
+            admin_claim_expired:
+              '管理员认领码已过期，请在 Web 管理页面重新生成。',
+            admin_claim_invalid: '管理员认领码无效。',
+            admin_claim_locked:
+              '尝试次数过多，认领码已锁定，请在 Web 管理页面重新生成。',
+            admin_claim_private_only:
+              '为防止认领码泄露，请私聊机器人完成管理员认证。',
+            admin_claim_unavailable:
+              '当前没有可用的管理员认领码，请在 Web 管理页面重新生成。',
+          }
+          if (messages[error?.code]) return wrap(messages[error.code])
+          throw error
+        }
+      }
+
       case 'help': {
         return wrap(
           [
             '【基础与执行控制】',
             '  • /help 帮助菜单',
+            '  • /admin [status/claim <管理员码>] 查看或认证管理员身份',
             '  • /abort [新话语] 停止任务（后接文字时立即以此开启新对话，支持别名 /crush）',
             '',
             '【模型与能力管理】',
             '  • /model [ls/名称/reset] 查看或切换模型',
+            '  • /agents 查看当前渠道可用的 Agent 与 SubAgent',
+            '  • /agent [use <名称或id>] 查看或切换当前 Agent',
             '  • /think [0-4/off/low/med/high/max] 调整思考推理强度',
             '  • /tools [ls/on/off/reset] 查看与开启/禁用工具',
             '  • /yolo [on/off] 当前会话跳过 Shell 审批（谨慎使用）',
@@ -83,6 +135,9 @@ export class SlashHandler {
       case 'interrupt':
       case 'cut':
       case 'break': {
+        if (isGroup && !isAdmin) {
+          return wrap('群聊中的任务中止需要系统管理员权限。')
+        }
         let count = 0
         if (this.channel?.activeJobs && this.channel.activeJobs.size > 0) {
           for (const [jobSid, job] of Array.from(
@@ -117,24 +172,99 @@ export class SlashHandler {
 
       case 'tools': {
         const tools = getChannelToolNames({
+          agentId: this.memory?.agentId,
           channel: this.channel,
+          conversationKind: ctx.isGroup ? 'group' : 'direct',
+          principal: ctx.principal || null,
+          sessionId: ctx.sid || null,
           source: 'channel',
+          triggerKind: ctx.isTask ? 'task' : 'interactive',
+          user: { isAdmin },
         })
         return wrap(
           [
             '【Channel 工具策略】',
-            'Channel 固定启用完整 ai-plugin、terminal-pty 与 file-editor-plugin，不支持按渠道增删工具。',
+            isAdmin
+              ? '当前身份已认证为系统管理员，可使用完整 Agent、终端与文件工具。'
+              : '当前身份为普通用户，仅显示当前对话允许使用的工具。',
             `当前工具数: ${tools.length}`,
             ...tools.map((tool) => `  ✅ ${tool}`),
           ].join('\n'),
         )
       }
 
+      case 'agents': {
+        if (!ctx.channelAgentScope) {
+          return wrap('当前入口不支持渠道 Agent 路由。')
+        }
+        const targets = await ctx.channelAgentScope.list()
+        if (!targets.length) {
+          return wrap('此通信渠道当前没有关联可用的 Agent。')
+        }
+        return wrap(
+          [
+            '【可用 Agent】',
+            ...targets.map((target) => {
+              const marker = target.active ? '→' : ' '
+              const type = target.type === 'subagent' ? 'SubAgent' : 'Agent'
+              const indent = target.type === 'subagent' ? '  ' : ''
+              const status = target.runStatus
+                ? ` · ${target.runStatus}${target.switchable ? '' : ' · 只读'}`
+                : ''
+              return `${marker} ${indent}[${type}] ${target.name} (${target.id})${status}`
+            }),
+            '',
+            '使用 /agent use <名称或id> 切换',
+          ].join('\n'),
+        )
+      }
+
+      case 'agent': {
+        if (!ctx.channelAgentScope) {
+          return wrap('当前入口不支持渠道 Agent 路由。')
+        }
+        const [operation, ...selectorParts] = rest
+        if (!operation) {
+          const current = await ctx.channelAgentScope.current()
+          if (!current)
+            return wrap('当前对话尚未选择 Agent，请使用 /agents 查看。')
+          const type = current.type === 'subagent' ? 'SubAgent' : 'Agent'
+          return wrap(`当前 [${type}] ${current.name} (${current.id})`)
+        }
+        if (operation.toLocaleLowerCase() !== 'use' || !selectorParts.length) {
+          return wrap('用法：/agent use <Agent或SubAgent名称/id>')
+        }
+        if (isGroup && !isAdmin) {
+          return wrap('群聊中的 Agent 切换需要系统管理员权限。')
+        }
+        try {
+          const target = await ctx.channelAgentScope.use(
+            selectorParts.join(' '),
+          )
+          const type = target.type === 'subagent' ? 'SubAgent' : 'Agent'
+          return wrap(`已切换到 [${type}] ${target.name} (${target.id})`)
+        } catch (error) {
+          const messages = {
+            route_target_ambiguous:
+              '名称或 ID 前缀不唯一，请使用 /agents 查看完整 ID。',
+            route_target_not_found:
+              '没有找到该 Agent/SubAgent，请使用 /agents 查看。',
+            subagent_session_busy:
+              '该 SubAgent 正在执行任务，当前只读，不能切入普通对话。',
+          }
+          if (messages[error?.code]) return wrap(messages[error.code])
+          throw error
+        }
+      }
+
       case 'trigger':
       case 'triggers': {
+        if (!isAdmin) return wrap('触发器管理需要系统管理员权限。')
         const service = getTriggerService()
         const registry = service.registry
-        const agentId = this.memory?.agentId || 'wechat-master'
+        const agentId = this.memory?.agentId
+        if (!agentId)
+          throw new Error('Session command requires an Agent context')
 
         if (!arg || arg === 'ls' || arg === 'list') {
           const list = await registry.list({ agentId })
@@ -284,6 +414,7 @@ export class SlashHandler {
 
         const normalizedArg = arg.toLowerCase().trim()
         if (normalizedArg in valMap) {
+          if (!isAdmin) return wrap('修改 Agent 推理强度需要系统管理员权限。')
           const targetLevel = valMap[normalizedArg]
           await this.memory.setAgentMeta('reasoning_effort', targetLevel)
           return wrap(
@@ -317,6 +448,7 @@ export class SlashHandler {
             '用法：/yolo on|off（仅影响当前会话的所有 Shell 执行入口）',
           )
         }
+        if (!isAdmin) return wrap('修改 YOLO 模式需要系统管理员权限。')
 
         const enabled = normalized === 'on'
         if (this.channel?.setSessionYolo)
@@ -336,8 +468,14 @@ export class SlashHandler {
             : await getSessionYolo(this.memory, sid)
           : false
         const tools = getChannelToolNames({
+          agentId: this.memory?.agentId,
           channel: this.channel,
+          conversationKind: ctx.isGroup ? 'group' : 'direct',
+          principal: ctx.principal || null,
+          sessionId: sid,
           source: 'channel',
+          triggerKind: ctx.isTask ? 'task' : 'interactive',
+          user: { isAdmin },
         })
         const effort = await this.memory.getAgentMeta('reasoning_effort', 0)
         const provider = this.channel?.provider || '默认'
@@ -399,6 +537,7 @@ export class SlashHandler {
           )
         }
         if (arg === 'reset') {
+          if (!isAdmin) return wrap('修改 Agent 模型需要系统管理员权限。')
           const patch = {
             model: this.channel.defaultModel || '',
             provider: this.channel.defaultProvider || '',
@@ -414,6 +553,7 @@ export class SlashHandler {
         }
 
         // 切换模型（支持 provider/model 或直接 model）
+        if (!isAdmin) return wrap('修改 Agent 模型需要系统管理员权限。')
         const patch = {}
         if (arg.includes('/')) {
           const [p, m] = arg.split('/')
@@ -434,14 +574,16 @@ export class SlashHandler {
 
       case 'sessions':
       case 'ls': {
-        const list = await this.memory.listSessions()
+        const list = sessionScope
+          ? await sessionScope.list()
+          : await this.memory.listSessions()
         const cur = await active()
         return wrap(
           list.length
             ? list
                 .map(
                   (s) =>
-                    `${s.id} ${s.id === cur ? '*' : ' '} ${s.title || ''} (${s.msgCount}条)`,
+                    `${s.id} ${s.id === cur ? '*' : ' '} ${s.kind === 'subagent' ? '[SubAgent] ' : ''}${s.title || ''} (${s.msgCount}条)`,
                 )
                 .join('\n')
             : '暂无会话，用 /new 新建',
@@ -449,16 +591,28 @@ export class SlashHandler {
       }
 
       case 'new': {
-        const s = await this.memory.createSession({ title: arg || '新会话' })
-        await this.memory.setActiveSession(s.id)
+        if (isGroup && !isAdmin) {
+          return wrap('群聊中新建会话需要系统管理员权限。')
+        }
+        const s = sessionScope
+          ? await sessionScope.create(arg || '新会话')
+          : await this.memory.createSession({ title: arg || '新会话' })
+        if (!sessionScope) await this.memory.setActiveSession(s.id)
+        ctx.sid = s.id
         return wrap(`已新建并切换到会话 ${s.id}`)
       }
 
       case 'use': {
         if (!arg) return wrap('用法：/use <会话id>')
-        const s = await this.memory.getSession(arg)
+        if (isGroup && !isAdmin) {
+          return wrap('群聊中切换会话需要系统管理员权限。')
+        }
+        const s = sessionScope
+          ? await sessionScope.activate(arg).catch(() => null)
+          : await this.memory.getSession(arg)
         if (!s) return wrap(`会话 ${arg} 不存在，/sessions 查看`)
-        await this.memory.setActiveSession(s.id)
+        if (!sessionScope) await this.memory.setActiveSession(s.id)
+        ctx.sid = s.id
         return wrap(`已切换到会话 ${s.id}`)
       }
 
@@ -470,6 +624,9 @@ export class SlashHandler {
       }
 
       case 'compact': {
+        if (isGroup && !isAdmin) {
+          return wrap('群聊中压缩上下文需要系统管理员权限。')
+        }
         const cur = await active()
         if (!cur) return wrap('当前无激活会话，无法压缩上下文')
         if (this.channel?.activeJobs?.has(cur)) {
@@ -509,6 +666,9 @@ export class SlashHandler {
       }
 
       case 'clear': {
+        if (isGroup && !isAdmin) {
+          return wrap('群聊中清空会话需要系统管理员权限。')
+        }
         const cur = await active()
         if (!cur) return wrap('当前无激活会话')
         await this.memory.clearChat(cur)
@@ -516,6 +676,7 @@ export class SlashHandler {
       }
 
       case 'soul': {
+        if (!isAdmin) return wrap('查看或修改 Agent 灵魂需要系统管理员权限。')
         if (rest[0] === 'set' && rest[1]) {
           const soul = rest.slice(1).join(' ')
           await this.memory.writeSoul(soul)
@@ -530,6 +691,7 @@ export class SlashHandler {
       }
 
       case 'memory': {
+        if (!isAdmin) return wrap('查看 Agent 长期记忆需要系统管理员权限。')
         const g = await this.memory.readAllGlobal()
         return wrap(g ? `【长期记忆】\n${g}` : '暂无长期记忆')
       }
@@ -544,6 +706,18 @@ export class SlashHandler {
 
       case 'delete': {
         if (!arg) return wrap('用法：/delete <会话id>')
+        if (isGroup && !isAdmin) {
+          return wrap('群聊中删除会话需要系统管理员权限。')
+        }
+        if (sessionScope) {
+          const result = await sessionScope.delete(arg)
+          ctx.sid = result.activeSessionId
+          return wrap(
+            result.activeSessionId
+              ? `已删除会话 ${arg}，当前切换到 ${result.activeSessionId}`
+              : `已删除会话 ${arg}，当前没有其他会话`,
+          )
+        }
         await this.memory.deleteSession(arg)
         return wrap(`已删除会话 ${arg}`)
       }

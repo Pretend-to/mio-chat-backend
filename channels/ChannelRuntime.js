@@ -8,11 +8,11 @@ import {
   resolveChannelAdapter,
   resolveOneBotsPlatform,
 } from './ChannelAdapterRegistry.js'
-import {
-  isIlinkChannel,
-  migrateOneBotsIlinkToNative,
-  nativeIlinkMetadata,
-} from './migrations/migrateOneBotsIlinkToNative.js'
+import prismaManager from '../lib/database/prisma.js'
+import { ChannelAgentRoutingService } from './bindings/ChannelAgentRoutingService.js'
+import { ChannelConversationService } from './bindings/ChannelConversationService.js'
+import { ChannelIdentityService } from './bindings/ChannelIdentityService.js'
+import { ChannelRouteResolver } from './bindings/ChannelRouteResolver.js'
 import logger from '../utils/logger.js'
 
 /**
@@ -41,8 +41,13 @@ export class ChannelRuntime {
     llm,
     memoryBase = 'memory',
     persistenceFactory = createSessionPersistence,
-    persistenceMode = process.env.MIO_CHANNEL_PERSISTENCE_MODE || 'legacy',
+    persistenceMode = process.env.MIO_CHANNEL_PERSISTENCE_MODE || 'database',
     prisma = null,
+    bindingResolver = null,
+    routeResolver = null,
+    conversationService = null,
+    agentRoutingService = null,
+    identityService = null,
     logger: customLogger = null,
   } = {}) {
     if (!channelStore) throw new Error('ChannelRuntime requires channelStore')
@@ -57,7 +62,20 @@ export class ChannelRuntime {
     this.persistenceFactory = persistenceFactory
     this.persistenceMode = persistenceMode
     this.prisma = prisma
-    this.running = new Map() // channelId -> { channel, chn, memory }
+    this.bindingResolver = bindingResolver
+    this.routeResolver = routeResolver || new ChannelRouteResolver({ prisma })
+    this.conversationService =
+      conversationService || new ChannelConversationService({ prisma })
+    this.agentRoutingService =
+      agentRoutingService ||
+      new ChannelAgentRoutingService({
+        conversationService: this.conversationService,
+        prisma,
+        routeResolver: this.routeResolver,
+      })
+    this.identityService =
+      identityService || new ChannelIdentityService({ prisma })
+    this.running = new Map() // channelId -> { channel, chn, agents, gateway }
   }
 
   /** OneBots 渠道判定；历史 `wechat` 类型也统一由 OneBots 接管。 */
@@ -77,14 +95,6 @@ export class ChannelRuntime {
     return ChannelRuntime.isNativeIlinkChannel(channel)
   }
 
-  async migrateIlinkChannels() {
-    return migrateOneBotsIlinkToNative({
-      channelStore: this.channelStore,
-      createMemory: agentId => this.createMemory(agentId),
-      logger: this.logger,
-    })
-  }
-
   /**
    * Resolve the optional gateway only when a OneBots channel is actually used.
    * This keeps installations without OneBots (and the legacy iLink path) lazy.
@@ -93,7 +103,8 @@ export class ChannelRuntime {
     if (!this.onebotsGateway) {
       const mod = await import('./onebots/OneBotsGateway.js')
       const Gateway = mod.OneBotsGateway || mod.default
-      if (typeof Gateway === 'function') this.onebotsGateway = new Gateway({ logger: this.logger })
+      if (typeof Gateway === 'function')
+        this.onebotsGateway = new Gateway({ logger: this.logger })
       else if (Gateway) this.onebotsGateway = Gateway
     }
     if (!this.onebotsGateway) {
@@ -121,26 +132,28 @@ export class ChannelRuntime {
 
   /** Migrate persisted iLink accounts, then restore all supported channels. */
   async init() {
-    await this.migrateIlinkChannels()
-    const channels = typeof this.channelStore.listInternal === 'function'
-      ? await this.channelStore.listInternal()
-      : []
-    const onebots = channels.filter(channel => (
-      this.isOneBotsChannel(channel) && !isIlinkChannel(channel)
-    ))
+    const channels =
+      typeof this.channelStore.listInternal === 'function'
+        ? await this.channelStore.listInternal()
+        : []
+    const onebots = channels.filter((channel) => this.isOneBotsChannel(channel))
     if (onebots.length > 0) await this.getOnebotsGateway({ initialize: true })
 
-    const supported = channels.filter(channel => (
-      this.isNativeIlinkChannel(channel) ||
-      (this.isOneBotsChannel(channel) && !isIlinkChannel(channel))
-    ))
+    const supported = channels.filter(
+      (channel) =>
+        this.isNativeIlinkChannel(channel) || this.isOneBotsChannel(channel),
+    )
     for (const channel of supported) {
       const bound = this.isNativeIlinkChannel(channel)
         ? Boolean(channel.token && channel.userId)
         : Boolean(channel.userId || channel.botId)
       if (channel.status !== 'running' || !bound) continue
-      try { await this.start(channel.id) } catch (error) {
-        this.logger.warn?.(`[ChannelRuntime] 渠道 "${channel.id}" 恢复失败: ${error.message}`)
+      try {
+        await this.start(channel.id)
+      } catch (error) {
+        this.logger.warn?.(
+          `[ChannelRuntime] 渠道 "${channel.id}" 恢复失败: ${error.message}`,
+        )
         await this.channelStore.update(channel.id, { status: 'stopped' })
       }
     }
@@ -151,7 +164,10 @@ export class ChannelRuntime {
     // 进程退出时的停止：只停轮询与 OneBots 账号，不把 status 落库。
     // 否则“被动停止”会被写成 stopped，下次启动 init() 不会恢复该渠道。
     await this.stopAll({ persistStatus: false })
-    if (this.onebotsGateway && typeof this.onebotsGateway.dispose === 'function') {
+    if (
+      this.onebotsGateway &&
+      typeof this.onebotsGateway.dispose === 'function'
+    ) {
       await this.onebotsGateway.dispose()
     }
     this._onebotsInitialized = false
@@ -168,20 +184,41 @@ export class ChannelRuntime {
     if (recover) {
       const recovered = await memory.recoverInterruptedMessages()
       if (recovered > 0) {
-        console.warn(`[ChannelRuntime] recovered ${recovered} interrupted message(s) for ${agentId}`)
+        console.warn(
+          `[ChannelRuntime] recovered ${recovered} interrupted message(s) for ${agentId}`,
+        )
       }
     }
     return memory
   }
 
+  async _database() {
+    if (!this.prisma) this.prisma = await prismaManager.initialize()
+    return this.prisma
+  }
+
+  async _loadBindings(channelId) {
+    if (this.bindingResolver) return await this.bindingResolver(channelId)
+    const prisma = await this._database()
+    return await prisma.agentChannelBinding.findMany({
+      include: { agent: true },
+      orderBy: { createdAt: 'asc' },
+      where: { channelId: String(channelId), enabled: true },
+    })
+  }
+
   async broadcastConfigUpdate(channel) {
     try {
-      const { default: sessions } = await import('../lib/server/socket.io/services/sessions.js')
-      const publicChannel = typeof this.channelStore.getPublic === 'function'
-        ? await this.channelStore.getPublic(channel.id)
-        : channel
+      const { default: sessions } =
+        await import('../lib/server/socket.io/services/sessions.js')
+      const publicChannel =
+        typeof this.channelStore.getPublic === 'function'
+          ? await this.channelStore.getPublic(channel.id)
+          : channel
       for (const client of sessions.getAllAdminClients() || []) {
-        client.sendSystemMessage?.('channel_config_updated', { channel: publicChannel })
+        client.sendSystemMessage?.('channel_config_updated', {
+          channel: publicChannel,
+        })
       }
     } catch (error) {
       this.logger.warn?.(`[ChannelRuntime] 渠道配置广播失败: ${error.message}`)
@@ -201,119 +238,266 @@ export class ChannelRuntime {
     return updated
   }
 
-  /**
-   * 旧版本把渠道模型写进 agent meta。首次启动时迁回 ChannelStore 后清空，
-   * 避免 agent 级配置继续覆盖可独立配置的多个渠道。
-   */
-  async migrateLegacyModelConfig(memory, channel) {
-    const legacyProvider = await memory.getAgentMeta('provider', null)
-    const legacyModel = await memory.getAgentMeta('model', null)
-    if (legacyProvider == null && legacyModel == null) return channel
-
-    const patch = {}
-    if (legacyProvider != null) patch.provider = String(legacyProvider)
-    if (legacyModel != null) patch.model = String(legacyModel)
-    const updated = await this.channelStore.update(channel.id, patch)
-    await memory.setAgentMeta('provider', null)
-    await memory.setAgentMeta('model', null)
-    this.logger.info?.(`[ChannelRuntime] 已将渠道 "${channel.id}" 的旧 agent 模型配置迁移到 ChannelStore`)
-    return updated || { ...channel, ...patch }
-  }
-
   /** 启动一个已绑定渠道 */
   async start(channelId) {
     let channel = await this.channelStore.get(channelId)
     if (!channel) throw new Error(`channel ${channelId} not found`)
-    const nativeMetadata = nativeIlinkMetadata()
-    const needsIlinkMigration = isIlinkChannel(channel) && Object.entries(nativeMetadata)
-      .some(([key, value]) => channel[key] !== value)
-    if (needsIlinkMigration) {
-      await this.migrateIlinkChannels()
-      channel = await this.channelStore.get(channelId)
-      if (!this.isNativeIlinkChannel(channel)) {
-        throw new Error(`channel ${channelId} could not migrate to native iLink`)
-      }
-    }
     const adapterDefinition = resolveChannelAdapter(channel)
     const onebots = this.isOneBotsChannel(channel)
     const nativeIlink = this.isNativeIlinkChannel(channel)
     if (!onebots && !nativeIlink) {
       throw new Error(`unsupported channel type: ${channel.type || 'unknown'}`)
     }
-    if (nativeIlink ? (!channel.token || !channel.userId) : (!channel.userId && !channel.botId)) {
+    if (
+      nativeIlink
+        ? !channel.token || !channel.userId
+        : !channel.userId && !channel.botId
+    ) {
       throw new Error(`channel ${channelId} not bound`)
     }
     if (this.running.has(channelId)) return this.running.get(channelId).chn
 
-    const agentId = channel.agentId || adapterDefinition?.defaults?.agentId || 'channel-master'
+    const bindings = await this._loadBindings(channelId)
     const platform = onebots ? resolveOneBotsPlatform(channel) : 'weixin-ilink'
     if (onebots && !platform) {
-      throw new Error(`channel adapter has no OneBots platform: ${channel.type || 'unknown'}`)
+      throw new Error(
+        `channel adapter has no OneBots platform: ${channel.type || 'unknown'}`,
+      )
     }
-    this.logger.info?.(`[ChannelRuntime] 🚀 正在启动渠道 "${channelId}" (type=${channel.type}, driver=${onebots ? 'onebots' : 'native'}, platform=${platform}, masterId=${channel.userId || channel.botId})`)
-    const memory = await this.createMemory(agentId, { recover: true })
-    channel = await this.migrateLegacyModelConfig(memory, channel)
+    this.logger.info?.(
+      `[ChannelRuntime] 🚀 正在启动渠道 "${channelId}" (type=${channel.type}, driver=${onebots ? 'onebots' : 'native'}, platform=${platform}, masterId=${channel.userId || channel.botId})`,
+    )
     let client
     let gateway = null
     try {
       if (onebots) {
         gateway = await this.getOnebotsGateway({ initialize: true })
-        const latestContextToken = await memory.getAgentMeta('latestContextToken', null)
-        const accountConfig = latestContextToken && channel.userId
-          ? { ...channel, contextTokens: { [channel.userId]: latestContextToken } }
-          : channel
-        await gateway.startAccount(accountConfig, adapterDefinition)
+        await gateway.startAccount(channel, adapterDefinition)
         if (typeof gateway.createClient !== 'function') {
-          throw new Error('OneBots gateway does not provide createClient(channel)')
+          throw new Error(
+            'OneBots gateway does not provide createClient(channel)',
+          )
         }
         client = await gateway.createClient(channel)
       } else {
         client = this.clientFactory
           ? await this.clientFactory(channel)
           : new IlinkClient().setAuth({
-            botId: channel.botId,
-            token: channel.token,
-            userId: channel.userId,
-          })
-      }
-      const commonOptions = {
-        channelId,
-        id: channelId,
-        client,
-        memory,
-        masterId: channel.userId || channel.botId || channelId,
-        llm: this.llm,
-        provider: channel.provider || null,
-        model: channel.model || null,
-        logger: this.logger,
-        onConfigUpdate: patch => this.updateConfig(channelId, patch),
-        onActivity: () => {
-          this.channelStore.update(channelId, { lastActive: Date.now() }).catch(() => {})
-        },
+              botId: channel.botId,
+              token: channel.token,
+              userId: channel.userId,
+            })
       }
       const factory = onebots
-        ? this.onebotChannelFactory || await this.getOnebotChannelFactory()
-        : adapterDefinition?.createChannel || (options => new WechatChannel(options))
-      const chn = await factory({
-        ...commonOptions,
-        adapterDefinition,
-        channel,
-        gateway,
-        platform,
-      })
+        ? this.onebotChannelFactory || (await this.getOnebotChannelFactory())
+        : adapterDefinition?.createChannel ||
+          ((options) => new WechatChannel(options))
+      const agents = new Map()
+      let routeTargetResolver = null
+      let transportContext = null
+      for (const binding of bindings) {
+        const memory = await this.createMemory(binding.agentId, {
+          recover: true,
+        })
+        const chn = await factory({
+          adapterDefinition,
+          channel,
+          channelId,
+          client,
+          gateway,
+          id: channelId,
+          llm: this.llm,
+          logger: this.logger,
+          masterId: channel.userId || channel.botId || channelId,
+          memory,
+          model: binding.agent?.model || null,
+          onActivity: () => {
+            this.channelStore
+              .update(channelId, { lastActive: Date.now() })
+              .catch(() => {})
+          },
+          onConfigUpdate: async (patch) => {
+            const prisma = await this._database()
+            const agent = await prisma.agent.update({
+              data: {
+                ...(Object.hasOwn(patch, 'model')
+                  ? { model: patch.model || null }
+                  : {}),
+                ...(Object.hasOwn(patch, 'provider')
+                  ? { provider: patch.provider || null }
+                  : {}),
+              },
+              where: { id: binding.agentId },
+            })
+            return { model: agent.model || '', provider: agent.provider || '' }
+          },
+          outboundEnabled: binding.outboundEnabled,
+          platform,
+          provider: binding.agent?.provider || null,
+          routeTargetResolver: (...args) => routeTargetResolver(...args),
+        })
+        agents.set(binding.id, { agent: binding.agent, binding, chn, memory })
+      }
+      if (!agents.size) {
+        const metadata = new Map()
+        const memory = {
+          agentId: null,
+          async getAgentMeta(key, fallback = null) {
+            return metadata.has(key) ? metadata.get(key) : fallback
+          },
+          async setAgentMeta(key, value) {
+            metadata.set(key, value)
+            return value
+          },
+        }
+        const chn = await factory({
+          adapterDefinition,
+          channel,
+          channelId,
+          client,
+          gateway,
+          id: channelId,
+          keepAlive: { enabled: false },
+          llm: this.llm,
+          logger: this.logger,
+          masterId: channel.userId || channel.botId || channelId,
+          memory,
+          model: null,
+          onActivity: () =>
+            this.channelStore
+              .update(channelId, { lastActive: Date.now() })
+              .catch(() => {}),
+          outboundEnabled: false,
+          platform,
+          provider: null,
+          routeTargetResolver: (...args) => routeTargetResolver(...args),
+        })
+        transportContext = { chn, memory }
+      }
+      routeTargetResolver = async (envelope) => {
+        const principal = await this.identityService.resolve(envelope)
+        const commandName = envelope.content.text
+          .trim()
+          .match(/^\/([^\s]+)/)?.[1]
+          ?.toLocaleLowerCase()
+        if (
+          commandName === 'admin' ||
+          commandName === 'agent' ||
+          commandName === 'agents'
+        ) {
+          const context = agents.values().next().value || transportContext
+          return {
+            enqueueInboundDebounce: (from, packet = {}) =>
+              context.chn.enqueueInboundDebounce(from, {
+                ...packet,
+                ctx: {
+                  ...packet.ctx,
+                  channelAgentScope: this.agentRoutingService.scope(envelope),
+                  channelIdentityScope: this.identityService.scope(envelope),
+                  channelId,
+                  envelope,
+                  principal,
+                },
+              }),
+            get latestContextToken() {
+              return context.chn.latestContextToken
+            },
+            set latestContextToken(value) {
+              context.chn.latestContextToken = value
+            },
+            keepAlive: context.chn.keepAlive,
+            memory: context.memory,
+          }
+        }
+        const target = await this.routeResolver.resolve({
+          channelId: envelope.source.channelId,
+          explicitAgentId: envelope.explicitAgentId || null,
+          externalConversationId: envelope.conversation.externalConversationId,
+        })
+        const context = agents.get(target.bindingId)
+        if (!context)
+          throw new Error(`resolved binding ${target.bindingId} is not active`)
+        const resolvedConversation = await this.conversationService.resolve({
+          agentId: target.agentId,
+          channelId,
+          envelope,
+        })
+        const sessionScope = this.conversationService.scope(
+          resolvedConversation.conversation.id,
+          target.agentId,
+        )
+        return {
+          enqueueInboundDebounce: (from, packet = {}) =>
+            context.chn.enqueueInboundDebounce(from, {
+              ...packet,
+              ctx: {
+                ...packet.ctx,
+                agentId: target.agentId,
+                bindingId: target.bindingId,
+                channelId,
+                envelope,
+                principal,
+                sessionId: resolvedConversation.sessionId,
+                sessionScope,
+                sid: resolvedConversation.sessionId,
+              },
+            }),
+          get latestContextToken() {
+            return context.chn.latestContextToken
+          },
+          set latestContextToken(value) {
+            context.chn.latestContextToken = value
+          },
+          keepAlive: context.chn.keepAlive,
+          memory: context.memory,
+        }
+      }
+      for (const context of agents.values()) {
+        context.chn.routeTargetResolver = routeTargetResolver
+      }
+      const primaryContext = agents.values().next().value || transportContext
+      const chn = primaryContext.chn
       await chn.start()
-      this.running.set(channelId, { channel, chn, memory, gateway, onebots })
+      this.running.set(channelId, {
+        agents,
+        channel,
+        chn,
+        gateway,
+        memory: primaryContext.memory,
+        onebots,
+      })
       await this.channelStore.update(channelId, { status: 'running' })
-      this.logger.info?.(`[ChannelRuntime] ✅ 渠道 "${channelId}" 启动成功并进入运行状态 (running)`)
+      this.logger.info?.(
+        `[ChannelRuntime] ✅ 渠道 "${channelId}" 启动成功并进入运行状态 (running)`,
+      )
       return chn
     } catch (error) {
-      this.logger.error?.(`[ChannelRuntime] ❌ 渠道 "${channelId}" 启动失败:`, error)
+      this.logger.error?.(
+        `[ChannelRuntime] ❌ 渠道 "${channelId}" 启动失败:`,
+        error,
+      )
       // A partially started embedded account otherwise keeps polling even
       // though no Channel instance owns it.
       if (onebots && gateway?.stopAccount) {
         await gateway.stopAccount(channelId).catch(() => {})
       }
       throw error
+    }
+  }
+
+  /** Remove a deleted Agent from live execution maps without stopping its transports. */
+  detachAgent(agentId) {
+    const target = String(agentId)
+    for (const entry of this.running.values()) {
+      for (const [bindingId, context] of entry.agents || []) {
+        if (String(context.binding?.agentId) !== target) continue
+        for (const job of context.chn?.activeJobs?.values?.() || []) {
+          job?._abortLlm?.()
+          job?.abort?.()
+        }
+        context.chn?.activeJobs?.clear?.()
+        entry.agents.delete(bindingId)
+      }
     }
   }
 
@@ -331,7 +515,17 @@ export class ChannelRuntime {
     if (!channel) channel = await this.channelStore.get(channelId)
     let firstError = null
     if (entry) {
-      try { await entry.chn.stop() } catch (error) { firstError = error }
+      const channels = new Set([
+        entry.chn,
+        ...[...(entry.agents?.values?.() || [])].map((context) => context.chn),
+      ])
+      for (const chn of channels) {
+        try {
+          await chn?.stop?.()
+        } catch (error) {
+          firstError ||= error
+        }
+      }
       this.running.delete(channelId)
     }
     if (entry?.onebots || this.isOneBotsChannel(channel)) {
@@ -339,14 +533,20 @@ export class ChannelRuntime {
         // A never-started account has no gateway lifecycle to tear down. Avoid
         // loading the optional dependency merely to mark such a channel stopped.
         const gateway = entry?.gateway || this.onebotsGateway
-        if (gateway && typeof gateway.stopAccount === 'function') await gateway.stopAccount(channelId)
-      } catch (error) { if (!firstError) firstError = error }
+        if (gateway && typeof gateway.stopAccount === 'function')
+          await gateway.stopAccount(channelId)
+      } catch (error) {
+        if (!firstError) firstError = error
+      }
     }
     if (persistStatus) {
       await this.channelStore.update(channelId, { status: 'stopped' })
     }
     if (firstError) {
-      this.logger.error?.(`[ChannelRuntime] ⚠️ 停止渠道 "${channelId}" 发生异常:`, firstError)
+      this.logger.error?.(
+        `[ChannelRuntime] ⚠️ 停止渠道 "${channelId}" 发生异常:`,
+        firstError,
+      )
       throw firstError
     }
     this.logger.info?.(

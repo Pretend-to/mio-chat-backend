@@ -24,7 +24,7 @@ export const weixinIlinkAdapter = {
     media: ['image', 'file', 'video'],
     markdown: true,
   },
-  defaults: { agentId: 'wechat-master', name: '微信助手' },
+  defaults: { name: '微信' },
   configSchema: [],
   createChannel(options) {
     return new WechatChannel(options)

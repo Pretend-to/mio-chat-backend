@@ -7,6 +7,7 @@
  */
 
 import { BaseChannel, splitMessageText } from '../common/BaseChannel.js'
+import { normalizeChannelEnvelope } from '../bindings/ChannelEnvelope.js'
 
 const MEDIA_TYPES = new Set([
   'image',
@@ -321,8 +322,9 @@ export class OneBotChannel extends BaseChannel {
 
   async stop() {
     if (this._stopPromise) return this._stopPromise
-    if (!this.running && !this._eventsBound) return
+    if (!this.running && !this._eventsBound && this.activeJobs.size === 0) return
     this._stopPromise = (async () => {
+      const ownsTransport = this._eventsBound
       this._unbindEvents()
       let error = null
       try {
@@ -333,7 +335,7 @@ export class OneBotChannel extends BaseChannel {
         error = e
       }
       try {
-        await this.client.stop?.()
+        if (ownsTransport) await this.client.stop?.()
       } catch (e) {
         error ||= e
       }
@@ -378,16 +380,16 @@ export class OneBotChannel extends BaseChannel {
     const type = detailType || msg.message_type || msg.detail_type
     const userId = msg.user_id ?? msg.userId
     const groupId = msg.group_id ?? msg.groupId
-    const messageId = msg.message_id ?? msg.messageId ?? 'unknown'
+    const messageId = msg.message_id ?? msg.messageId
 
     this.log?.info?.(
-      `[${this.channelType}] 📥 收到 OneBot 消息事件: [id=${messageId}, type=${type}, user=${userId}${groupId ? `, group=${groupId}` : ''}]`,
+      `[${this.channelType}] 📥 收到 OneBot 消息事件: [id=${messageId || 'missing'}, type=${type}, user=${userId}${groupId ? `, group=${groupId}` : ''}]`,
     )
 
     if (type === 'private') {
-      if (userId == null || String(userId) !== String(this.masterId)) {
+      if (userId == null) {
         this.log?.warn?.(
-          `[${this.channelType}] 🛡️ 私聊安全过滤拦截: 来自 user=${userId}，但当前渠道 masterId=${this.masterId} (两者不匹配)，已丢弃该消息`,
+          `[${this.channelType}] ⚠️ 忽略缺少 userId 的私聊消息`,
         )
         return
       }
@@ -421,20 +423,47 @@ export class OneBotChannel extends BaseChannel {
           ? `[文件: ${extracted.files[0].name}]`
           : '')
     const from = type === 'group' ? `group:${groupId}` : String(userId)
+    const contextToken = this.extractContextToken(msg)
+    const envelope = normalizeChannelEnvelope({
+      actor: {
+        displayName: msg.sender?.card || msg.sender?.nickname || msg.user_name || null,
+        externalUserId: String(userId),
+        role: msg.sender?.role || null,
+      },
+      content: { files, images, text },
+      conversation: {
+        externalConversationId: type === 'group' ? String(groupId) : String(userId),
+        type,
+      },
+      message: {
+        externalMessageId: messageId,
+        receivedAt: Date.now(),
+        replyToMessageId: msg.reply?.message_id || msg.reply_to_message_id || null,
+        sentAt: Number(msg.time) > 0 ? Number(msg.time) * 1000 : Date.now(),
+      },
+      raw: msg,
+      source: {
+        accountId: this.channel?.botId || this.client?.selfId || null,
+        adapterId: this.platform || this.channelType,
+        channelId: this.channelId,
+        channelName: this.channel?.name || null,
+      },
+    })
+    const target = await this.resolveInboundTarget(envelope, { contextToken, from })
+    if (!target) return
     const messageContext = {
       messageId: msg.message_id ?? msg.messageId,
       messageType: type,
       userId,
       ...(type === 'group' ? { groupId } : {}),
     }
-    const contextToken = this.extractContextToken(msg)
     const isSlash = text.trim().startsWith('/')
 
     this.log?.info?.(
       `[${this.channelType}] 📨 入站内容解析就绪: from=${from}, text="${text.slice(0, 80)}${text.length > 80 ? '...' : ''}", 图片=${images.length}张, 文件=${files.length}个, 斜杠指令=${isSlash ? '是' : '否'}`,
     )
 
-    return this.enqueueInboundDebounce(from, {
+    return target.enqueueInboundDebounce(from, {
       contextToken,
       files,
       hasMedia: inboundMedia.hasMedia,
@@ -443,7 +472,7 @@ export class OneBotChannel extends BaseChannel {
       pendingMediaPromise: inboundMedia.pendingMediaPromise,
       rawMsg: msg,
       text,
-      ctx: messageContext,
+      ctx: { ...messageContext, envelope },
     })
   }
 

@@ -39,22 +39,22 @@ describe('Channel Session History & Slash Commands Test', () => {
     const resGet = await handler.handle('/think')
     assert.match(resGet.text, /思考\/推理强度/)
 
-    const resSetHigh = await handler.handle('/think high')
+    const adminContext = { principal: { isAdmin: true } }
+    const resSetHigh = await handler.handle('/think high', adminContext)
     assert.match(resSetHigh.text, /思考\/推理强度已设置为/)
     assert.strictEqual(store.get('reasoning_effort'), 3)
 
-    await handler.handle('/think max')
+    await handler.handle('/think max', adminContext)
     assert.strictEqual(store.get('reasoning_effort'), 4)
   })
 
   test('should handle /tools slash command correctly', async () => {
     const handler = new SlashCommandHandler({ channel: {}, memory: {} })
-    const res = await handler.handle('/tools')
+    const res = await handler.handle('/tools', {
+      principal: { isAdmin: true },
+    })
     assert.match(res.text, /Channel 工具策略/)
-    assert.match(
-      res.text,
-      /Channel 固定启用完整 ai-plugin、terminal-pty 与 file-editor-plugin/,
-    )
+    assert.match(res.text, /系统管理员，可使用完整 Agent、终端与文件工具/)
   })
 
   test('should compact and fully archive the active session', async () => {
@@ -121,19 +121,41 @@ describe('Channel Session History & Slash Commands Test', () => {
     }
     const handler = new SlashCommandHandler({ channel, memory: mockMemory })
 
-    const before = await handler.handle('/yolo')
+    const adminContext = { principal: { isAdmin: true } }
+    const before = await handler.handle('/yolo', adminContext)
     assert.match(before.text, /YOLO 模式：已关闭/)
 
-    const enabled = await handler.handle('/yolo on')
+    const enabled = await handler.handle('/yolo on', adminContext)
     assert.match(enabled.text, /已开启/)
     assert.deepStrictEqual(store.get('session_yolo'), { s_test: true })
 
-    const status = await handler.handle('/status')
+    const status = await handler.handle('/status', adminContext)
     assert.match(status.text, /会话: s_test/)
     assert.match(status.text, /YOLO: 开启/)
     assert.match(status.text, /运行中任务: 1 个/)
 
-    await handler.handle('/yolo off')
+    await handler.handle('/yolo off', adminContext)
     assert.deepStrictEqual(store.get('session_yolo'), {})
+  })
+
+  test('should use the explicitly targeted Web session for session commands', async () => {
+    const store = new Map()
+    const memory = {
+      getActiveSession: async () => 's_agent_default',
+      getAgentMeta: async (key, fallback) => store.get(key) ?? fallback,
+      setAgentMeta: async (key, value) => store.set(key, value),
+    }
+    const handler = new SlashCommandHandler({ channel: {}, memory })
+
+    const result = await handler.handle('/yolo on', {
+      principal: { isAdmin: true },
+      sessionId: 's_web_selected',
+      sid: 's_web_selected',
+    })
+
+    assert.match(result.text, /已开启/)
+    assert.deepStrictEqual(store.get('session_yolo'), {
+      s_web_selected: true,
+    })
   })
 })

@@ -50,10 +50,18 @@ export class MemoryStore {
     return clean
   }
   _sessionFile(id) {
-    return path.join(this._agentDir(), 'sessions', `${this._safeSegment(id)}.json`)
+    return path.join(
+      this._agentDir(),
+      'sessions',
+      `${this._safeSegment(id)}.json`,
+    )
   }
   _globalFile(category = 'general') {
-    return path.join(this._agentDir(), 'global', `${this._safeSegment(category)}.md`)
+    return path.join(
+      this._agentDir(),
+      'global',
+      `${this._safeSegment(category)}.md`,
+    )
   }
   async _ensureAgentDir() {
     const dir = this._agentDir()
@@ -87,7 +95,10 @@ export class MemoryStore {
     return await this._readFile(path.join(this._agentDir(), 'soul.md'), '')
   }
   async writeSoul(content) {
-    await this._writeFile(path.join(this._agentDir(), 'soul.md'), String(content ?? ''))
+    await this._writeFile(
+      path.join(this._agentDir(), 'soul.md'),
+      String(content ?? ''),
+    )
     return true
   }
 
@@ -107,7 +118,10 @@ export class MemoryStore {
     const dir = path.join(this._agentDir(), 'global')
     try {
       const files = await fs.promises.readdir(dir)
-      return files.filter((f) => f.endsWith('.md')).map((f) => f.slice(0, -3)).toSorted()
+      return files
+        .filter((f) => f.endsWith('.md'))
+        .map((f) => f.slice(0, -3))
+        .toSorted()
     } catch {
       return []
     }
@@ -143,11 +157,17 @@ export class MemoryStore {
     const body = (await this.readGlobal(category)).split('\n')
     const t = target.trim()
     if (!t) {
-      await this._writeFile(this._globalFile(category), `${String(content).trim()}\n`)
+      await this._writeFile(
+        this._globalFile(category),
+        `${String(content).trim()}\n`,
+      )
       return true
     }
     const next = body.map((l) => (l.includes(t) ? String(content).trim() : l))
-    await this._writeFile(this._globalFile(category), next.join('\n').replace(/\n+$/, '') + '\n')
+    await this._writeFile(
+      this._globalFile(category),
+      next.join('\n').replace(/\n+$/, '') + '\n',
+    )
     return true
   }
   /** delete：删除命中 target 的行 */
@@ -156,7 +176,10 @@ export class MemoryStore {
     if (!t) throw new Error('deleteGlobal requires target')
     const body = (await this.readGlobal(category)).split('\n')
     const next = body.filter((l) => !l.includes(t))
-    await this._writeFile(this._globalFile(category), next.join('\n').replace(/\n+$/, '') + (next.length ? '\n' : ''))
+    await this._writeFile(
+      this._globalFile(category),
+      next.join('\n').replace(/\n+$/, '') + (next.length ? '\n' : ''),
+    )
     return true
   }
 
@@ -174,21 +197,30 @@ export class MemoryStore {
     const sessions = []
     for (const f of files.filter((file) => file.endsWith('.json'))) {
       try {
-        const s = JSON.parse(await fs.promises.readFile(path.join(dir, f), UTF8))
+        const s = JSON.parse(
+          await fs.promises.readFile(path.join(dir, f), UTF8),
+        )
         sessions.push({
           createdAt: s.created_at,
           id: s.id,
           msgCount: (s.chat || []).length,
           title: s.title || s.id,
         })
-      } catch { /* skip malformed */ }
+      } catch {
+        /* skip malformed */
+      }
     }
     sessions.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
     return sessions
   }
   async getSession(id) {
     const raw = await this._readFile(this._sessionFile(id), null)
-    return raw ? JSON.parse(raw) : null
+    if (!raw) return null
+    return {
+      kind: 'conversation',
+      parentSessionId: null,
+      ...JSON.parse(raw),
+    }
   }
   async createSession({
     createdAt = Date.now(),
@@ -201,9 +233,14 @@ export class MemoryStore {
       created_at: createdAt,
       crystal: '', // <memory_crystal> / previous_summary
       id: this._safeSegment(id),
+      kind: 'conversation',
+      parentSessionId: null,
       title,
     }
-    await this._writeFile(this._sessionFile(session.id), JSON.stringify(session, null, 2))
+    await this._writeFile(
+      this._sessionFile(session.id),
+      JSON.stringify(session, null, 2),
+    )
     return session
   }
   async deleteSession(id) {
@@ -219,11 +256,15 @@ export class MemoryStore {
   }
   /** 追加一条聊天消息到会话 */
   async appendToChat(id, msg) {
-    const session = (await this.getSession(id)) || (await this.createSession({ id }))
+    const session =
+      (await this.getSession(id)) || (await this.createSession({ id }))
     session.chat = session.chat || []
     msg.time = ensureMessageTime(msg.time)
     session.chat.push(msg)
-    await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
+    await this._writeFile(
+      this._sessionFile(id),
+      JSON.stringify(session, null, 2),
+    )
     return session
   }
   async getChat(id) {
@@ -232,11 +273,15 @@ export class MemoryStore {
   }
   /** 设置/清除该会话的结晶摘要（memory_crystal / previous_summary） */
   async setCrystal(id, crystalXml = '') {
-    const session = (await this.getSession(id)) || (await this.createSession({ id }))
+    const session =
+      (await this.getSession(id)) || (await this.createSession({ id }))
     const nextCrystal = crystalXml ?? ''
     if ((session.crystal || '') === nextCrystal) return false
     session.crystal = nextCrystal
-    await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
+    await this._writeFile(
+      this._sessionFile(id),
+      JSON.stringify(session, null, 2),
+    )
     return true
   }
   async getCrystal(id) {
@@ -245,13 +290,19 @@ export class MemoryStore {
   }
   /** 追加一条待压缩归档的记忆事件（保护日常对话 Prefix Cache） */
   async appendPendingMemory(id, event) {
-    const session = (await this.getSession(id)) || (await this.createSession({ id }))
-    session.pending_memories = Array.isArray(session.pending_memories) ? session.pending_memories : []
+    const session =
+      (await this.getSession(id)) || (await this.createSession({ id }))
+    session.pending_memories = Array.isArray(session.pending_memories)
+      ? session.pending_memories
+      : []
     session.pending_memories.push({
       ...event,
       timestamp: Date.now(),
     })
-    await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
+    await this._writeFile(
+      this._sessionFile(id),
+      JSON.stringify(session, null, 2),
+    )
     return session.pending_memories
   }
   /** 获取当前会话积累的待压缩记忆事件 */
@@ -264,17 +315,25 @@ export class MemoryStore {
     const session = await this.getSession(id)
     if (session) {
       session.pending_memories = []
-      await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
+      await this._writeFile(
+        this._sessionFile(id),
+        JSON.stringify(session, null, 2),
+      )
     }
     return true
   }
   /** 清空会话聊天（保留人格注入用不到的 history 之外——这里只清 chat，保留 crystal） */
   async clearChat(id) {
-    const session = (await this.getSession(id)) || (await this.createSession({ id }))
+    const session =
+      (await this.getSession(id)) || (await this.createSession({ id }))
     session.chat = []
-    await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
+    await this._writeFile(
+      this._sessionFile(id),
+      JSON.stringify(session, null, 2),
+    )
     return true
-  }_sessionArchiveDir(id) {
+  }
+  _sessionArchiveDir(id) {
     return path.join(this._agentDir(), 'archives', this._safeSegment(id))
   }
 
@@ -327,8 +386,16 @@ export class MemoryStore {
     )
     // 2. 裁剪：仅保留最近 N 轮写回
     session.chat = kept
-    await this._writeFile(this._sessionFile(id), JSON.stringify(session, null, 2))
-    return { rotated: true, archivePath, removedCount: removed.length, keptCount: kept.length }
+    await this._writeFile(
+      this._sessionFile(id),
+      JSON.stringify(session, null, 2),
+    )
+    return {
+      rotated: true,
+      archivePath,
+      removedCount: removed.length,
+      keptCount: kept.length,
+    }
   }
 
   // ===============================================================
@@ -342,14 +409,19 @@ export class MemoryStore {
       return JSON.parse(raw.trim())
     } catch (e) {
       if (e instanceof SyntaxError) {
-        console.error(`[MemoryStore] Meta JSON parse error in ${fp}: ${e.message}. Resetting meta fallback.`)
+        console.error(
+          `[MemoryStore] Meta JSON parse error in ${fp}: ${e.message}. Resetting meta fallback.`,
+        )
         return {}
       }
       throw e
     }
   }
   async _writeMeta(meta) {
-    await this._writeFile(path.join(this._agentDir(), 'meta.json'), JSON.stringify(meta, null, 2))
+    await this._writeFile(
+      path.join(this._agentDir(), 'meta.json'),
+      JSON.stringify(meta, null, 2),
+    )
   }
   async getAgentMeta(key, fallback = null) {
     const meta = await this._readMeta()
@@ -366,12 +438,17 @@ export class MemoryStore {
   // active session（当前激活）
   // ===============================================================
   async getActiveSession() {
-    const raw = await this._readFile(path.join(this._agentDir(), 'active'), null)
+    const raw = await this._readFile(
+      path.join(this._agentDir(), 'active'),
+      null,
+    )
     return raw ? raw.trim() || null : null
   }
   async setActiveSession(id) {
     if (id == null) {
-      try { await fs.promises.unlink(path.join(this._agentDir(), 'active')) } catch {}
+      try {
+        await fs.promises.unlink(path.join(this._agentDir(), 'active'))
+      } catch {}
       return null
     }
     await this._writeFile(path.join(this._agentDir(), 'active'), String(id))

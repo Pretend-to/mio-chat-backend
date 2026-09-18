@@ -108,25 +108,29 @@ test('OneBot subscriptions and lifecycle are idempotent', async () => {
   assert.equal(client.listenerCount('message.private'), 1)
   assert.equal(client.listenerCount('message.group'), 1)
   client.emit('message.private', {
+    message_id: 'private-master',
     message_type: 'private',
     user_id: 'master',
     content: [{ type: 'text', data: { text: 'hi' } }],
   })
   client.emit('message.private', {
+    message_id: 'private-other',
     message_type: 'private',
     user_id: 'other',
     content: [{ type: 'text', data: { text: 'ignore' } }],
   })
   client.emit('message.group', {
+    message_id: 'group-42',
     message_type: 'group',
     user_id: 'member',
     group_id: '42',
     content: [{ type: 'text', data: { text: 'group hi' } }],
   })
   await new Promise((resolve) => setImmediate(resolve))
-  assert.equal(packets.length, 2)
+  assert.equal(packets.length, 3)
   assert.equal(packets[0].from, 'master')
-  assert.equal(packets[1].from, 'group:42')
+  assert.equal(packets[1].from, 'other')
+  assert.equal(packets[2].from, 'group:42')
 
   await Promise.all([channel.stop(), channel.stop()])
   assert.equal(client.stopped, 1)

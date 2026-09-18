@@ -59,7 +59,7 @@ export class OneBotsGateway {
             options.dataDir ??
             this.options.dataDir ??
             process.env.ONEBOTS_DATA_DIR ??
-            'channels-data/onebots',
+            'data/onebots',
           )
           await fs.promises.mkdir(runtimeDir, { recursive: true })
           BaseApp.configDir = runtimeDir

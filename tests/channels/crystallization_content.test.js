@@ -66,6 +66,7 @@ test('Channel 落盘内容不会把每个结晶 chunk 保存成独立事件', as
   })
 
   const result = await llm.process({
+    agentId: 'agent-crystal-stream',
     channel: {},
     chat: [],
     crystal: '',

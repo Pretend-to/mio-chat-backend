@@ -55,7 +55,7 @@ async function loginAndChannel(svc, { soul = true, typing = false } = {}) {
 const line = (text, from = MASTER, token = 'CTX') => ({ from_user_id: from, message_id: 1, message_type: 1, context_token: token, item_list: [{ type: 1, text }] })
 const lastSent = (state) => state.sent[state.sent.length - 1]?.msg?.item_list?.[0]?.text ?? null
 
-test('WechatChannel 端到端：登录→收→AI回复→真网络发出→记忆→slash→单用户', async () => {
+test('WechatChannel 端到端：登录→多用户收发→记忆→slash', async () => {
   const svc = await buildIlinkServer()
   const { memory, chn, baseDir } = await loginAndChannel(svc)
 
@@ -67,10 +67,10 @@ test('WechatChannel 端到端：登录→收→AI回复→真网络发出→记�
   const sid = await memory.getActiveSession()
   assert.strictEqual((await memory.getChat(sid)).length, 2, '会话聊天落盘(user+assistant)')
 
-  // 陌生人被忽略（真网络不发出）
+  // 同一已认证 Channel 接受新的外部用户；生产路由会为其分配独立 Session。
   const before = svc.state.sent.length
   await chn._handleMessage(line('你是谁', 'stranger@im.wechat'))
-  assert.strictEqual(svc.state.sent.length, before, '陌生人消息不回复')
+  assert.strictEqual(svc.state.sent.length, before + 1, '新外部用户获得回复')
 
   // slash：/sessions 与 /new
   await chn._handleMessage(line('/sessions'))

@@ -23,7 +23,6 @@ import { resolveChannelAdapter } from './ChannelAdapterRegistry.js'
  *     platform,      // 平台适配器，如 'weixin-ilink'
  *     protocol,      // 协议标识，如 'weixin.ilink'
  *     config,        // adapter 扩展配置
- *     agentId,       // 归属 agent（决定 memory/agents/<id> 与预设）
  *     token,         // bot_token（敏感，落盘）
  *     botId, userId, // iLink 登录返回的 bot 账户 id / 绑定者微信 id
  *     avatar,        // 头像链接（可选）
@@ -40,9 +39,10 @@ export class ChannelStore {
     encryptionKey = process.env.MIOCHAT_ENC_KEY,
     file = DEFAULT_FILE,
     logger = console,
-    mode = process.env.MIO_CHANNEL_PERSISTENCE_MODE || 'legacy',
+    mode = null,
     prisma = null,
   } = {}) {
+    mode ||= process.env.MIO_CHANNEL_PERSISTENCE_MODE || (file !== DEFAULT_FILE ? 'legacy' : 'database')
     if (!['legacy', 'shadow', 'database-shadow', 'database'].includes(mode)) {
       throw new Error(`invalid channel persistence mode ${mode}`)
     }
@@ -112,15 +112,12 @@ export class ChannelStore {
     }
     return {
       ...legacy,
-      agentId: row.agentId,
       avatar: row.avatar || '',
       botId: row.botId || '',
       createdAt: row.createdAt.getTime(),
       id: row.id,
       lastActive: row.lastActive?.getTime() || 0,
-      model: row.model || '',
       name: row.name || '',
-      provider: row.provider || '',
       status: row.status,
       token: row.tokenEnc ? decryptToken(row.tokenEnc, this._key(true)) : '',
       type: row.type,
@@ -144,18 +141,17 @@ export class ChannelStore {
   async _writeDatabase(channel) {
     const prisma = await this._database()
     const tokenEnc = channel.token ? encryptToken(channel.token, this._key(true)) : null
-    await prisma.agent.upsert({ create: { id: channel.agentId }, update: {}, where: { id: channel.agentId } })
     const legacyJson = { ...channel }
     delete legacyJson.token
+    delete legacyJson.agentId
+    delete legacyJson.provider
+    delete legacyJson.model
     const data = {
-      agentId: channel.agentId,
       avatar: channel.avatar || null,
       botId: channel.botId || null,
       lastActive: channel.lastActive ? new Date(channel.lastActive) : null,
       legacyJson: JSON.stringify(legacyJson),
-      model: channel.model || null,
       name: channel.name || null,
-      provider: channel.provider || null,
       status: channel.status || 'unbound',
       tokenEnc,
       type: channel.type || 'channel',
@@ -217,7 +213,6 @@ export class ChannelStore {
     const legacyBoundRecord = !data.type && !data.adapterId && !data.driver &&
       !data.platform && Boolean(data.token || data.userId || data.botId)
     const channel = {
-      agentId: 'channel-master',
       avatar: '',
       botId: '',
       createdAt: now,
@@ -230,13 +225,14 @@ export class ChannelStore {
       driver: legacyBoundRecord ? 'native' : '',
       platform: legacyBoundRecord ? 'weixin-ilink' : '',
       protocol: legacyBoundRecord ? 'weixin.ilink' : '',
-      provider: data.provider || '',
-      model: data.model || '',
       updatedAt: now,
       userId: '',
       lastActive: 0,
       ...data,
     }
+    delete channel.agentId
+    delete channel.provider
+    delete channel.model
     list.push(channel)
     this._cache = list
     if (this.mode === 'database' || this.mode === 'database-shadow') {
@@ -254,7 +250,11 @@ export class ChannelStore {
       : await this._load()
     const ch = list.find((c) => c.id === id)
     if (!ch) return null
-    Object.assign(ch, patch, { updatedAt: Date.now() })
+    const nextPatch = { ...patch }
+    delete nextPatch.agentId
+    delete nextPatch.provider
+    delete nextPatch.model
+    Object.assign(ch, nextPatch, { updatedAt: Date.now() })
     this._cache = list
     if (this.mode === 'database' || this.mode === 'database-shadow') {
       await this._writeDatabase(ch)

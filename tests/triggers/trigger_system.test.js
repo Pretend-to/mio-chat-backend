@@ -58,12 +58,14 @@ test('TriggerRegistry: 触发器增删改查与脚本文件管理', async () => 
 
   // 1. 创建 script 触发器并自动落盘脚本文件
   const created = await registry.create({
+    agentId: 'wechat-master',
     id: 'test_trg_btc',
     scriptCode: `console.log('@WAKE@ ' + JSON.stringify({ wake: true, reason: 'BTC突破', data: { p: 78500 } }))`,
     scriptLang: 'js',
     mode: 'once',
     type: 'script',
     promptTemplate: '【关注提示】{{payload.reason}}',
+    sessionId: 'session_123',
   })
 
   assert.equal(created.id, 'test_trg_btc')
@@ -156,10 +158,16 @@ test('WakeInjector: 会话注入、冷却限制与 once 生命周期自动销毁
   const injector = new WakeInjector({
     registry,
     channelRuntime: mockRuntime,
+    sessionTurnService: {
+      runTurn: async ({ sessionId, text, ...opts }) => {
+        injectedMessages.push({ opts, sid: sessionId, text })
+      },
+    },
   })
 
   // 1. 创建 once 触发器
   const trigger = await registry.create({
+    agentId: 'wechat-master',
     id: 'trg_once_test',
     mode: 'once',
     cooldownSec: 10,
@@ -195,6 +203,11 @@ test('sentinel Tool: 两步流创建、试跑、管理全生命周期', async ()
     }),
   })
   const tool = new SentinelTool({ service })
+  const toolContext = {
+    agentId: 'wechat-master',
+    channelId: 'sentinel-test-channel',
+    sessionId: 's_test',
+  }
   service.setChannelRuntime({
     running: new Map([
       [
@@ -229,6 +242,7 @@ test('sentinel Tool: 两步流创建、试跑、管理全生命周期', async ()
 
   // 2. 第二步：调用 sentinel 工具传入 scriptPath 与 params 启动哨兵
   const createRes = await tool.execute({
+    ...toolContext,
     params: {
       action: 'create',
       id: 'tool_test_trg',
@@ -252,6 +266,7 @@ test('sentinel Tool: 两步流创建、试跑、管理全生命周期', async ()
 
   // 3. 更新哨兵参数并自动重启，使新参数进入 TRIGGER_PARAMS
   const updateRes = await tool.execute({
+    ...toolContext,
     params: {
       action: 'update',
       id: 'tool_test_trg',
@@ -272,6 +287,7 @@ test('sentinel Tool: 两步流创建、试跑、管理全生命周期', async ()
   // 4. 试跑 (run)
 
   const runRes = await tool.execute({
+    ...toolContext,
     params: {
       action: 'run',
       id: 'tool_test_trg',
@@ -283,6 +299,7 @@ test('sentinel Tool: 两步流创建、试跑、管理全生命周期', async ()
 
   // 5. 列表 (list)
   const listRes = await tool.execute({
+    ...toolContext,
     params: { action: 'list' },
   })
   assert.ok(listRes.count >= 1)
@@ -296,12 +313,14 @@ test('sentinel Tool: 两步流创建、试跑、管理全生命周期', async ()
   // 6. 校验缺少 scriptPath 时报错
   await assert.rejects(async () => {
     await tool.execute({
+      ...toolContext,
       params: { action: 'create', id: 'fail_trg' },
     })
   }, /必须提供已落盘的 scriptPath/)
 
   // 7. 删除 (remove)
   const rmRes = await tool.execute({
+    ...toolContext,
     params: { action: 'remove', id: 'tool_test_trg' },
   })
   assert.equal(rmRes.success, true)

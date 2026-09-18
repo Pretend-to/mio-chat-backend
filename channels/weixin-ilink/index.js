@@ -22,7 +22,7 @@ export const weixinIlinkAdapter = {
     media: ['image', 'file'],
     markdown: true,
   },
-  defaults: { agentId: 'wechat-master', name: '微信助手' },
+  defaults: { name: '微信' },
   configSchema: [
     {
       key: 'outbound_text_format',

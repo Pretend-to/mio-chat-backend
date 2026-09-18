@@ -124,26 +124,34 @@ export function getChannelCatalog() {
     version: CATALOG_VERSION,
     runtimes,
     adapters,
-    // Compatibility alias for older frontends. New clients should consume
-    // `adapters`: these entries describe MioChat adapters, not OneBots platforms.
-    platforms: structuredClone(adapters),
   }
 }
 
-/** Normalize the versioned creation contract and former flat requests. */
+/** Normalize the strict versioned Channel creation contract. */
 export function normalizeChannelCreatePayload(body = {}) {
-  if (body.version != null && body.version !== CATALOG_VERSION) {
+  if (body.version !== CATALOG_VERSION) {
     throw new TypeError(`Unsupported channel creation version: ${body.version}`)
   }
-  const adapterRequest = body.adapter && typeof body.adapter === 'object' ? body.adapter : {}
-  const profile = body.profile && typeof body.profile === 'object' ? body.profile : body
-  const requestedId = adapterRequest.id || adapterRequest.platform || body.adapterId ||
-    body.platform || body.type || 'weixin-ilink'
+  const forbidden = ['agentId', 'sessionId', 'bindingId', 'masterId', 'userId', 'botId', 'provider', 'model', 'preset']
+    .filter(key => Object.hasOwn(body, key) || Object.hasOwn(body.profile || {}, key))
+  if (forbidden.length) {
+    throw new TypeError(`Channel creation does not accept Agent or internal identity fields: ${forbidden.join(', ')}`)
+  }
+  if (!body.adapter || typeof body.adapter !== 'object' || Array.isArray(body.adapter)) {
+    throw new TypeError('Channel creation requires an adapter object')
+  }
+  if (!body.profile || typeof body.profile !== 'object' || Array.isArray(body.profile)) {
+    throw new TypeError('Channel creation requires a profile object')
+  }
+  const adapterRequest = body.adapter
+  const profile = body.profile
+  const requestedId = adapterRequest.id
+  if (!requestedId) throw new TypeError('Channel adapter id is required')
   const definition = getChannelAdapterDefinition(requestedId)
   if (!definition) throw new TypeError(`Unsupported channel adapter: ${normalizeId(requestedId) || '(empty)'}`)
 
-  const runtime = normalizeId(adapterRequest.runtime || body.driver || definition.runtime)
-  const protocol = normalizeId(adapterRequest.protocol || body.protocol || definition.protocol)
+  const runtime = normalizeId(adapterRequest.runtime || definition.runtime)
+  const protocol = normalizeId(adapterRequest.protocol || definition.protocol)
   if (runtime !== definition.runtime) {
     throw new TypeError(`Unsupported runtime for ${definition.id}: ${runtime || '(empty)'}`)
   }
@@ -161,9 +169,6 @@ export function normalizeChannelCreatePayload(body = {}) {
     platform: definition.platform || definition.onebots?.platform || definition.id,
     protocol,
     name: profile.name || definition.defaults.name || definition.name,
-    agentId: profile.agentId || definition.defaults.agentId || 'channel-master',
-    provider: profile.provider || '',
-    model: profile.model || '',
     config: {
       ...Object.fromEntries(
         definition.configSchema

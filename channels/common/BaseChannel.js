@@ -19,9 +19,11 @@ import {
 } from '../../lib/chat/sessionExecutionState.js'
 import { ensureMessageTime } from '../../lib/chat/messageTimestamp.js'
 import {
+  appendFileReferences,
   appendRecursiveContextMessages,
   prepareChannelUserInput,
 } from '../llm.js'
+import { channelEnvelopeMetadata } from '../bindings/ChannelEnvelope.js'
 import sessions from '../../lib/server/socket.io/services/sessions.js'
 import {
   formatChannelErrorMessage,
@@ -62,6 +64,7 @@ export class BaseChannel {
     channelId = null,
     debounceConfig = {},
     debounceEnabled = null,
+    routeTargetResolver = null,
   }) {
     if (!client || !memory || !masterId) {
       throw new Error(
@@ -83,6 +86,7 @@ export class BaseChannel {
     this.log = logger
     this.onActivity = onActivity
     this.onConfigUpdate = onConfigUpdate
+    this.routeTargetResolver = routeTargetResolver
     this.activeJobs = new Map() // sessionId -> { startTime, text, currentTool, toolCount, lastProgressText }
     this._sessionQueues = new Map() // sessionId -> Promise chain (FIFO 互斥队列兼容)
     this._sessionLocks = new Set() // sessionId -> 互斥单飞锁
@@ -128,14 +132,16 @@ export class BaseChannel {
     const next = {}
     if (Object.hasOwn(patch, 'provider')) next.provider = patch.provider ?? ''
     if (Object.hasOwn(patch, 'model')) next.model = patch.model ?? ''
-    if (Object.keys(next).length === 0) return {
-      model: this.model,
-      provider: this.provider,
-    }
+    if (Object.keys(next).length === 0)
+      return {
+        model: this.model,
+        provider: this.provider,
+      }
 
-    const persisted = typeof this.onConfigUpdate === 'function'
-      ? await this.onConfigUpdate(next)
-      : next
+    const persisted =
+      typeof this.onConfigUpdate === 'function'
+        ? await this.onConfigUpdate(next)
+        : next
     if (Object.hasOwn(next, 'provider')) {
       this.provider = persisted?.provider ?? next.provider
     }
@@ -454,6 +460,7 @@ export class BaseChannel {
 
   async stop() {
     this.running = false
+    for (const job of this.activeJobs.values()) job?.abort?.()
     this.keepAlive.stop()
     this.confirmations.clear()
     this.clearAllTyping()
@@ -470,16 +477,12 @@ export class BaseChannel {
    */
   async isSessionYoloEnabled(sessionId) {
     if (!sessionId) return false
-    if (this._sessionYolo.has(sessionId))
-      return this._sessionYolo.get(sessionId)
-    const enabled = await getSessionYolo(this.memory, sessionId)
-    this._sessionYolo.set(sessionId, enabled)
-    return enabled
+    return await getSessionYolo(this.memory, sessionId)
   }
 
   async setSessionYolo(sessionId, enabled) {
     const value = await setSessionYolo(this.memory, sessionId, enabled)
-    this._sessionYolo.set(sessionId, value)
+    this._sessionYolo.clear()
     return value
   }
 
@@ -507,6 +510,28 @@ export class BaseChannel {
         }
       }
     } catch {}
+  }
+
+  /** Resolve an inbound transport envelope without turning routing failures into transport failures. */
+  async resolveInboundTarget(envelope, { from, contextToken = null } = {}) {
+    if (!this.routeTargetResolver) return this
+    try {
+      return await this.routeTargetResolver(envelope)
+    } catch (error) {
+      const notices = {
+        binding_not_found:
+          '此通信渠道当前没有关联可用的 Agent，请先在管理页面完成绑定。',
+        route_required:
+          '此通信渠道关联了多个 Agent，请发送 /agents 查看并使用 /agent use <名称或id> 选择。',
+        session_not_found:
+          '此通信渠道关联的 Agent 暂无可用 Session，请先在管理页面创建会话。',
+      }
+      const notice = notices[error?.code]
+      if (!notice) throw error
+      this.log?.warn?.(`[${this.channelType}] 入站消息未路由: ${error.code}`)
+      await this._safeSend(from, contextToken, notice)
+      return null
+    }
   }
 
   /** 高危动作挂起确认代理 */
@@ -1077,6 +1102,12 @@ export class BaseChannel {
     this.log?.info?.(
       `[${this.channelType}] 📥 接收外部/唤醒消息并加入会话队列 | 会话: ${targetSid} | 来源: ${options.source || options.from || 'trigger'} | 目标接收者: ${ctx.from}`,
     )
+    // Exact-session Web turns enter through this API instead of the adapter
+    // ingress path. Route slash commands through the same control plane, while
+    // keeping cron/trigger payloads literal even if they begin with a slash.
+    if (options.allowSlashCommands === true && text.trim().startsWith('/')) {
+      return this._route(text.trim(), ctx)
+    }
     return this._enqueueSession(targetSid, text.trim(), ctx)
   }
 
@@ -1113,6 +1144,7 @@ export class BaseChannel {
         chat: [],
         contextToken: ctx.contextToken || this.latestContextToken || null,
         crystal: '',
+        envelope: ctx.envelope,
         from: ctx.from,
         globalMem: '',
         guidance: false,
@@ -1157,6 +1189,7 @@ export class BaseChannel {
     // 消息时间由公共管线统一生成，与具体渠道协议解耦。后续的 Web 镜像、
     // session 持久化和 LLM 请求必须复用同一个值，保证跨轮次输入稳定。
     ctx.messageTime = ensureMessageTime(ctx.messageTime)
+    text = appendFileReferences(text, ctx.files)
 
     if (this.onActivity) {
       this.onActivity()
@@ -1179,7 +1212,6 @@ export class BaseChannel {
         : []
     const session = await this.memory.getSession(sid)
     const chat = session?.chat || []
-
     ctx.channelId =
       ctx.channelId || this.channelId || this.id || this.memory?.agentId
     // Resolve the same image source that is forwarded to createBackendLlm.
@@ -1190,6 +1222,7 @@ export class BaseChannel {
       text,
       channelImages,
       ctx.messageTime,
+      ctx.envelope,
     )
     const persistedUserText =
       Array.isArray(preparedUserInput.imageList) &&
@@ -1202,16 +1235,32 @@ export class BaseChannel {
             .map((image) => `![图片](${image})`)
             .join('\n')}`.trim()
         : preparedUserInput.sourceText
+    const persistedUserContent = [...preparedUserInput.persistedContent]
+    if (Array.isArray(ctx.files)) {
+      for (const file of ctx.files) {
+        const url = file?.url || file?.file
+        if (!url) continue
+        persistedUserContent.push({
+          data: { file: url, name: file?.name || 'file' },
+          type: 'file',
+        })
+      }
+    }
+
+    // Message identity is allocated once and shared by live transport,
+    // persistence, stream-cache replay, and history. Reallocating an id at any
+    // boundary makes the UI render the same logical message twice after reload.
+    ctx.userMessageId =
+      ctx.userMessageId ||
+      `msg_u_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+    ctx.messageId =
+      ctx.messageId ||
+      `msg_a_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
 
     // 当消息来自第三方渠道（!ctx.isWeb）时，若 Web 客户端在线，向其广播用户消息并建立 Blank 占位
-    if (!ctx.isWeb) {
-      const userMsgId =
-        ctx.userMessageId ||
-        `msg_u_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
-      const assistantMsgId =
-        ctx.messageId ||
-        `msg_a_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
-      ctx.messageId = assistantMsgId
+    if (!ctx.isWeb && ctx.persistUserMessage !== false) {
+      const userMsgId = ctx.userMessageId
+      const assistantMsgId = ctx.messageId
 
       const onlineWebClients = sessions.getAllAdminClients()
       if (onlineWebClients && onlineWebClients.length > 0) {
@@ -1227,8 +1276,14 @@ export class BaseChannel {
         for (const client of onlineWebClients) {
           client.send({
             data: {
+              agentId: this.memory.agentId,
               assistantMessageId: assistantMsgId,
-              contactorId: ctx.channelId,
+              channelId: ctx.channelId,
+              contactorId: ctx.streamContactorId || this.memory.agentId,
+              sessionId: sid,
+              ...(ctx.subagentContact
+                ? { subagentContact: ctx.subagentContact }
+                : {}),
               userMessage: {
                 content: userMsgContent,
                 id: userMsgId,
@@ -1246,29 +1301,52 @@ export class BaseChannel {
 
     const emittedBlocks = []
     let didEmitTextBlock = false
+    const executionMetadata = {
+      ...(ctx.envelope ? channelEnvelopeMetadata(ctx.envelope) : {}),
+      ...(ctx.isTask ? { triggerType: 'task' } : {}),
+      ...(ctx.isWake
+        ? {
+            wakeType: ctx.source === 'subagent' ? 'subagent' : 'trigger',
+          }
+        : {}),
+    }
+    const persistedExecutionMetadata = Object.keys(executionMetadata).length
+      ? executionMetadata
+      : null
     const supportsPersistenceLifecycle =
       typeof this.memory.beginAssistantMessage === 'function' &&
       typeof this.memory.finalizeAssistantMessage === 'function'
     let assistantPersistenceId = null
     let persistenceQueue = Promise.resolve()
     let userPersistedBeforeLlm = false
+    const persistUserMessage = ctx.persistUserMessage !== false
 
     if (supportsPersistenceLifecycle) {
       const persistUser =
         typeof this.memory.appendUserMessage === 'function'
           ? this.memory.appendUserMessage.bind(this.memory)
           : this.memory.appendToChat.bind(this.memory)
-      await persistUser(sid, {
-        content: preparedUserInput.persistedContent,
-        from_user_id: ctx.from,
-        role: 'user',
-        text: persistedUserText,
-        time: ctx.messageTime,
-      })
-      userPersistedBeforeLlm = true
+      if (persistUserMessage) {
+        await persistUser(sid, {
+          channel_id: ctx.envelope?.source?.channelId,
+          content: persistedUserContent,
+          external_conversation_id:
+            ctx.envelope?.conversation?.externalConversationId,
+          external_message_id: ctx.envelope?.message?.externalMessageId,
+          from_user_id: ctx.envelope?.actor?.externalUserId || ctx.from,
+          id: ctx.userMessageId,
+          metadata: persistedExecutionMetadata,
+          role: 'user',
+          source_type: ctx.envelope?.source?.adapterId,
+          text: persistedUserText,
+          time: ctx.envelope?.message?.sentAt || ctx.messageTime,
+        })
+        userPersistedBeforeLlm = true
+      }
       assistantPersistenceId = await this.memory.beginAssistantMessage(sid, {
         content: [],
         id: ctx.messageId,
+        metadata: persistedExecutionMetadata,
         role: 'assistant',
         text: '',
         time: Date.now(),
@@ -1654,6 +1732,7 @@ export class BaseChannel {
         chat,
         contextToken: ctx.contextToken,
         crystal: crystal || '',
+        envelope: ctx.envelope,
         from: ctx.from,
         globalMem: globalMem || '',
         guidance: !soul,
@@ -1668,10 +1747,21 @@ export class BaseChannel {
           activeJobObj._abortLlm = abortFn
         },
         pendingMemories,
+        approvalTarget: ctx.approvalTarget,
+        principal: ctx.principal,
         provider: this.provider,
         sessionId: sid,
+        sessionScope: ctx.sessionScope,
         soul: soul || '',
+        source: ctx.source,
+        streamContactorId: ctx.streamContactorId,
+        subagentContact: ctx.subagentContact,
+        subagentRunId: ctx.subagentRunId,
         text,
+        toolNames: ctx.toolNames,
+        triggerId: ctx.triggerId,
+        isTask: ctx.isTask,
+        isWake: ctx.isWake,
         webClient: ctx.webClient,
       })
 
@@ -1703,13 +1793,13 @@ export class BaseChannel {
 
         const now = Date.now()
         const userMsg = {
-          content: preparedUserInput.persistedContent,
+          content: persistedUserContent,
           from_user_id: ctx.from,
           role: 'user',
           text: persistedUserText,
           time: ctx.messageTime || now,
         }
-        if (!userPersistedBeforeLlm)
+        if (!userPersistedBeforeLlm && persistUserMessage)
           await this.memory.appendToChat(sid, userMsg)
 
         const assembledAssistantContent = Array.isArray(reply?.content)
