@@ -6,6 +6,7 @@ import MetaTool, {
   extractQueryTools,
   extractTargetCall,
 } from '../../lib/plugins/ai-plugin/tools/meta_tool.js'
+import SentinelTool from '../../lib/plugins/ai-plugin/tools/sentinel.js'
 import { MioFunction } from '../../lib/function.js'
 import { parseConcatenatedJson } from '../../utils/jsonParser.js'
 
@@ -429,6 +430,37 @@ test('MetaTool can discover and call universal tools (like tts_speech) when pare
   assert.equal(callRes.success, true)
   assert.equal(ttsInvoked, true)
   assert.equal(callRes.audioUrl, 'https://example.com/audio.mp3')
+})
+
+test('MetaTool list exposes sentinel to an admin Web Agent', async () => {
+  const previous = global.middleware
+  const sentinel = new SentinelTool()
+  global.middleware = {
+    plugins: [
+      {
+        getTools: () => new Map([['ai-plugin', [sentinel]]]),
+        name: 'ai-plugin',
+      },
+    ],
+  }
+
+  try {
+    const result = await new MetaTool()._execute({
+      params: { action: 'list' },
+      parentEvent: {
+        agentId: 'agent-1',
+        conversationKind: 'direct',
+        principal: { id: 'web:admin', isAdmin: true, role: 'system_admin' },
+        sessionId: 'session-1',
+        source: 'web',
+        triggerKind: 'interactive',
+        user: { id: 'web:admin', isAdmin: true, role: 'system_admin' },
+      },
+    })
+    assert.ok(result.tools.some((tool) => tool.name === 'sentinel'))
+  } finally {
+    global.middleware = previous
+  }
 })
 
 test('MetaTool - text display echo (getDisplayName)', () => {

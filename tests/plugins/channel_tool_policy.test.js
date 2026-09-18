@@ -3,11 +3,13 @@ import assert from 'node:assert/strict'
 
 import {
   applyChannelToolPolicy,
+  evaluateToolAccess,
   getChannelToolNames,
   getPluginToolNames,
   isToolAllowed,
 } from '../../lib/chat/llm/toolPolicy.js'
 import { ChatEventFactory } from '../../lib/chat/llm/events/ChatEventFactory.js'
+import SentinelTool from '../../lib/plugins/ai-plugin/tools/sentinel.js'
 
 function tool(name, options = {}) {
   return { name, ...options }
@@ -187,6 +189,60 @@ test('non-admin Channel principals cannot see admin tools and execution allowlis
     }
     assert.equal(isToolAllowed(event, 'public_tool'), true)
     assert.equal(isToolAllowed(event, 'admin_tool_mid_1'), false)
+  } finally {
+    global.middleware = previous
+  }
+})
+
+test('admin Web Agent can execute and meta-call the ai-plugin sentinel tool', () => {
+  const sentinel = new SentinelTool()
+  const previous = global.middleware
+  const principal = { id: 'web:admin', isAdmin: true, role: 'system_admin' }
+  global.middleware = {
+    plugins: [
+      {
+        getTools: () => new Map([['ai-plugin', [sentinel]]]),
+        name: 'ai-plugin',
+      },
+    ],
+  }
+  const directEvent = {
+    agentId: 'agent-1',
+    conversationKind: 'direct',
+    principal,
+    sessionId: 'session-1',
+    settings: { toolCallSettings: { tools: ['sentinel'] } },
+    source: 'web',
+    triggerKind: 'interactive',
+    user: principal,
+  }
+  try {
+    assert.ok(
+      getPluginToolNames('ai-plugin', directEvent).includes(sentinel.name),
+    )
+    assert.equal(
+      evaluateToolAccess(sentinel, { event: directEvent }, 'execute').allowed,
+      true,
+    )
+
+    const metaEvent = {
+      ...directEvent,
+      settings: { toolCallSettings: { tools: ['meta_tool'] } },
+    }
+    assert.equal(
+      evaluateToolAccess(sentinel, { event: metaEvent }, 'meta_call').allowed,
+      true,
+    )
+
+    const guestEvent = {
+      ...directEvent,
+      principal: { id: 'web:guest', isAdmin: false, role: 'user' },
+      user: { id: 'web:guest', isAdmin: false, role: 'user' },
+    }
+    assert.equal(
+      evaluateToolAccess(sentinel, { event: guestEvent }, 'execute').allowed,
+      false,
+    )
   } finally {
     global.middleware = previous
   }
