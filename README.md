@@ -1,8 +1,12 @@
 <div align="center">
 
+<h1>MioChat</h1>
+
 <img src="https://s3.krumio.com/file/web/eadf69/miochat-logo.gif" width="600" alt="MioChat Logo" />
 
-**不仅仅是对话转发，更是下一代 Agent 操作系统**
+**MioChat —— 不仅仅是对话转发，更是下一代 Agent 操作系统**
+
+开源的、模型无关的 Agent 运行时：**Agent / Session / SubAgent 三级上下文模型**、V3 Hook 切面、MCP 与 Skills 双标准工具生态、多渠道接入，以及可无人值守长跑的定时自治。
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.19.0-brightgreen.svg)](https://nodejs.org/)
@@ -25,7 +29,7 @@ Mio-Chat 是一个由多个模块构成的完整 Agent 生态系统：
 | :--- | :--- | :--- |
 | **Backend** | [Pretend-to/mio-chat-backend](https://github.com/Pretend-to/mio-chat-backend) | **(当前仓库)** 核心运行环境、Hook 架构、插件系统 |
 | **Frontend** | [Pretend-to/mio-chat-frontend](https://github.com/Pretend-to/mio-chat-frontend) | 基于 Vue 3 + Element Plus 的沉浸式 Agent 交互界面 |
-| **Renderer** | [Pretend-to/mio-markdown](https://github.com/Pretend-to/mio-markdown) | 专为 AI 深度定制的 Markdown 渲染引擎，支持 Artifacts |
+| **Renderer** | [Pretend-to/mio-previewer](https://github.com/Pretend-to/mio-previewer) | 专为 AI 深度定制的 Markdown 渲染引擎，支持 Artifacts |
 | **Plugins** | [Pretend-to/awesome-miochat-plugins](https://github.com/Pretend-to/awesome-miochat-plugins) | 官方及社区维护的插件、Skill、Hook 集合仓库 |
 
 ## 为什么做它
@@ -85,6 +89,37 @@ Mio-Chat 是一个由多个模块构成的完整 Agent 生态系统：
 - **独立灵魂与记忆持久化**：每个渠道独立绑定 AgentId，拥有专属灵魂设定（Soul）、长期记忆（GlobalMem）、会话结晶（Crystal），并支持 `/soul`、`/model`、`/sessions` 等全套 Slash 交互命令。
 
 <img src="./docs/assets/screenshots/channels.png" width="800" alt="MioChat 微信渠道管理与多渠道接入界面" />
+
+### 🧬 Agent · Session · SubAgent：三级上下文模型
+把"一个机器人绑一个窗口"升级为可编排、可隔离、可长跑的智能体运行时。
+
+**① Agent 是主体，Channel 只是入口**
+
+- Agent 拥有名称、头像、人格（Soul）、模型、工具、技能与长期记忆；Message、Chunk、ToolCall、Crystal、PendingMemory 全部通过 Session 归属到 Agent。
+- Channel 只保存平台、账号凭据、连接状态与协议能力，**不拥有 Agent、不拥有模型、不拥有人格、也不拥有聊天记录**。
+- 二者是**多对多**：同一个 Agent 可以同时出现在 Web、微信等多个入口；同一个入口也可以挂载多个 Agent —— 这正是下面「多 Agent 混合群组」的地基。
+
+**② Session 是上下文单位，子 Session 构成一棵树**
+
+一个 Agent 可以有多个 Session，Session 通过 `parentSessionId` 派生出有向树。子 Session 承载 SubAgent 与任意隔离执行上下文，与父 Session 共享同一个 Agent 与 Channel，但**各自独立持有** MessageChain、运行 FIFO 与锁、LLM 调用历史、工具调用记录、超时与取消信号。
+
+```text
+Agent
+└── Session（主）              ← 用户可见的主消息链
+    ├── Session（子）：行情调研   ← 自有上下文，不占主窗口
+    │   └── Run: 09-05 / 09-06 / 09-07
+    └── Session（子）：日报编辑
+        └── Run: 09-05 / 09-06 / 09-07
+```
+
+**③ SubAgent 是两级编排：RunGroup / Run**
+
+- **RunGroup** 是一次编排事务，**Run** 是其中单个执行单元；多个 Run 默认并行，用 `dependsOn` 声明 DAG 依赖即可串行。
+- 每个 Run 使用独立 child Session，**不会创建永久 Agent**；工具权限是当前 Agent 有效工具集的**子集，并在创建 Run 时冻结**。
+- `sessionPolicy` 控制上下文延续：`fresh` 每次全新隔离；`persistent` 复用同一个 child Session，后续用 `continue` 把新一轮追加在尾部 —— 长周期任务因此能"越跑越懂"。
+- **完成后只唤醒主 Agent 并汇报 groupId / runId，不注入结果正文**；主 Agent 主动 `read_result` 拉取。父 Session 默认只看到最终摘要或产物引用，看不到子任务的搜索与工具调用全过程。
+
+**为什么这样切**：主 Session 的消息链保持稳定，才能持续命中 Prompt Cache；重活与脏活留在子上下文中，主窗口不被噪声挤占 —— 这是"能演示"与"能无人值守跑一周而不丢上下文"之间的差别。
 
 ### 🧠 多 Agent 混合群组
 打破单 Agent 孤岛，实现异构 LLM 与多元人格的集群智慧。

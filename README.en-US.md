@@ -1,8 +1,12 @@
 <div align="center">
 
+<h1>MioChat</h1>
+
 <img src="https://s3.krumio.com/file/web/eadf69/miochat-logo.gif" width="600" alt="MioChat Logo" />
 
-**Not just a chat relay — the next-generation Agent OS.**
+**MioChat — not just a chat relay, but the next-generation Agent OS.**
+
+An open-source, model-agnostic Agent runtime: a **three-level context model of Agent / Session / SubAgent**, V3 Hook aspects, a dual-standard tool ecosystem (MCP + Skills), multi-channel ingress, and scheduled autonomy that can run unattended.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.19.0-brightgreen.svg)](https://nodejs.org/)
@@ -25,7 +29,7 @@ Mio-Chat is a complete **Agent ecosystem** built from multiple modules:
 | :--- | :--- | :--- |
 | **Backend** | [Pretend-to/mio-chat-backend](https://github.com/Pretend-to/mio-chat-backend) | **(this repo)** core runtime, Hook architecture, plugin system |
 | **Frontend** | [Pretend-to/mio-chat-frontend](https://github.com/Pretend-to/mio-chat-frontend) | immersive agent UI built on Vue 3 + Element Plus |
-| **Renderer** | [Pretend-to/mio-markdown](https://github.com/Pretend-to/mio-markdown) | Markdown rendering engine deeply customized for AI, with Artifacts support |
+| **Renderer** | [Pretend-to/mio-previewer](https://github.com/Pretend-to/mio-previewer) | Markdown rendering engine deeply customized for AI, with Artifacts support |
 | **Plugins** | [Pretend-to/awesome-miochat-plugins](https://github.com/Pretend-to/awesome-miochat-plugins) | official & community plugin / Skill / Hook collections |
 
 ## Why it exists
@@ -84,6 +88,37 @@ Seamlessly embed Agents into real-world IM apps. *Currently in Beta stage, debut
 - **Independent Soul & Memory Persistence**: Each Channel is mapped to a dedicated AgentId with isolated Soul persona, GlobalMem long-term facts, and session Crystal memories, supported by `/soul`, `/model`, and `/sessions` Slash commands.
 
 <img src="./docs/assets/screenshots/channels.png" width="800" alt="MioChat WeChat Channel Management & Multi-channel Gateway" />
+
+### 🧬 Agent · Session · SubAgent: a three-level context model
+Turning "one bot bound to one window" into an orchestratable, isolatable, long-running agent runtime.
+
+**① The Agent is the subject; a Channel is only ingress**
+
+- An Agent owns its name, avatar, soul/persona, model, tools, skills and long-term memory. Messages, chunks, tool calls, crystals and pending memories all belong to an Agent *through* a Session.
+- A Channel stores only platform, credentials, connection state and protocol capabilities. It **owns no Agent, no model, no persona, and no chat history**.
+- The relation is **many-to-many**: one Agent can appear on Web and WeChat at the same time, and one endpoint can host several Agents — which is exactly the foundation of "Multi-Agent hybrid groups" below.
+
+**② A Session is the context unit; child Sessions form a tree**
+
+One Agent can hold many Sessions, and `parentSessionId` derives them into a directed tree. Child Sessions carry SubAgents and any isolated execution context. They share the Agent and Channel with their parent, yet **independently hold** their own MessageChain, run FIFO and lock, LLM call history, tool-call records, and timeout/cancel signals.
+
+```text
+Agent
+└── Session (main)            ← user-visible main message chain
+    ├── Session (child): market research   ← own context, never eats the main window
+    │   └── Run: 09-05 / 09-06 / 09-07
+    └── Session (child): daily report editor
+        └── Run: 09-05 / 09-06 / 09-07
+```
+
+**③ SubAgent is a two-level orchestration: RunGroup / Run**
+
+- A **RunGroup** is one orchestration transaction; a **Run** is a single execution unit. Multiple Runs are parallel by default — declare `dependsOn` to turn them into a serial DAG.
+- Every Run uses its own child Session and **never creates a permanent Agent**. Tool permissions are a **subset of the parent Agent's effective tools, frozen at Run creation time**.
+- `sessionPolicy` controls context continuity: `fresh` gives full isolation each time, while `persistent` reuses the same child Session so `continue` appends a new round to the tail — long-lived jobs therefore get better the longer they run.
+- **On completion the SubAgent only wakes the main Agent with a groupId/runId, without injecting the result body.** The main Agent pulls it via `read_result`. By default a parent Session sees only the final summary or artifact references, never the child's full search and tool-call trace.
+
+**Why split it this way**: keeping the main Session's message chain stable is what keeps hitting the Prompt Cache, while heavy and dirty work stays in child contexts so the main window is never crowded out. That is the difference between "a demo" and "a week of unattended runs without losing context".
 
 ### 🧠 Multi-Agent hybrid groups
 Break the single-agent silo; run a swarm of heterogeneous LLMs and personas together.
