@@ -2,13 +2,14 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
-  applyChannelToolPolicy,
+  applyAgentToolPolicy,
   evaluateToolAccess,
-  getChannelToolNames,
+  getAgentToolNames,
   getPluginToolNames,
   isToolAllowed,
 } from '../../lib/chat/llm/toolPolicy.js'
 import { ChatEventFactory } from '../../lib/chat/llm/events/ChatEventFactory.js'
+import ManageScheduledTasks from '../../lib/plugins/ai-plugin/tools/cron.js'
 import SentinelTool from '../../lib/plugins/ai-plugin/tools/sentinel.js'
 
 function tool(name, options = {}) {
@@ -27,8 +28,8 @@ test('Agent policy exposes the dedicated manager and three execution plugin sets
               'ai-plugin',
               [
                 tool('memory_mid_1'),
-                tool('channel_action_mid_1', {
-                  access: { scene: { sources: ['channel'] } },
+                tool('agent_action_mid_1', {
+                  access: { requires: { agentContext: true } },
                 }),
               ],
             ],
@@ -94,7 +95,7 @@ test('Agent policy exposes the dedicated manager and three execution plugin sets
         },
       },
     }
-    assert.equal(applyChannelToolPolicy(event), false)
+    assert.equal(applyAgentToolPolicy(event), false)
     assert.deepEqual(event.body.settings.toolCallSettings, {
       mode: 'NONE',
       passthrough: true,
@@ -107,10 +108,10 @@ test('Agent policy exposes the dedicated manager and three execution plugin sets
       channel: { type: 'weixin-ilink' },
       source: 'channel',
     })
-    assert.equal(applyChannelToolPolicy(channelEvent), true)
+    assert.equal(applyAgentToolPolicy(channelEvent), true)
     assert.deepEqual(channelEvent.body.settings.toolCallSettings.tools, [
       'memory_mid_1',
-      'channel_action_mid_1',
+      'agent_action_mid_1',
       'agent_profile_mid_1',
       'agent_model_mid_1',
       'agent_session_mid_1',
@@ -123,9 +124,9 @@ test('Agent policy exposes the dedicated manager and three execution plugin sets
       'write_mid_1',
       'replace_mid_1',
     ])
-    assert.deepEqual(getChannelToolNames(channelEvent), [
+    assert.deepEqual(getAgentToolNames(channelEvent), [
       'memory_mid_1',
-      'channel_action_mid_1',
+      'agent_action_mid_1',
       'agent_profile_mid_1',
       'agent_model_mid_1',
       'agent_session_mid_1',
@@ -138,13 +139,25 @@ test('Agent policy exposes the dedicated manager and three execution plugin sets
       'write_mid_1',
       'replace_mid_1',
     ])
+    const webAgentEvent = ChatEventFactory.createMock({
+      agentId: 'agent-1',
+      body: {},
+      channel: null,
+      sessionId: 'session-1',
+      source: 'web',
+    })
+    assert.equal(applyAgentToolPolicy(webAgentEvent), true)
+    assert.deepEqual(
+      webAgentEvent.body.settings.toolCallSettings.tools,
+      channelEvent.body.settings.toolCallSettings.tools,
+    )
     assert.deepEqual(getPluginToolNames('other-plugin'), ['other_mid_1'])
   } finally {
     global.middleware = previous
   }
 })
 
-test('Task policy keeps its explicit tool allowlist even with channel context', () => {
+test('Task policy keeps its explicit tool allowlist even with Agent context', () => {
   const event = ChatEventFactory.createMock({
     channel: { type: 'weixin-ilink' },
     settings: {
@@ -153,11 +166,11 @@ test('Task policy keeps its explicit tool allowlist even with channel context', 
     source: 'channel',
     triggerKind: 'task',
   })
-  assert.equal(applyChannelToolPolicy(event), false)
+  assert.equal(applyAgentToolPolicy(event), false)
   assert.deepEqual(event.settings.toolCallSettings.tools, ['task_tool'])
 })
 
-test('non-admin Channel principals cannot see admin tools and execution allowlists are exact', () => {
+test('non-admin Agent principals cannot see admin tools and execution allowlists are exact', () => {
   const previous = global.middleware
   global.middleware = {
     plugins: [
@@ -183,7 +196,7 @@ test('non-admin Channel principals cannot see admin tools and execution allowlis
       source: 'channel',
       user: { isAdmin: false },
     }
-    assert.deepEqual(getChannelToolNames(context), ['public_tool_mid_1'])
+    assert.deepEqual(getAgentToolNames(context), ['public_tool_mid_1'])
     const event = {
       settings: { toolCallSettings: { tools: ['public_tool_mid_1'] } },
     }
@@ -245,5 +258,53 @@ test('admin Web Agent can execute and meta-call the ai-plugin sentinel tool', ()
     )
   } finally {
     global.middleware = previous
+  }
+})
+
+test('Agent-only tools are stable across transports and hidden from frontend OpenAI sessions', () => {
+  const agentOnlyTools = [new SentinelTool(), new ManageScheduledTasks()]
+  const agentPrincipal = {
+    id: 'admin:1',
+    isAdmin: true,
+    role: 'system_admin',
+  }
+  const agentContexts = ['web', 'channel', 'internal', 'scheduled_task'].map(
+    (source) => ({
+      agentId: 'agent-1',
+      conversationKind: 'direct',
+      principal: agentPrincipal,
+      sessionId: 'session-1',
+      source,
+      triggerKind: source === 'scheduled_task' ? 'task' : 'interactive',
+      user: agentPrincipal,
+    }),
+  )
+
+  const webSession = {
+    conversationKind: 'direct',
+    principal: agentPrincipal,
+    sessionId: null,
+    source: 'web',
+    triggerKind: 'interactive',
+    user: agentPrincipal,
+  }
+  for (const toolInstance of agentOnlyTools) {
+    const schemas = agentContexts.map((event) =>
+      toolInstance.json('openai', { event }),
+    )
+    assert.ok(schemas.every(Boolean), toolInstance.name)
+    for (const schema of schemas.slice(1)) {
+      assert.deepEqual(schema, schemas[0], toolInstance.name)
+    }
+    assert.ok(
+      agentContexts.every((event) =>
+        evaluateToolAccess(toolInstance, { event }, 'execute').allowed,
+      ),
+    )
+    assert.equal(toolInstance.json('openai', { event: webSession }), null)
+    assert.equal(
+      evaluateToolAccess(toolInstance, { event: webSession }, 'execute').reason,
+      'agent_context_required',
+    )
   }
 })

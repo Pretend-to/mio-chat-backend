@@ -101,12 +101,12 @@ test('MetaTool - action: list', async () => {
     }
   }
 
-  class ChannelOnlyTool extends MioFunction {
+  class AgentOnlyTool extends MioFunction {
     constructor() {
       super({
-        access: { scene: { sources: ['channel'] } },
-        description: 'Channel only tool',
-        name: 'channel_only_tool',
+        access: { requires: { agentContext: true } },
+        description: 'Agent-only tool',
+        name: 'agent_only_tool',
         parameters: { properties: {}, type: 'object' },
       })
       this.func = async () => ({})
@@ -114,18 +114,18 @@ test('MetaTool - action: list', async () => {
   }
 
   const toolA = new ToolA()
-  const channelTool = new ChannelOnlyTool()
+  const agentTool = new AgentOnlyTool()
 
   global.middleware = {
     plugins: [
       {
-        getTools: () => new Map([['plugin-one', [toolA, channelTool]]]),
+        getTools: () => new Map([['plugin-one', [toolA, agentTool]]]),
         name: 'plugin-one',
       },
     ],
   }
 
-  // 1. Web context (channel-scoped tool should be hidden)
+  // 1. Frontend OpenAI WebSession (Agent-scoped tool should be hidden)
   const webList = await meta._execute({
     params: { action: 'list' },
     parentEvent: { body: {} },
@@ -135,14 +135,19 @@ test('MetaTool - action: list', async () => {
   assert.strictEqual(webList.tools[0].name, 'tool_a')
   assert.ok(webList.groups['plugin-one'])
 
-  // 2. Channel context (channel-scoped tool should be visible)
+  // 2. Server Agent context remains visible regardless of transport
   const channelList = await meta._execute({
     params: { action: 'list' },
-    parentEvent: { channel: { id: 'wx' }, source: 'channel' },
+    parentEvent: {
+      agentId: 'agent-1',
+      channel: { id: 'wx' },
+      sessionId: 'session-1',
+      source: 'channel',
+    },
   })
   assert.strictEqual(channelList.success, true)
   assert.strictEqual(channelList.total, 2)
-  assert.ok(channelList.tools.some((t) => t.name === 'channel_only_tool'))
+  assert.ok(channelList.tools.some((t) => t.name === 'agent_only_tool'))
 })
 
 test('MetaTool - action: query', async () => {
@@ -358,7 +363,7 @@ test('MetaTool cannot call a tool not exposed to meta or when meta_tool is not a
   assert.equal(invoked, false)
 })
 
-test('MetaTool can discover and call universal tools (like tts_speech) when parentEvent has core channel tool allowlist', async () => {
+test('MetaTool can discover and call universal tools (like tts_speech) when parentEvent has core Agent tool allowlist', async () => {
   const meta = new MetaTool()
   let ttsInvoked = false
   class UniversalTtsTool extends MioFunction {
@@ -388,9 +393,11 @@ test('MetaTool can discover and call universal tools (like tts_speech) when pare
     ],
   }
 
-  // Channel Agent parent event has core channel tool allowlist (ai-plugin, meta_tool, etc.)
+  // Agent parent event has the core Agent tool allowlist (ai-plugin, meta_tool, etc.)
   const channelParentEvent = {
+    agentId: 'agent-1',
     channel: { type: 'weixin-ilink' },
+    sessionId: 'session-1',
     settings: {
       toolCallSettings: {
         mode: 'AUTO',

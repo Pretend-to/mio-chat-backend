@@ -13,7 +13,7 @@ import { wrapUserMessageWithMetadata } from '../lib/chat/messageTimestamp.js'
 import { coalesceCrystallizeEvents } from '../lib/chat/crystallizationContent.js'
 import sessions from '../lib/server/socket.io/services/sessions.js'
 import streamCache from '../lib/server/socket.io/services/streamCache.js'
-import { getChannelToolNames } from '../lib/chat/llm/toolPolicy.js'
+import { getAgentToolNames } from '../lib/chat/llm/toolPolicy.js'
 import CrystallizationService from '../lib/chat/llm/services/CrystallizationService.js'
 import approvalNotificationBroker from '../lib/approvals/ApprovalNotificationBroker.js'
 import { resolveOrigin } from '../utils/origin.js'
@@ -940,7 +940,7 @@ export function createBackendLlm(opts = {}) {
 
       const finalTools = Array.isArray(ctx.toolNames)
         ? [...ctx.toolNames]
-        : getChannelToolNames({
+        : getAgentToolNames({
             agentId: executionAgentId,
             channel: ctx.channel || { type: 'channel' },
             conversationKind:

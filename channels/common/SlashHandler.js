@@ -21,7 +21,7 @@
  *   - /context 当前话题记忆结晶查看
  *   - /delete 删除会话
  */
-import { getChannelToolNames } from '../../lib/chat/llm/toolPolicy.js'
+import { getAgentToolNames } from '../../lib/chat/llm/toolPolicy.js'
 import { getTriggerService } from '../../lib/triggers/index.js'
 import {
   getSessionYolo,
@@ -171,7 +171,7 @@ export class SlashHandler {
       }
 
       case 'tools': {
-        const tools = getChannelToolNames({
+        const tools = getAgentToolNames({
           agentId: this.memory?.agentId,
           channel: this.channel,
           conversationKind: ctx.isGroup ? 'group' : 'direct',
@@ -467,7 +467,7 @@ export class SlashHandler {
             ? await this.channel.isSessionYoloEnabled(sid)
             : await getSessionYolo(this.memory, sid)
           : false
-        const tools = getChannelToolNames({
+        const tools = getAgentToolNames({
           agentId: this.memory?.agentId,
           channel: this.channel,
           conversationKind: ctx.isGroup ? 'group' : 'direct',

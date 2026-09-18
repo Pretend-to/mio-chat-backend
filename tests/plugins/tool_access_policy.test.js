@@ -64,20 +64,20 @@ test('plugin policy defaults can only be narrowed by a tool policy', () => {
   const tool = createTool({
     access: {
       delegation: 'deny',
-      scene: { sources: ['web', 'channel'] },
+      scene: { conversationKinds: ['direct', 'group'] },
     },
   })
   tool.setPlugin({
     access: {
       requires: { agentContext: true },
-      scene: { sources: ['channel', 'internal'] },
+      scene: { conversationKinds: ['direct'] },
     },
     enabled: true,
     name: 'policy-plugin',
   })
 
   const policy = resolveToolAccess(tool)
-  assert.deepEqual(policy.scene.sources, ['channel'])
+  assert.deepEqual(policy.scene.conversationKinds, ['direct'])
   assert.equal(policy.requires.agentContext, true)
   assert.equal(policy.delegation, 'deny')
   assert.equal(
@@ -99,8 +99,7 @@ test('plugin policy defaults can only be narrowed by a tool policy', () => {
 test('scene and principal requirements compose without legacy flags', () => {
   const tool = createTool({
     access: {
-      requires: { admin: true },
-      scene: { sources: ['channel'] },
+      requires: { admin: true, agentContext: true },
     },
   })
   assert.equal(
@@ -109,12 +108,17 @@ test('scene and principal requirements compose without legacy flags', () => {
       { source: 'web', user: { isAdmin: true } },
       'schema',
     ).reason,
-    'source_not_allowed',
+    'agent_context_required',
   )
   assert.equal(
     evaluateToolAccess(
       tool,
-      { source: 'channel', user: { isAdmin: false } },
+      {
+        agentId: 'agent-1',
+        sessionId: 'session-1',
+        source: 'web',
+        user: { isAdmin: false },
+      },
       'schema',
     ).reason,
     'admin_required',
@@ -122,7 +126,25 @@ test('scene and principal requirements compose without legacy flags', () => {
   assert.equal(
     evaluateToolAccess(
       tool,
-      { source: 'channel', user: { isAdmin: true } },
+      {
+        agentId: 'agent-1',
+        sessionId: 'session-1',
+        source: 'web',
+        user: { isAdmin: true },
+      },
+      'schema',
+    ).allowed,
+    true,
+  )
+  assert.equal(
+    evaluateToolAccess(
+      tool,
+      {
+        agentId: 'agent-1',
+        sessionId: 'session-1',
+        source: 'channel',
+        user: { isAdmin: true },
+      },
       'schema',
     ).allowed,
     true,
@@ -136,6 +158,7 @@ test('historical SessionTurn sources normalize into orthogonal dimensions', () =
       sessionId: 'session-1',
       source: 'subagent',
       subagentRunId: 'run-1',
+      triggerKind: 'task',
     }),
     {
       agentId: 'agent-1',
@@ -144,11 +167,44 @@ test('historical SessionTurn sources normalize into orthogonal dimensions', () =
       principal: {},
       sessionId: 'session-1',
       sessionKind: 'subagent',
-      source: 'internal',
+      sessionOrigin: 'agent',
       subagentRunId: 'run-1',
       toolAllowlist: null,
+      transportSource: 'internal',
       triggerKind: 'task',
     },
+  )
+})
+
+test('session origin is derived from ownership, independently of transport', () => {
+  assert.equal(
+    normalizeToolAccessContext({ source: 'web', user: { isAdmin: true } })
+      .sessionOrigin,
+    'web_session',
+  )
+  assert.equal(
+    normalizeToolAccessContext({
+      agentId: 'agent-1',
+      sessionId: 'session-1',
+      sessionOrigin: 'web_session',
+      source: 'web',
+    }).sessionOrigin,
+    'agent',
+  )
+  assert.equal(
+    normalizeToolAccessContext({
+      sessionOrigin: 'agent',
+      source: 'web',
+    }).sessionOrigin,
+    'web_session',
+  )
+  assert.equal(
+    normalizeToolAccessContext({
+      agentId: 'agent-1',
+      sessionId: 'session-1',
+      source: 'channel',
+    }).sessionOrigin,
+    'agent',
   )
 })
 
