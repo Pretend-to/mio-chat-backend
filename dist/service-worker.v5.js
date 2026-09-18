@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v20";
+const CACHE_VERSION = "v21";
 const SHELL_CACHE = `mio-shell-${CACHE_VERSION}`;
 const ASSET_CACHE = `mio-assets-${CACHE_VERSION}`;
 const MIO_CACHE_PREFIX = "mio-";
@@ -135,9 +135,12 @@ self.addEventListener("fetch", (event) => {
   }
 
   // Network traffic must never wait for cache initialization or cache I/O.
+  // File storage (/f/), plugins (/p/), API, and WebSocket must bypass Service Worker.
   if (
     url.pathname.startsWith("/api/") ||
-    url.pathname.startsWith("/socket.io/")
+    url.pathname.startsWith("/socket.io/") ||
+    url.pathname.startsWith("/f/") ||
+    url.pathname.startsWith("/p/")
   ) {
     return;
   }
