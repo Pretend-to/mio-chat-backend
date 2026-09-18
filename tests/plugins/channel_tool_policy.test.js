@@ -5,6 +5,7 @@ import {
   applyChannelToolPolicy,
   getChannelToolNames,
   getPluginToolNames,
+  isToolAllowed,
 } from '../../lib/chat/llm/toolPolicy.js'
 import { ChatEventFactory } from '../../lib/chat/llm/events/ChatEventFactory.js'
 
@@ -12,7 +13,7 @@ function tool(name, options = {}) {
   return { name, ...options }
 }
 
-test('Channel policy always exposes all three pinned plugin tool sets', () => {
+test('Agent policy exposes the dedicated manager and three execution plugin sets', () => {
   const previous = global.middleware
   global.middleware = {
     plugins: [
@@ -24,7 +25,24 @@ test('Channel policy always exposes all three pinned plugin tool sets', () => {
               'ai-plugin',
               [
                 tool('memory_mid_1'),
-                tool('channel_action_mid_1', { channelOnly: true }),
+                tool('channel_action_mid_1', {
+                  access: { scene: { sources: ['channel'] } },
+                }),
+              ],
+            ],
+          ]),
+      },
+      {
+        access: { requires: { agentContext: true } },
+        name: 'agent-manager-plugin',
+        getTools: () =>
+          new Map([
+            [
+              'agent-manager-plugin',
+              [
+                tool('agent_profile_mid_1'),
+                tool('agent_model_mid_1'),
+                tool('agent_session_mid_1'),
               ],
             ],
           ]),
@@ -51,11 +69,7 @@ test('Channel policy always exposes all three pinned plugin tool sets', () => {
           new Map([
             [
               'file-editor-plugin',
-              [
-                tool('read_mid_1'),
-                tool('write_mid_1'),
-                tool('replace_mid_1'),
-              ],
+              [tool('read_mid_1'), tool('write_mid_1'), tool('replace_mid_1')],
             ],
           ]),
       },
@@ -86,6 +100,7 @@ test('Channel policy always exposes all three pinned plugin tool sets', () => {
     })
 
     const channelEvent = ChatEventFactory.createMock({
+      agentId: 'agent-1',
       body: {},
       channel: { type: 'weixin-ilink' },
       source: 'channel',
@@ -94,6 +109,9 @@ test('Channel policy always exposes all three pinned plugin tool sets', () => {
     assert.deepEqual(channelEvent.body.settings.toolCallSettings.tools, [
       'memory_mid_1',
       'channel_action_mid_1',
+      'agent_profile_mid_1',
+      'agent_model_mid_1',
+      'agent_session_mid_1',
       'bash_mid_1',
       'bash_input_mid_1',
       'read_screen_mid_1',
@@ -106,6 +124,9 @@ test('Channel policy always exposes all three pinned plugin tool sets', () => {
     assert.deepEqual(getChannelToolNames(channelEvent), [
       'memory_mid_1',
       'channel_action_mid_1',
+      'agent_profile_mid_1',
+      'agent_model_mid_1',
+      'agent_session_mid_1',
       'bash_mid_1',
       'bash_input_mid_1',
       'read_screen_mid_1',
@@ -132,4 +153,41 @@ test('Task policy keeps its explicit tool allowlist even with channel context', 
   })
   assert.equal(applyChannelToolPolicy(event), false)
   assert.deepEqual(event.settings.toolCallSettings.tools, ['task_tool'])
+})
+
+test('non-admin Channel principals cannot see admin tools and execution allowlists are exact', () => {
+  const previous = global.middleware
+  global.middleware = {
+    plugins: [
+      {
+        name: 'ai-plugin',
+        getTools: () =>
+          new Map([
+            [
+              'ai-plugin',
+              [
+                tool('public_tool_mid_1'),
+                tool('admin_tool_mid_1', {
+                  access: { requires: { admin: true } },
+                }),
+              ],
+            ],
+          ]),
+      },
+    ],
+  }
+  try {
+    const context = {
+      source: 'channel',
+      user: { isAdmin: false },
+    }
+    assert.deepEqual(getChannelToolNames(context), ['public_tool_mid_1'])
+    const event = {
+      settings: { toolCallSettings: { tools: ['public_tool_mid_1'] } },
+    }
+    assert.equal(isToolAllowed(event, 'public_tool'), true)
+    assert.equal(isToolAllowed(event, 'admin_tool_mid_1'), false)
+  } finally {
+    global.middleware = previous
+  }
 })

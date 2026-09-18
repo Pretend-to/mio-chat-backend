@@ -172,9 +172,9 @@ importers:
         specifier: ^7.9.0
         version: 7.9.0(@types/react@19.2.14)(better-sqlite3@12.9.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
 
-  lib/plugins/anyui-plugin: {}
+  lib/plugins/agent-manager-plugin: {}
 
-  lib/plugins/channel-manager-plugin: {}
+  lib/plugins/anyui-plugin: {}
 
   lib/plugins/edge-tts-plugin:
     dependencies:

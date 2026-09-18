@@ -7,6 +7,7 @@ import MetaTool, {
   extractTargetCall,
 } from '../../lib/plugins/ai-plugin/tools/meta_tool.js'
 import { MioFunction } from '../../lib/function.js'
+import { parseConcatenatedJson } from '../../utils/jsonParser.js'
 
 test('MetaTool - parameter extraction', () => {
   // 1. Standard call parameters
@@ -38,6 +39,53 @@ test('MetaTool - parameter extraction', () => {
   assert.deepStrictEqual(q3, ['replace'])
 })
 
+test('MetaTool - repairs a missing outer brace without string-encoding HTML', async () => {
+  class PublishTool extends MioFunction {
+    constructor() {
+      super({
+        description: 'Publish HTML',
+        name: 'publish',
+        parameters: {
+          properties: { html: { type: 'string' } },
+          required: ['html'],
+          type: 'object',
+        },
+      })
+      this.func = async (event) => ({ html: event.params.html, success: true })
+    }
+  }
+
+  const publish = new PublishTool()
+  global.middleware = {
+    plugins: [{ getTools: () => new Map([['web', [publish]]]), name: 'web' }],
+  }
+  const raw =
+    '{"action":"call","tool_name":"publish","schema":{"html":"<div data-json=\\"{&quot;x&quot;:1}\\">hello</div>"}'
+  const params = parseConcatenatedJson(raw)
+  assert.equal(params.action, 'call')
+  assert.deepEqual(params.schema, {
+    html: '<div data-json="{&quot;x&quot;:1}">hello</div>',
+  })
+
+  const result = await new MetaTool()._execute({ params })
+  assert.equal(result.success, true)
+  assert.equal(result.html, params.schema.html)
+})
+
+test('JSON repair refuses truncated strings and mismatched delimiters', () => {
+  assert.deepStrictEqual(
+    parseConcatenatedJson('{"action":"call","schema":{"html":"unterminated}'),
+    {},
+  )
+  assert.deepStrictEqual(parseConcatenatedJson('{"schema":[}'), {})
+})
+
+test('MetaTool - does not silently route empty parameters to list', async () => {
+  const result = await new MetaTool()._execute({ params: {} })
+  assert.equal(result.success, false)
+  assert.match(result.error, /action/)
+})
+
 test('MetaTool - action: list', async () => {
   const meta = new MetaTool()
 
@@ -55,7 +103,7 @@ test('MetaTool - action: list', async () => {
   class ChannelOnlyTool extends MioFunction {
     constructor() {
       super({
-        channelOnly: true,
+        access: { scene: { sources: ['channel'] } },
         description: 'Channel only tool',
         name: 'channel_only_tool',
         parameters: { properties: {}, type: 'object' },
@@ -76,7 +124,7 @@ test('MetaTool - action: list', async () => {
     ],
   }
 
-  // 1. Web context (channelOnly tool should be hidden)
+  // 1. Web context (channel-scoped tool should be hidden)
   const webList = await meta._execute({
     params: { action: 'list' },
     parentEvent: { body: {} },
@@ -86,7 +134,7 @@ test('MetaTool - action: list', async () => {
   assert.strictEqual(webList.tools[0].name, 'tool_a')
   assert.ok(webList.groups['plugin-one'])
 
-  // 2. Channel context (channelOnly tool should be visible)
+  // 2. Channel context (channel-scoped tool should be visible)
   const channelList = await meta._execute({
     params: { action: 'list' },
     parentEvent: { channel: { id: 'wx' }, source: 'channel' },
@@ -102,7 +150,7 @@ test('MetaTool - action: query', async () => {
   class FileEditorTool extends MioFunction {
     constructor() {
       super({
-        adminOnly: true,
+        access: { requires: { admin: true } },
         description: 'Replace code in file',
         name: 'replace',
         parameters: {
@@ -158,6 +206,7 @@ test('MetaTool - action: query', async () => {
       action: 'query',
       tools: ['replace', 'tts_speech', 'non_existent_tool'],
     },
+    parentEvent: { user: { isAdmin: true, role: 'admin' } },
   })
 
   assert.strictEqual(res.success, true)
@@ -165,7 +214,6 @@ test('MetaTool - action: query', async () => {
 
   const queriedReplace = res.tools.find((t) => t.name === 'replace')
   assert.strictEqual(queriedReplace.success, true)
-  assert.strictEqual(queriedReplace.adminOnly, true)
   assert.ok(queriedReplace.parameters.properties.filePath)
 
   const queriedTts = res.tools.find((t) => t.name === 'tts_speech')
@@ -243,6 +291,41 @@ test('MetaTool - action: call without extraRender duplication', async () => {
   assert.strictEqual(extraRenderCallCount, 1)
 })
 
+test('MetaTool cannot call a tool outside the parent execution allowlist', async () => {
+  const meta = new MetaTool()
+  let invoked = false
+  class HiddenTool extends MioFunction {
+    constructor() {
+      super({
+        description: 'Hidden tool',
+        name: 'hidden_tool',
+        parameters: { properties: {}, type: 'object' },
+      })
+      this.func = async () => {
+        invoked = true
+        return { success: true }
+      }
+    }
+  }
+  global.middleware = {
+    plugins: [
+      {
+        getTools: () => new Map([['hidden', [new HiddenTool()]]]),
+        name: 'hidden-plugin',
+      },
+    ],
+  }
+  const result = await meta._execute({
+    params: { action: 'call', tool_name: 'hidden_tool' },
+    parentEvent: {
+      settings: { toolCallSettings: { tools: ['meta_tool'] } },
+    },
+  })
+  assert.equal(result.success, false)
+  assert.match(result.error, /not found/)
+  assert.equal(invoked, false)
+})
+
 test('MetaTool - text display echo (getDisplayName)', () => {
   const meta = new MetaTool()
 
@@ -283,13 +366,13 @@ test('MetaTool - text display echo (getDisplayName)', () => {
     'Querying schema: replace, write',
   )
 
-  // 3. call display name (delegates to target tool's getDisplayName)
+  // 3. call display name stays generic until access is evaluated
   assert.strictEqual(
     meta.getDisplayName({
       action: 'call',
       schema: { filePath: 'index.js' },
       tool_name: 'replace',
     }),
-    'Replacing in index.js',
+    'Calling replace',
   )
 })
