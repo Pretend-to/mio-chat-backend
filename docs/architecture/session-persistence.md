@@ -1,5 +1,10 @@
 # MioChat Session Persistence Architecture v0.4
 
+> Identity/lifecycle update (2026-09-15): Agent/Channel 多对多、Session 父子关系、
+> 当前 Session 和删除语义由
+> [`channel-agent-refactor/Spec.md`](./channel-agent-refactor/Spec.md) 取代本文中的旧关系假设；
+> 本文的 Message/Chunk 持久化合同继续有效。
+>
 > 状态：database-only 实现与自动迁移已完成，待合并
 > 日期：2026-08-31
 > 范围：Channel 会话、流式回复、结晶和旧 JSON 数据迁移
@@ -286,22 +291,10 @@ Channel 与 Session 兼容层仍保留四种显式诊断模式：
 的基准状态并补齐标记。完成标记存在时，实例密钥缺失或与 `MIOCHAT_ENC_KEY` 不一致也会
 阻止启动，绝不会自动轮换密钥。
 
-以下命令保留用于只读诊断和人工复验（均在实例后端根目录执行）：
-
-```bash
-# 1. 只读盘点；输出 manifestHash，不写 DB 和旧文件
-pnpm db:migrate:channel-storage
-
-# 2. 使用盘点输出的精确 hash 执行；有 Channel token 时必须提供 32-byte key
-MIOCHAT_ENC_KEY='<64 hex or canonical base64>' \
-  pnpm db:migrate:channel-storage --apply --manifest '<manifestHash>'
-
-# 3. 独立复验
-MIOCHAT_ENC_KEY='<same key>' pnpm db:migrate:channel-storage --verify
-```
-
-`--apply` 没有精确匹配当前盘点 hash 时会拒绝执行。迁移器和四模式运行时均不会
-自动删除、改名或清空旧文件。
+旧版独立 JSON 迁移器及其命令入口已随 Agent/Channel 领域模型切换移除。当前启动阶段
+只负责 SQLite schema diff 同步、同步前备份和实例密钥检查，不再自动导入旧 JSON。
+仍需保留旧数据的部署必须先使用旧版本完成导入并验证备份，再升级到当前版本；当前
+运行时不会自动删除、改名或清空遗留文件。
 
 升级通过应用重启提供的维护窗口完成。init 成功返回前不会启动 Channel、Trigger 或
 HTTP 服务；导入事务和逐源验证完成后直接进入 `database`。若失败，服务保持停止并

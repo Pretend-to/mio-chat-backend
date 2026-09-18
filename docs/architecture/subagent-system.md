@@ -1,5 +1,14 @@
 # MioChat Channel SubAgent 开发设计
 
+> 本文是早期设计背景材料。异步 SubAgent 的最终实施计划以
+> [`channel-agent-refactor/SubAgentAsyncDevelopmentPlan.md`](./channel-agent-refactor/SubAgentAsyncDevelopmentPlan.md)
+> 为准：不创建 Task Session，不新增与 Session 一对一的 Thread 身份表，普通主 Session
+> 负责触发、编排、验收和最终结论。
+>
+> Identity/lifecycle update (2026-09-15): SubAgent 继续使用 child Session、不会创建永久
+> Agent；Agent/Channel Binding、统一执行入口和删除语义以
+> [`channel-agent-refactor/Spec.md`](./channel-agent-refactor/Spec.md) 为准。
+>
 > 版本：v0.2
 > 状态：Channel-first 设计稿，尚未实现
 > 日期：2026-09-05
@@ -59,16 +68,16 @@ Channel
 
 ### 2.1 可以直接复用的基础设施
 
-| 现有能力 | 代码位置 | 复用方式 |
-| --- | --- | --- |
-| Channel 运行实例与 Agent/Channel 绑定 | `channels/ChannelRuntime.js` | SubAgent 解析目标 Channel，复用其 `chn` 和 `memory` |
-| Session 创建、查询、消息持久化 | `lib/chat/persistence/SessionPersistence.js`、`lib/chat/persistence/DatabaseMemoryStore.js` | 子任务创建独立 Session，写入同一 Agent 的持久化空间 |
-| Session 级 FIFO | `channels/common/BaseChannel.js::_enqueueSession()` | 子 Session 使用自己的 `sessionId`，天然与主 Session 隔离 |
-| 用户消息先落盘、assistant 生命周期和流式 Chunk | `channels/common/BaseChannel.js::_processChat()` | 子任务沿用同一套消息一致性和崩溃恢复语义 |
-| LLM 统一调用入口 | `channels/llm.js` | 子任务使用同一 LLM service，但传入独立上下文 |
-| 全局插件实例和工具注册 | `lib/middleware.js`、`lib/plugin.js` | 插件只在进程启动时加载一次，子任务只拿工具快照 |
-| 纯时间任务调度 | `lib/cron.js` | Cron 只负责创建/唤醒 SubAgentRun，不再把复杂工作塞入主 Session |
-| 条件唤醒 | `lib/triggers/` | Sentinel 触发 SubAgentRun 或投递结构化结果，不直接污染主上下文 |
+| 现有能力                                       | 代码位置                                                                                    | 复用方式                                                       |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Channel 运行实例与 Agent/Channel 绑定          | `channels/ChannelRuntime.js`                                                                | SubAgent 解析目标 Channel，复用其 `chn` 和 `memory`            |
+| Session 创建、查询、消息持久化                 | `lib/chat/persistence/SessionPersistence.js`、`lib/chat/persistence/DatabaseMemoryStore.js` | 子任务创建独立 Session，写入同一 Agent 的持久化空间            |
+| Session 级 FIFO                                | `channels/common/BaseChannel.js::_enqueueSession()`                                         | 子 Session 使用自己的 `sessionId`，天然与主 Session 隔离       |
+| 用户消息先落盘、assistant 生命周期和流式 Chunk | `channels/common/BaseChannel.js::_processChat()`                                            | 子任务沿用同一套消息一致性和崩溃恢复语义                       |
+| LLM 统一调用入口                               | `channels/llm.js`                                                                           | 子任务使用同一 LLM service，但传入独立上下文                   |
+| 全局插件实例和工具注册                         | `lib/middleware.js`、`lib/plugin.js`                                                        | 插件只在进程启动时加载一次，子任务只拿工具快照                 |
+| 纯时间任务调度                                 | `lib/cron.js`                                                                               | Cron 只负责创建/唤醒 SubAgentRun，不再把复杂工作塞入主 Session |
+| 条件唤醒                                       | `lib/triggers/`                                                                             | Sentinel 触发 SubAgentRun 或投递结构化结果，不直接污染主上下文 |
 
 ### 2.2 必须明确的边界
 
@@ -425,16 +434,16 @@ running ───────► waiting_tool ───────► running
 
 状态语义：
 
-| 状态 | 含义 | 是否允许重试 |
-| --- | --- | --- |
-| `queued` | 已持久化，等待执行槽位 | 是 |
-| `running` | 正在执行 LLM 或工具 | 需 heartbeat 判断 |
-| `waiting_tool` | 等待工具结果或异步资源 | 是，但必须去重 |
-| `completed` | 已得到最终结果 | 否，除非人工重新运行 |
-| `failed` | 业务、模型或持久化失败 | 按错误类型决定 |
-| `cancelled` | 用户、父任务或系统取消 | 默认否 |
-| `expired` | 超过 deadline | 可人工重试 |
-| `interrupted` | 进程退出或执行租约丢失 | 按幂等策略恢复 |
+| 状态           | 含义                   | 是否允许重试         |
+| -------------- | ---------------------- | -------------------- |
+| `queued`       | 已持久化，等待执行槽位 | 是                   |
+| `running`      | 正在执行 LLM 或工具    | 需 heartbeat 判断    |
+| `waiting_tool` | 等待工具结果或异步资源 | 是，但必须去重       |
+| `completed`    | 已得到最终结果         | 否，除非人工重新运行 |
+| `failed`       | 业务、模型或持久化失败 | 按错误类型决定       |
+| `cancelled`    | 用户、父任务或系统取消 | 默认否               |
+| `expired`      | 超过 deadline          | 可人工重试           |
+| `interrupted`  | 进程退出或执行租约丢失 | 按幂等策略恢复       |
 
 ### 7.1 创建和执行顺序
 
@@ -528,8 +537,10 @@ await channel.runSessionTurn(sessionId, prompt, {
 
 #### `parent`
 
-子 Agent 完成后向父任务返回结构化结果。同步 `delegate` 作为一个 tool result；
-异步 `spawn` 则向父 Session 排队一条短摘要事件，不能伪装成已经完成的旧 tool call。
+子 Agent 完成后自动唤醒父 Session。同步 `delegate` 作为一个 tool result；异步
+`spawn` 只向父 Session 排队包含 group/run ID 和读取指令的短唤醒消息，不能伪装成
+已经完成的旧 tool call，也不预注入结果正文。主 Agent 被唤醒后通过
+`status/read_result` 读取持久化结果。
 
 结果格式建议：
 
@@ -727,14 +738,13 @@ permission policy
 
 ### 11.3 权限继承
 
-默认继承 Channel/Agent 的基础权限，但进一步收窄：
+默认冻结继承当前主 Agent 的完整有效权限：
 
-- `adminOnly` 工具不自动开放给子任务；
-- `channelOnly` 工具只有在目标 Channel 明确匹配时才可用；
-- `subagent` 工具默认禁止递归；
-- 交互式确认工具在后台 Run 中默认失败关闭，不等待用户；
-- 文件工具的工作目录和读写范围必须在 Run policy 中明确；
-- Sentinel 的 AdminOnly 受信任脚本规则不应自动扩展为 SubAgent 的 Shell 权限。
+- 未提供 Run `tools` 时继承父执行上下文的完整工具快照；
+- 提供 Run `tools` 时只能取父快照子集，不能提权；
+- `adminOnly`、`channelOnly`、Shell AST、文件作用域和审批仍由原工具策略判定；
+- 权限快照不再主动剔除 `subagent`；嵌套派发是否成立仍由 Run 层级、递归深度、预算和 deadline 约束判定；
+- 热重载不会改变已创建 Run 的权限快照，新 Run 才读取新权限。
 
 ## 12. 日报示例：持久化行情调研 + 持久化日报编辑
 
@@ -778,13 +788,13 @@ Cron 08:00
 
 ## 13. Cron、Sentinel 和 SubAgent 的职责
 
-| 组件 | 负责什么 | 不负责什么 |
-| --- | --- | --- |
-| Cron | 到点解析 reuseKey 并创建/唤醒 SubAgentRun | 不负责外部条件轮询，不直接拼主 Session |
-| Sentinel | 自己 loop，条件满足后发事件 | 不负责复杂日报编辑，不直接重写主 MessageChain |
-| SubAgentManager | Run 生命周期、上下文、预算、恢复和投递 | 不负责实现业务调研逻辑 |
-| Channel Session | 子任务上下文和消息持久化 | 不成为后台任务的全局调度器 |
-| 主 Agent | 用户可见对话和最终决策 | 不承载所有后台中间过程 |
+| 组件            | 负责什么                                  | 不负责什么                                    |
+| --------------- | ----------------------------------------- | --------------------------------------------- |
+| Cron            | 到点解析 reuseKey 并创建/唤醒 SubAgentRun | 不负责外部条件轮询，不直接拼主 Session        |
+| Sentinel        | 自己 loop，条件满足后发事件               | 不负责复杂日报编辑，不直接重写主 MessageChain |
+| SubAgentManager | Run 生命周期、上下文、预算、恢复和投递    | 不负责实现业务调研逻辑                        |
+| Channel Session | 子任务上下文和消息持久化                  | 不成为后台任务的全局调度器                    |
+| 主 Agent        | 用户可见对话和最终决策                    | 不承载所有后台中间过程                        |
 
 Sentinel 触发 SubAgent 时，事件至少携带：
 
@@ -860,9 +870,8 @@ SubAgent 不是安全沙箱。第一版至少实现：
 - 文件 artifact 必须记录来源 Run 和路径；
 - 取消时清理 abort handler、timer 和 pending delivery。
 
-`adminOnly` 只说明调用入口受信任，不等于可以忽略 Run 级权限。尤其不能因为
-Sentinel 当前允许受信任本地脚本，就让所有 SubAgent 自动获得 Shell 或文件系统
-全权限。
+SubAgent 不维护独立的静态工具安全白名单。它只能继承父执行上下文已经拥有的能力，
+并继续经过原工具的安全检查、审批、作用域与审计链路；Run 级 `tools` 只负责收窄。
 
 ## 16. 观测和管理
 
