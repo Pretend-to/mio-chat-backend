@@ -190,6 +190,27 @@ test('SubAgent Phase 1 persistence, ownership, idempotency and state machine', a
     (await service.getGroup(continued.id)).status,
     GROUP_STATUS.DISPATCHED,
   )
+
+  // listGroups should deduplicate runs by sessionId and only keep the latest
+  const groups = await service.listGroups({
+    agentId: continued.agentId,
+    parentSessionId: continued.parentSessionId,
+  })
+  const targetGroup = groups.find((g) => g.id === continued.id)
+  assert.equal(targetGroup.runs.length, 1)
+  assert.equal(targetGroup.runs[0].id, revision.id)
+  assert.equal(targetGroup.runs[0].sessionId, continued.runs[0].sessionId)
+
+  // continueRun should allow continuing a stopped/cancelled run
+  await service.transitionRun(revision.id, RUN_STATUS.CANCELLED, {
+    cancelReason: 'stopped_by_user',
+  })
+  const thirdRevision = await service.continueRun(revision.id, {
+    instruction: 'Resume after stop',
+  })
+  assert.equal(thirdRevision.attempt, 3)
+  assert.equal(thirdRevision.sessionId, continued.runs[0].sessionId)
+  assert.equal(thirdRevision.status, RUN_STATUS.QUEUED)
 })
 
 test('dispatcher executes dependency DAG asynchronously and persists results for explicit tool reads', async (t) => {
@@ -281,6 +302,8 @@ test('dispatcher executes dependency DAG asynchronously and persists results for
   assert.equal(wakes[0].sessionId, parentSessionId)
   assert.equal(wakes[0].isWake, true)
   assert.equal(wakes[0].source, 'subagent')
+  assert.equal(wakes[0].persistUserMessage, undefined)
+  assert.match(wakes[0].userMessageId, /^msg_u_subagent_wake_/)
   assert.match(wakes[0].text, new RegExp(group.id))
   assert.match(wakes[0].text, /status|read_result/)
   assert.doesNotMatch(wakes[0].text, /first done/)
