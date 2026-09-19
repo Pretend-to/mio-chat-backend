@@ -438,6 +438,11 @@ export class ChannelRuntime {
                 agentId: target.agentId,
                 bindingId: target.bindingId,
                 channelId,
+                channelConversationId: resolvedConversation.conversation.id,
+                externalConversationId:
+                  resolvedConversation.conversation.externalConversationId,
+                externalThreadId:
+                  resolvedConversation.conversation.externalThreadId || null,
                 envelope,
                 principal,
                 sessionId: resolvedConversation.sessionId,

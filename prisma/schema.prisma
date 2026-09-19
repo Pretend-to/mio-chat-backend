@@ -127,6 +127,7 @@ model Task {
   agentId           String    @map("agent_id")
   sessionId         String    @map("session_id")
   deliveryBindingId String?   @map("delivery_binding_id")
+  deliveryMode      String    @default("default") @map("delivery_mode")
   triggerPrompt     String?   @default("") @map("prompt")
   status            String    @default("active")
   lastRunAt         DateTime? @map("last_run_at")
@@ -280,28 +281,30 @@ model ShellAutoApproveRule {
 // Agent, Session and Channel models. Breaking reset policy is documented in
 // docs/architecture/channel-agent-refactor/Spec.md.
 model Agent {
-  id               String   @id
-  name             String   @default("Agent")
-  avatar           String?
-  description      String?
-  soul             String?
-  defaultSessionId String?  @map("default_session_id")
-  provider         String?
-  model            String?
-  status           String   @default("active")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  id                       String   @id
+  name                     String   @default("Agent")
+  avatar                   String?
+  description              String?
+  soul                     String?
+  defaultSessionId         String?  @map("default_session_id")
+  defaultDeliveryBindingId String?  @map("default_delivery_binding_id")
+  provider                 String?
+  model                    String?
+  status                   String   @default("active")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
 
-  metas                AgentMeta[]
-  channelBindings      AgentChannelBinding[]
-  channelConversations ChannelConversation[]
-  sessions             Session[]
-  memories             GlobalMemory[]
-  tasks                Task[]
-  triggers             Trigger[]
-  subAgentRunGroups    SubAgentRunGroup[]
-  subAgentRuns         SubAgentRun[]
-  sessionInboxEvents   SessionInboxEvent[]
+  metas                  AgentMeta[]
+  channelBindings        AgentChannelBinding[]
+  defaultDeliveryBinding AgentChannelBinding?  @relation("AgentDefaultDeliveryBinding", fields: [defaultDeliveryBindingId], references: [id], onDelete: SetNull)
+  channelConversations   ChannelConversation[]
+  sessions               Session[]
+  memories               GlobalMemory[]
+  tasks                  Task[]
+  triggers               Trigger[]
+  subAgentRunGroups      SubAgentRunGroup[]
+  subAgentRuns           SubAgentRun[]
+  sessionInboxEvents     SessionInboxEvent[]
 
   @@map("agents")
 }
@@ -387,11 +390,12 @@ model AgentChannelBinding {
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
-  agent            Agent          @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  channel          Channel        @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  routes           ChannelRoute[]
-  deliveryTasks    Task[]
-  deliveryTriggers Trigger[]      @relation("TriggerDeliveryBinding")
+  agent             Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  channel           Channel            @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  routes            ChannelRoute[]
+  deliveryTasks     Task[]
+  defaultForAgents  Agent[]            @relation("AgentDefaultDeliveryBinding")
+  deliveryTriggers  Trigger[]          @relation("TriggerDeliveryBinding")
   subAgentRunGroups SubAgentRunGroup[]
 
   @@unique([agentId, channelId])
@@ -517,6 +521,7 @@ model SubAgentRunGroup {
   completionPolicy  String    @default("all") @map("completion_policy")
   quorum            Int?
   deliveryBindingId String?   @map("delivery_binding_id")
+  deliveryMode      String    @default("default") @map("delivery_mode")
   // Completion automatically wakes the parent Agent. The wake only carries
   // group/run identifiers; the parent reads persisted results via the tool.
   resumeParent      Boolean   @default(true) @map("resume_parent")
@@ -530,10 +535,10 @@ model SubAgentRunGroup {
   updatedAt         DateTime  @updatedAt @map("updated_at")
   finishedAt        DateTime? @map("finished_at")
 
-  agent         Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  agent           Agent                @relation(fields: [agentId], references: [id], onDelete: Cascade)
   deliveryBinding AgentChannelBinding? @relation(fields: [deliveryBindingId], references: [id], onDelete: SetNull)
-  parentSession Session       @relation("SubAgentRunGroupParentSession", fields: [parentSessionId], references: [id], onDelete: Cascade)
-  runs          SubAgentRun[]
+  parentSession   Session              @relation("SubAgentRunGroupParentSession", fields: [parentSessionId], references: [id], onDelete: Cascade)
+  runs            SubAgentRun[]
 
   @@unique([agentId, idempotencyKey])
   @@index([parentSessionId, createdAt])
@@ -803,6 +808,7 @@ model Trigger {
   agentId           String    @map("agent_id")
   sessionId         String    @map("session_id")
   deliveryBindingId String?   @map("delivery_binding_id")
+  deliveryMode      String    @default("default") @map("delivery_mode")
   sourceChannelId   String?   @map("source_channel_id")
   type              String
   mode              String    @default("persistent")

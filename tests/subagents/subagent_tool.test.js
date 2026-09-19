@@ -3,6 +3,15 @@ import test from 'node:test'
 
 import SubAgentTool from '../../lib/plugins/agent-manager-plugin/tools/subagent.js'
 
+const deliveryService = {
+  listDeliveryChannels: async () => [],
+  resolveDeliveryBinding: async ({ deliveryMode }) => ({
+    binding: null,
+    deliveryChannelId: null,
+    deliveryMode,
+  }),
+}
+
 function registerTools(names, accessByName = {}) {
   const previous = global.middleware
   global.middleware = {
@@ -58,7 +67,10 @@ test('subagent tool derives ownership from execution context and returns an imme
     },
     runService,
   }
-  const tool = new SubAgentTool({ runtimeFactory: () => runtime })
+  const tool = new SubAgentTool({
+    deliveryService,
+    runtimeFactory: () => runtime,
+  })
   try {
     const receipt = await tool.execute({
       agentId,
@@ -117,7 +129,10 @@ test('subagent continue reuses the completed child run through an explicit follo
       getRun: async () => ({ agentId: 'agent-context', id: 'run-1' }),
     },
   }
-  const tool = new SubAgentTool({ runtimeFactory: () => runtime })
+  const tool = new SubAgentTool({
+    deliveryService,
+    runtimeFactory: () => runtime,
+  })
 
   const result = await tool.execute({
     agentId: 'agent-context',
@@ -146,7 +161,10 @@ test('subagent capabilities fully inherits the parent tool snapshot by default',
     'write_mid_1',
   ]
   const restoreTools = registerTools(names)
-  const tool = new SubAgentTool({ runtimeFactory: () => ({}) })
+  const tool = new SubAgentTool({
+    deliveryService,
+    runtimeFactory: () => ({}),
+  })
   try {
     const result = await tool.execute({
       agentId: 'agent-context',

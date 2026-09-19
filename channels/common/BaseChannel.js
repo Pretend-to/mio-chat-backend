@@ -1180,7 +1180,18 @@ export class BaseChannel {
       this.doSendTyping(ctx, 1).catch(() => {})
       const reply = await this.llm.process({
         agentId: this.memory.agentId,
+        bindingId: ctx.bindingId || ctx.channelBindingId || null,
         channel: this,
+        channelId: ctx.channelId || this.id,
+        channelConversationId: ctx.channelConversationId || null,
+        externalConversationId:
+          ctx.externalConversationId ||
+          ctx.envelope?.conversation?.externalConversationId ||
+          null,
+        externalThreadId:
+          ctx.externalThreadId ||
+          ctx.envelope?.conversation?.externalThreadId ||
+          null,
         chat: [],
         contextToken: ctx.contextToken || this.latestContextToken || null,
         crystal: '',
@@ -1785,8 +1796,18 @@ export class BaseChannel {
       // 调用底层 LLM
       const reply = await this.llm.process({
         agentId: this.memory.agentId,
+        bindingId: ctx.bindingId || ctx.channelBindingId || null,
         channel: outputPort || this,
         channelId: ctx.channelId,
+        channelConversationId: ctx.channelConversationId || null,
+        externalConversationId:
+          ctx.externalConversationId ||
+          ctx.envelope?.conversation?.externalConversationId ||
+          null,
+        externalThreadId:
+          ctx.externalThreadId ||
+          ctx.envelope?.conversation?.externalThreadId ||
+          null,
         chat,
         contextToken: ctx.contextToken,
         crystal: crystal || '',

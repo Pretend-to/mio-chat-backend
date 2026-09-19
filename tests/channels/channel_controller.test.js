@@ -92,6 +92,7 @@ test('Channel 管理 API 使用严格 DTO 创建并认证原生 iLink 连接', a
     identityService,
     ilinkClientFactory: () => qrClient,
     runtime,
+    startTriggers: false,
   })
 
   const catalogResponse = response()

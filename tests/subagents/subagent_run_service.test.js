@@ -1,8 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
+import { execFileSync } from 'node:child_process'
+import fs from 'node:fs'
+import path from 'node:path'
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
+import { PrismaClient } from '@prisma/client'
 
-import prismaManager from '../../lib/database/prisma.js'
 import { AgentService } from '../../lib/agents/AgentService.js'
 import SubAgentRunService from '../../lib/subagents/SubAgentRunService.js'
 import SubAgentDispatcher from '../../lib/subagents/SubAgentDispatcher.js'
@@ -11,8 +15,33 @@ import { ChannelAgentRoutingService } from '../../channels/bindings/ChannelAgent
 
 const id = (prefix) => `${prefix}_${crypto.randomUUID()}`
 
+async function fixture(t) {
+  const databasePath = `/tmp/mio-subagent-runs-${process.pid}-${crypto.randomUUID()}.db`
+  execFileSync(
+    path.join(process.cwd(), 'node_modules/.bin/prisma'),
+    [
+      'db',
+      'push',
+      '--schema',
+      path.join(process.cwd(), 'prisma/schema.prisma'),
+      '--url',
+      `file:${databasePath}`,
+    ],
+    { env: { ...process.env, RUST_LOG: 'debug' }, stdio: 'ignore' },
+  )
+  const prisma = new PrismaClient({
+    adapter: new PrismaBetterSqlite3({ url: `file:${databasePath}` }),
+  })
+  await prisma.$connect()
+  t.after(async () => {
+    await prisma.$disconnect()
+    await fs.promises.rm(databasePath, { force: true })
+  })
+  return prisma
+}
+
 test('SubAgent Phase 1 persistence, ownership, idempotency and state machine', async (t) => {
-  const prisma = await prismaManager.initialize()
+  const prisma = await fixture(t)
   const agentId = id('agent')
   const parentSessionId = id('session')
   await prisma.agent.create({ data: { id: agentId, name: 'SubAgent Test' } })
@@ -23,10 +52,6 @@ test('SubAgent Phase 1 persistence, ownership, idempotency and state machine', a
     data: { defaultSessionId: parentSessionId },
     where: { id: agentId },
   })
-  t.after(async () => {
-    await prisma.agent.deleteMany({ where: { id: agentId } })
-  })
-
   const service = new SubAgentRunService({ prisma })
   const input = {
     agentId,
@@ -222,17 +247,13 @@ test('SubAgent Phase 1 persistence, ownership, idempotency and state machine', a
 })
 
 test('dispatcher executes dependency DAG asynchronously and persists results for explicit tool reads', async (t) => {
-  const prisma = await prismaManager.initialize()
+  const prisma = await fixture(t)
   const agentId = id('agent')
   const parentSessionId = id('session')
   await prisma.agent.create({ data: { id: agentId, name: 'Dispatcher Test' } })
   await prisma.session.create({
     data: { agentId, id: parentSessionId, kind: 'conversation', title: 'Main' },
   })
-  t.after(async () => {
-    await prisma.agent.deleteMany({ where: { id: agentId } })
-  })
-
   const runService = new SubAgentRunService({ prisma })
   const calls = []
   let releaseFirst

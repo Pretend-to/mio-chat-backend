@@ -944,9 +944,7 @@ export function createBackendLlm(opts = {}) {
             agentId: executionAgentId,
             channel: ctx.channel || { type: 'channel' },
             conversationKind:
-              ctx.envelope?.conversation?.type === 'group'
-                ? 'group'
-                : 'direct',
+              ctx.envelope?.conversation?.type === 'group' ? 'group' : 'direct',
             principal: ctx.principal || null,
             sessionId: ctx.sessionId,
             source: 'channel',
@@ -990,6 +988,20 @@ export function createBackendLlm(opts = {}) {
         ctx.channelId || ctx.channel?.id || ctx.channel?.channelId || null
       const event = {
         agentId: executionAgentId,
+        // ChannelRuntime resolves these identifiers before the adapter queue.
+        // Keep them on the event itself (and in body below) for legacy tools
+        // that still receive the compatibility event shape.
+        bindingId: ctx.bindingId || ctx.channelBindingId || null,
+        channelConversationId: ctx.channelConversationId || null,
+        externalConversationId:
+          ctx.externalConversationId ||
+          ctx.envelope?.conversation?.externalConversationId ||
+          null,
+        externalThreadId:
+          ctx.externalThreadId ||
+          ctx.envelope?.conversation?.externalThreadId ||
+          null,
+        envelope: ctx.envelope || null,
         subagentRunId: ctx.subagentRunId || null,
         actorId: ctx.principal?.externalUserId || ctx.from || 'channel_user',
         principal: ctx.principal || null,
@@ -1008,6 +1020,16 @@ export function createBackendLlm(opts = {}) {
         body: {
           channel: ctx.channel?.channelType || 'channel',
           channelId: auditChannelId,
+          bindingId: ctx.bindingId || ctx.channelBindingId || null,
+          channelConversationId: ctx.channelConversationId || null,
+          externalConversationId:
+            ctx.externalConversationId ||
+            ctx.envelope?.conversation?.externalConversationId ||
+            null,
+          externalThreadId:
+            ctx.externalThreadId ||
+            ctx.envelope?.conversation?.externalThreadId ||
+            null,
           contactorId: executionAgentId,
           messages,
           sessionId: ctx.sessionId || null,

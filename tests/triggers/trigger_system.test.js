@@ -197,12 +197,29 @@ test('WakeInjector: 会话注入、冷却限制与 once 生命周期自动销毁
 })
 
 test('sentinel Tool: 两步流创建、试跑、管理全生命周期', async () => {
-  const service = new TriggerService({
-    registry: new TriggerRegistry({
-      dataDir: path.join(TEST_DATA_DIR, 'tool-service'),
-    }),
+  const registry = new TriggerRegistry({
+    dataDir: path.join(TEST_DATA_DIR, 'tool-service'),
   })
-  const tool = new SentinelTool({ service })
+  const service = new TriggerService({
+    injector: new WakeInjector({
+      registry,
+      sessionTurnService: {
+        runTurn: async () => ({ deliveryStatus: 'not_requested' }),
+      },
+    }),
+    registry,
+  })
+  const tool = new SentinelTool({
+    deliveryService: {
+      listDeliveryChannels: async () => [],
+      resolveDeliveryBinding: async ({ deliveryMode }) => ({
+        binding: null,
+        deliveryChannelId: null,
+        deliveryMode,
+      }),
+    },
+    service,
+  })
   const toolContext = {
     agentId: 'wechat-master',
     channelId: 'sentinel-test-channel',

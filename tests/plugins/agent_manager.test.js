@@ -44,6 +44,36 @@ test('agent_profile persists fields on the current Agent', async () => {
   assert.equal(appended.agent.soul, 'Careful\n\nConcise')
 })
 
+test('agent_profile updates the public default delivery Channel ID', async () => {
+  let patchSeen = null
+  const service = {
+    async get() {
+      return { id: 'agent-a' }
+    },
+    async update(_agentId, patch) {
+      patchSeen = patch
+      return { id: 'agent-a', defaultDeliveryBindingId: null }
+    },
+  }
+  const tool = new AgentProfileTool({ service })
+  await tool.execute({
+    agentId: 'agent-a',
+    params: {
+      action: 'update',
+      defaultDeliveryChannelId: 'feishu',
+    },
+  })
+  assert.deepEqual(patchSeen, { defaultDeliveryChannelId: 'feishu' })
+  await tool.execute({
+    agentId: 'agent-a',
+    params: {
+      action: 'update',
+      defaultDeliveryChannelId: null,
+    },
+  })
+  assert.deepEqual(patchSeen, { defaultDeliveryChannelId: null })
+})
+
 test('Agent management tools require an explicit agentId', async () => {
   const tool = new AgentProfileTool({ service: {} })
   await assert.rejects(
