@@ -370,6 +370,18 @@ async function startApp() {
     const channelRuntime = getChannelRuntime()
     const { initAgentController } = await import('./lib/server/http/controllers/agentController.js')
     initAgentController({ runtime: channelRuntime })
+
+    // 自动清理/标记上次未完成的 SubAgent 运行状态（避免进程重启后残留僵尸任务）
+    try {
+      const { getSubAgentRuntime } = await import('./lib/subagents/index.js')
+      const recovered = await getSubAgentRuntime().runService.recoverStaleRuns()
+      if (recovered.length > 0) {
+        logger.info(`[SubAgent] 已将 ${recovered.length} 个进行中的僵尸子任务标记为中断 (interrupted)`)
+      }
+    } catch (e) {
+      logger.warn('[SubAgent] 恢复中断的子任务状态失败:', e.message)
+    }
+
     if (!isolatedTest) {
       try {
         // 先迁移并恢复原生 iLink 渠道；显式 OneBots 渠道仍可按需恢复。

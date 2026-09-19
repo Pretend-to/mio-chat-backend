@@ -355,3 +355,97 @@ test('running SubAgent Sessions are visible but cannot become ordinary Channel c
     (error) => error.code === 'subagent_session_busy',
   )
 })
+
+test('recoverStaleRuns recovers in-flight runs to interrupted on restart, supports continue and cancel (Issue #38)', async (t) => {
+  const prisma = await fixture(t)
+  const agentId = id('agent')
+  const parentSessionId = id('session')
+  await prisma.agent.create({ data: { id: agentId, name: 'Stale Run Test' } })
+  await prisma.session.create({
+    data: { agentId, id: parentSessionId, kind: 'conversation', title: 'Main' },
+  })
+  const runService = new SubAgentRunService({ prisma })
+  const dispatcher = new SubAgentDispatcher({
+    executor: { abort: async () => true },
+    runService,
+  })
+
+  // Create a group with two runs
+  const group = await runService.createGroup({
+    agentId,
+    allowedToolNames: ['web_search'],
+    idempotencyKey: id('idem_stale'),
+    jobs: [
+      { key: 'job-1', objective: 'Objective 1' },
+      { key: 'job-2', objective: 'Objective 2' },
+    ],
+    parentSessionId,
+  })
+
+  const [run1, run2] = group.runs
+  // Simulate run1 transitioning to RUNNING and run2 transitioning to WAITING_TOOL
+  await runService.transitionRun(run1.id, RUN_STATUS.RUNNING)
+  await runService.transitionRun(run2.id, RUN_STATUS.RUNNING)
+  await runService.transitionRun(run2.id, RUN_STATUS.WAITING_TOOL)
+
+  const inFlight1 = await runService.getRun(run1.id)
+  const inFlight2 = await runService.getRun(run2.id)
+  assert.equal(inFlight1.status, RUN_STATUS.RUNNING)
+  assert.equal(inFlight1.finishedAt, null)
+  assert.equal(inFlight2.status, RUN_STATUS.WAITING_TOOL)
+  assert.equal(inFlight2.finishedAt, null)
+
+  // Simulate process restart: call recoverStaleRuns()
+  const recovered = await runService.recoverStaleRuns({ reason: 'process_restarted' })
+  assert.equal(recovered.length, 2)
+
+  const updatedRun1 = await runService.getRun(run1.id)
+  const updatedRun2 = await runService.getRun(run2.id)
+  assert.equal(updatedRun1.status, RUN_STATUS.INTERRUPTED)
+  assert.notEqual(updatedRun1.finishedAt, null)
+  assert.equal(updatedRun1.cancelReason, 'process_restarted')
+  assert.equal(JSON.parse(updatedRun1.errorJson).code, 'run_interrupted')
+
+  assert.equal(updatedRun2.status, RUN_STATUS.INTERRUPTED)
+  assert.notEqual(updatedRun2.finishedAt, null)
+  assert.equal(updatedRun2.cancelReason, 'process_restarted')
+
+  // Recalculated group status should be FAILED since both runs are interrupted
+  const updatedGroup = await runService.getGroup(group.id)
+  assert.equal(updatedGroup.status, GROUP_STATUS.FAILED)
+
+  // Test 1: User cancels an interrupted run via dispatcher.abortRun
+  const cancelledRun2 = await dispatcher.abortRun(run2.id, 'User stopped interrupted run')
+  assert.equal(cancelledRun2.status, RUN_STATUS.CANCELLED)
+  assert.equal(cancelledRun2.cancelReason, 'User stopped interrupted run')
+
+  // Test 2: User continues an interrupted run via runService.continueRun
+  const continuedRun1 = await runService.continueRun(run1.id, {
+    instruction: 'Resume after server restart',
+  })
+  assert.equal(continuedRun1.status, RUN_STATUS.QUEUED)
+  assert.equal(continuedRun1.attempt, 2)
+  assert.equal(continuedRun1.revisionOfRunId, run1.id)
+
+  const reloadedGroup = await runService.getGroup(group.id)
+  assert.equal(reloadedGroup.status, GROUP_STATUS.DISPATCHED)
+  assert.equal(reloadedGroup.finishedAt, null)
+
+  // Test 3: Aborting an orphaned run where activeRuns doesn't have it
+  // Create another run in RUNNING state
+  const singleGroup = await runService.createGroup({
+    agentId,
+    allowedToolNames: ['web_search'],
+    idempotencyKey: id('idem_orphan'),
+    jobs: [{ key: 'orphan-job', objective: 'Orphan' }],
+    parentSessionId,
+  })
+  const orphanRun = singleGroup.runs[0]
+  await runService.transitionRun(orphanRun.id, RUN_STATUS.RUNNING)
+
+  // Dispatcher activeRuns does NOT have orphanRun (simulating restart before recoverStaleRuns)
+  assert.equal(dispatcher.activeRuns.has(orphanRun.id), false)
+  const abortedOrphan = await dispatcher.abortRun(orphanRun.id, 'stop orphan')
+  assert.equal(abortedOrphan.status, RUN_STATUS.CANCELLED)
+  assert.equal(abortedOrphan.cancelReason, 'stop orphan')
+})
