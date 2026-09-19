@@ -147,6 +147,60 @@ test('subagent continue reuses the completed child run through an explicit follo
   assert.equal(result.run.sessionId, 'child-1')
 })
 
+test('subagent continue automatically aborts running run before continuing', async () => {
+  const abortCalls = []
+  const continueCalls = []
+  const started = []
+  const runtime = {
+    dispatcher: {
+      abortRun: async (runId, reason) => {
+        abortCalls.push([runId, reason])
+        return { id: runId, status: 'cancelled' }
+      },
+      startGroup: (groupId) => started.push(groupId),
+    },
+    runService: {
+      continueRun: async (runId, options) => {
+        continueCalls.push([runId, options])
+        return {
+          groupId: 'group-1',
+          id: 'run-2',
+          inputJson: '{}',
+          jobKey: 'task',
+          sessionId: 'child-1',
+          status: 'queued',
+          toolNamesJson: '[]',
+        }
+      },
+      getRun: async () => ({
+        agentId: 'agent-context',
+        id: 'run-1',
+        status: 'running',
+      }),
+    },
+  }
+  const tool = new SubAgentTool({
+    deliveryService,
+    runtimeFactory: () => runtime,
+  })
+
+  const result = await tool.execute({
+    agentId: 'agent-context',
+    params: {
+      action: 'continue',
+      instruction: '打断并调整方向',
+      runId: 'run-1',
+    },
+    sessionId: 'session-context',
+  })
+
+  assert.equal(result.success, true)
+  assert.deepEqual(abortCalls, [['run-1', 'interrupted_for_continuation']])
+  assert.deepEqual(continueCalls, [['run-1', { instruction: '打断并调整方向' }]])
+  assert.deepEqual(started, ['group-1'])
+  assert.equal(result.run.sessionId, 'child-1')
+})
+
 test('subagent capabilities fully inherits the parent tool snapshot by default', async () => {
   const names = [
     'search_mid_1',
