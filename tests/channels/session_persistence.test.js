@@ -158,6 +158,53 @@ test('DatabaseMemoryStore preserves the MemoryStore contract and archive semanti
     concurrentRows.map((row) => row.seq),
     Array.from({ length: 100 }, (_, index) => index),
   )
+
+  // Message retry with existing message ID (Issue #39)
+  const retrySession = await memory.createSession({ id: 'session-retry' })
+  const userMsgId = 'custom_msg_retry_123'
+  const firstAppend = await memory.appendUserMessage(retrySession.id, {
+    id: userMsgId,
+    role: 'user',
+    text: 'initial user query',
+    time: 20_000,
+  })
+  assert.equal(firstAppend, userMsgId)
+  let chat = await memory.getChat(retrySession.id)
+  assert.equal(chat.length, 1)
+  assert.equal(chat[0].text, 'initial user query')
+
+  // User retries: frontend re-submits with identical message id and updated text
+  const retryAppend = await memory.appendUserMessage(retrySession.id, {
+    id: userMsgId,
+    role: 'user',
+    text: 'updated user query upon retry',
+    time: 20_100,
+  })
+  assert.equal(retryAppend, userMsgId)
+  chat = await memory.getChat(retrySession.id)
+  assert.equal(chat.length, 1)
+  assert.equal(chat[0].text, 'updated user query upon retry')
+
+  // Concurrent retry with identical ID
+  await Promise.all([
+    memory.appendUserMessage(retrySession.id, {
+      id: userMsgId,
+      role: 'user',
+      text: 'concurrent retry A',
+      time: 20_200,
+    }),
+    memory.appendUserMessage(retrySession.id, {
+      id: userMsgId,
+      role: 'user',
+      text: 'concurrent retry B',
+      time: 20_201,
+    }),
+  ])
+  const retryDbRows = await prisma.message.findMany({
+    where: { sessionId: retrySession.id },
+  })
+  assert.equal(retryDbRows.length, 1)
+  assert.equal(retryDbRows[0].id, userMsgId)
 })
 
 test('streaming lifecycle finalizes tool projections and recovers interrupted messages', async (t) => {
