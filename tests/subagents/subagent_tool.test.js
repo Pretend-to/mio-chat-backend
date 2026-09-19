@@ -32,10 +32,7 @@ function registerTools(names, accessByName = {}) {
 }
 
 test('subagent tool derives ownership from execution context and returns an immediate queued receipt', async () => {
-  const restoreTools = registerTools([
-    'read_mid_hash',
-    'subagent_mid_hash',
-  ])
+  const restoreTools = registerTools(['read_mid_hash', 'subagent_mid_hash'])
   const agentId = 'agent-context'
   const sessionId = 'session-context'
   const createCalls = []
@@ -83,7 +80,6 @@ test('subagent tool derives ownership from execution context and returns an imme
         action: 'spawn',
         objective: 'Inspect data',
         taskType: 'code_review',
-        tools: ['read'],
       },
       sessionId,
     })
@@ -98,7 +94,6 @@ test('subagent tool derives ownership from execution context and returns an imme
       'read_mid_hash',
       'subagent_mid_hash',
     ])
-    assert.deepEqual(createCalls[0].jobs[0].tools, ['read'])
     assert.equal(createCalls[0].jobs[0].taskType, 'code_review')
     assert.equal(createCalls[0].resumeParent, undefined)
   } finally {

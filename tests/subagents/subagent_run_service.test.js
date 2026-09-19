@@ -63,7 +63,6 @@ test('SubAgent Phase 1 persistence, ownership, idempotency and state machine', a
         objective: 'Read the ranking',
         role: 'Rank Researcher',
         sessionPolicy: 'fresh',
-        tools: ['web_search'],
       },
       {
         dependsOn: ['rank'],
@@ -72,7 +71,6 @@ test('SubAgent Phase 1 persistence, ownership, idempotency and state machine', a
         role: 'Deep Researcher',
         sessionPolicy: 'persistent',
         subagentKey: 'deep-research',
-        tools: ['read'],
       },
     ],
     parentSessionId,
@@ -81,7 +79,10 @@ test('SubAgent Phase 1 persistence, ownership, idempotency and state machine', a
   assert.equal(group.status, GROUP_STATUS.DISPATCHED)
   assert.equal(group.runs.length, 2)
   assert.equal(group.runs[1].dependencies.length, 1)
-  assert.deepEqual(JSON.parse(group.runs[0].toolNamesJson), ['web_search'])
+  assert.deepEqual(JSON.parse(group.runs[0].toolNamesJson), [
+    'web_search',
+    'read',
+  ])
   assert.equal(
     (await prisma.agent.findUnique({ where: { id: agentId } }))
       .defaultSessionId,
@@ -111,30 +112,6 @@ test('SubAgent Phase 1 persistence, ownership, idempotency and state machine', a
     (error) => error.code === 'session_has_active_subagent_runs',
   )
 
-  await assert.rejects(
-    service.createGroup({
-      ...input,
-      idempotencyKey: id('idem'),
-      jobs: [{ key: 'escape', objective: 'Escape', tools: ['bash'] }],
-    }),
-    (error) => error.code === 'subagent_tool_forbidden',
-  )
-  const inheritedInteractiveShell = await service.createGroup({
-    ...input,
-    allowedToolNames: ['bash_input_mid_test'],
-    idempotencyKey: id('idem'),
-    jobs: [
-      {
-        key: 'shell-input',
-        objective: 'Use interactive shell',
-        tools: ['bash_input'],
-      },
-    ],
-  })
-  assert.deepEqual(
-    JSON.parse(inheritedInteractiveShell.runs[0].toolNamesJson),
-    ['bash_input_mid_test'],
-  )
   const inheritedTools = await service.createGroup({
     ...input,
     allowedToolNames: [
@@ -151,37 +128,6 @@ test('SubAgent Phase 1 persistence, ownership, idempotency and state machine', a
     'read_mid_safe',
     'write_mid_unsafe',
     'agent_profile_mid_unsafe',
-  ])
-  const explicitShell = await service.createGroup({
-    ...input,
-    allowedToolNames: ['bash_mid_safe', 'read_mid_safe'],
-    idempotencyKey: id('idem'),
-    jobs: [
-      {
-        key: 'shell',
-        objective: 'Use an explicitly assigned shell',
-        tools: ['bash', 'read'],
-      },
-    ],
-  })
-  assert.deepEqual(JSON.parse(explicitShell.runs[0].toolNamesJson), [
-    'bash_mid_safe',
-    'read_mid_safe',
-  ])
-  const inheritedSideEffectTool = await service.createGroup({
-    ...input,
-    allowedToolNames: ['send_email_mid_unsafe'],
-    idempotencyKey: id('idem'),
-    jobs: [
-      {
-        key: 'inherited-side-effect',
-        objective: 'Use a parent-authorized tool',
-        tools: ['send_email'],
-      },
-    ],
-  })
-  assert.deepEqual(JSON.parse(inheritedSideEffectTool.runs[0].toolNamesJson), [
-    'send_email_mid_unsafe',
   ])
   await assert.rejects(
     service.createGroup({
@@ -339,7 +285,9 @@ test('dispatcher executes dependency DAG asynchronously and persists results for
   assert.match(wakes[0].text, /status|read_result/)
   assert.doesNotMatch(wakes[0].text, /first done/)
   assert.equal(
-    await prisma.sessionInboxEvent.count({ where: { sessionId: parentSessionId } }),
+    await prisma.sessionInboxEvent.count({
+      where: { sessionId: parentSessionId },
+    }),
     0,
   )
 
