@@ -133,6 +133,56 @@ test('SessionTurnService defaults identity only for trusted runtime sources', as
   assert.equal(observed[1].principal, null)
 })
 
+test('SessionTurnService adapts the raw LLM service used by TaskScheduler', async () => {
+  const observed = []
+  const memory = createMemory()
+  const rawLlmService = {
+    _getDefaultProvider: () => 'provider-1',
+    handleMessage: async (event) => {
+      observed.push(event)
+      await event.update({ content: 'scheduled reply', type: 'content' })
+      await event.complete()
+    },
+    llms: {
+      'provider-1': { models: [{ models: ['scheduled-model'] }] },
+    },
+  }
+  const service = new SessionTurnService({
+    llm: rawLlmService,
+    persistenceFactory: async () => memory,
+    prisma: {
+      agent: {
+        findUnique: async () => ({
+          id: 'agent-1',
+          model: null,
+          provider: 'provider-1',
+        }),
+      },
+      session: {
+        findUnique: async () => ({ agentId: 'agent-1', id: 'session-1' }),
+      },
+    },
+  })
+
+  const result = await service.runTurn({
+    agentId: 'agent-1',
+    isTask: true,
+    isWeb: false,
+    sessionId: 'session-1',
+    source: 'scheduled_task',
+    text: 'run scheduled task',
+  })
+
+  assert.equal(result.reply, null)
+  assert.equal(observed.length, 1)
+  assert.equal(observed[0].body.settings.base.model, 'scheduled-model')
+  assert.ok(
+    memory.messages.some(
+      (message) => message.role === 'assistant' && message.text === 'scheduled reply',
+    ),
+  )
+})
+
 test('SessionTurnService executes with the fresh Agent model and uses a live Channel only for output', async () => {
   const observed = []
   const memory = createMemory()
