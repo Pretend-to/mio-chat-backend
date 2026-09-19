@@ -133,7 +133,7 @@ test('SessionTurnService defaults identity only for trusted runtime sources', as
   assert.equal(observed[1].principal, null)
 })
 
-test('SessionTurnService adapts the raw LLM service used by TaskScheduler', async () => {
+test('TaskScheduler must inject a backend bridge into SessionTurnService', async () => {
   const observed = []
   const memory = createMemory()
   const rawLlmService = {
@@ -147,8 +147,13 @@ test('SessionTurnService adapts the raw LLM service used by TaskScheduler', asyn
       'provider-1': { models: [{ models: ['scheduled-model'] }] },
     },
   }
+  assert.throws(
+    () => new SessionTurnService({ llm: rawLlmService }),
+    /llm must expose process\(\)/,
+  )
+
   const service = new SessionTurnService({
-    llm: rawLlmService,
+    llm: createBackendLlm({ llmService: rawLlmService }),
     persistenceFactory: async () => memory,
     prisma: {
       agent: {
