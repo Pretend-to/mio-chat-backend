@@ -391,7 +391,7 @@ X-Admin-Code: 123456
   "data": {
     "message": "openai 适配器实例添加成功",
     "adapterType": "openai",
-    "instanceIndex": 1,
+    "instanceId": "adp_550e8400-e29b-41d4-a716-446655440000",
     "providers": ["openai-1", "我的 OpenAI"],
     "models": {
       "openai-1": [...],
@@ -405,7 +405,7 @@ X-Admin-Code: 123456
 
 | 字段 | 说明 |
 |------|------|
-| instanceIndex | 新实例的索引位置 |
+| instanceId | 后端生成的稳定实例 ID |
 | providers | 所有可用的适配器实例名称列表 |
 | models | 每个实例的模型列表（热更新后的最新数据） |
 
@@ -426,10 +426,12 @@ X-Admin-Code: 123456
 
 更新指定的适配器实例配置。
 
+每个实例都会由后端生成稳定的 `id`（格式为 `adp_<UUID>`）。更新、删除和刷新接口只接受该 ID，数字数组索引不再是合法的实例身份。
+
 **请求**
 
 ```http
-PUT /api/config/llm/:adapterType/:index
+PUT /api/config/llm/:adapterType/:instanceId
 Content-Type: application/json
 X-Admin-Code: 123456
 
@@ -446,7 +448,7 @@ X-Admin-Code: 123456
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | adapterType | string | 适配器类型：`openai`、`gemini`、`vertex` |
-| index | number | 实例索引（从 0 开始） |
+| instanceId | string | 实例稳定 ID（例如 `adp_...`） |
 
 **请求体**
 
@@ -459,9 +461,9 @@ X-Admin-Code: 123456
   "code": 0,
   "message": "success",
   "data": {
-    "message": "openai 适配器实例 #0 更新成功",
+    "message": "openai 适配器实例更新成功",
     "adapterType": "openai",
-    "instanceIndex": 0,
+    "instanceId": "adp_550e8400-e29b-41d4-a716-446655440000",
     "providers": ["更新后的名称"],
     "models": {
       "更新后的名称": [...]
@@ -490,7 +492,7 @@ X-Admin-Code: 123456
 **请求**
 
 ```http
-DELETE /api/config/llm/:adapterType/:index
+DELETE /api/config/llm/:adapterType/:instanceId
 X-Admin-Code: 123456
 ```
 
@@ -499,12 +501,12 @@ X-Admin-Code: 123456
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | adapterType | string | 适配器类型：`openai`、`gemini`、`vertex` |
-| index | number | 实例索引（从 0 开始） |
+| instanceId | string | 实例稳定 ID（例如 `adp_...`） |
 
 **示例**
 
 ```http
-DELETE /api/config/llm/openai/1
+DELETE /api/config/llm/openai/adp_550e8400-e29b-41d4-a716-446655440000
 ```
 
 **响应**
@@ -514,9 +516,8 @@ DELETE /api/config/llm/openai/1
   "code": 0,
   "message": "success",
   "data": {
-    "message": "openai 适配器实例 #1 删除成功",
+    "message": "openai 适配器实例删除成功",
     "adapterType": "openai",
-    "instanceIndex": 1,
     "providers": ["openai-1"],
     "models": {
       "openai-1": [...]
@@ -529,7 +530,6 @@ DELETE /api/config/llm/openai/1
 
 - ✅ **热更新**：立即生效
 - ✅ **自动重载**：删除后重新加载剩余适配器
-- ⚠️ **索引变化**：删除后，后续实例的索引会前移
 
 **状态码**: 
 - `200 OK` - 成功
@@ -603,7 +603,7 @@ X-Admin-Code: 123456
 **请求**
 
 ```http
-POST /api/config/llm/:adapterType/:index/refresh-models
+POST /api/config/llm/:adapterType/:instanceId/refresh-models
 X-Admin-Code: 123456
 ```
 
@@ -612,12 +612,12 @@ X-Admin-Code: 123456
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | adapterType | string | 适配器类型：`openai`、`gemini`、`vertex` |
-| index | number | 实例索引（从 0 开始） |
+| instanceId | string | 实例稳定 ID（例如 `adp_...`） |
 
 **示例**
 
 ```http
-POST /api/config/llm/openai/0/refresh-models
+POST /api/config/llm/openai/adp_550e8400-e29b-41d4-a716-446655440000/refresh-models
 ```
 
 **响应**
@@ -857,7 +857,7 @@ curl -X POST http://localhost:3080/api/config/llm/openai \
   "data": {
     "message": "openai 适配器实例添加成功",
     "adapterType": "openai",
-    "instanceIndex": 1,
+    "instanceId": "adp_550e8400-e29b-41d4-a716-446655440000",
     "providers": ["openai-1", "备用 OpenAI"],
     "models": {
       "openai-1": [...],
@@ -872,7 +872,7 @@ curl -X POST http://localhost:3080/api/config/llm/openai \
 ### 场景 2: 更新实例的 API Key
 
 ```bash
-curl -X PUT http://localhost:3080/api/config/llm/openai/0 \
+curl -X PUT http://localhost:3080/api/config/llm/openai/adp_550e8400-e29b-41d4-a716-446655440000 \
   -H "X-Admin-Code: 123456" \
   -H "Content-Type: application/json" \
   -d '{
@@ -900,7 +900,7 @@ curl -X POST http://localhost:3080/api/config/refresh-models \
 ### 场景 4: 删除不需要的实例
 
 ```bash
-curl -X DELETE http://localhost:3080/api/config/llm/openai/1 \
+curl -X DELETE http://localhost:3080/api/config/llm/openai/adp_550e8400-e29b-41d4-a716-446655440000 \
   -H "X-Admin-Code: 123456"
 ```
 
@@ -945,9 +945,9 @@ models = response.json()["data"]["models"]
 print(f"模型列表已刷新，共 {len(models)} 个 provider")
 
 # 4. 删除测试实例
-instance_index = len(config['llm_adapters']['openai'])
+    instance_id = result['instanceId']
 response = requests.delete(
-    f"{BASE_URL}/api/config/llm/openai/{instance_index}",
+    f"{BASE_URL}/api/config/llm/openai/{instance_id}",
     headers=headers
 )
 print("测试实例已删除")

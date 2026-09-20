@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import './mock-env.js';
 import { runGenericAdapterTests } from './test-suite.js';
-import ZhipuAdapter from '../../lib/chat/llm/adapters/implementations/zhipu.js';
+import { getAdapterClass } from '../../lib/chat/llm/adapters/registry.js';
+
+const ZhipuAdapter = await getAdapterClass('zhipu');
 
 test('Zhipu Adapter - Metadata & Core Initialization', async (_t) => {
   const metadata = ZhipuAdapter.getAdapterMetadata();
