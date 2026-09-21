@@ -206,4 +206,71 @@ describe('LLM Config API (test-connection & fetch-models)', () => {
     assert.strictEqual(resp.status, 400)
     assert.match(resp.data.message, /无效的适配器类型/)
   })
+
+  it('updateLLMInstance should seamlessly migrate an adapter instance across adapter types', async () => {
+    const { default: SystemSettingsService } = await import(
+      '../../lib/database/services/SystemSettingsService.js'
+    )
+    const currentAdapters = {
+      openai: [
+        {
+          api_key: 'test-key',
+          base_url: 'https://ark.cn-beijing.volces.com/api/v3',
+          enable: true,
+          id: 'adp_volc_test_123',
+          models: ['doubao-lite'],
+          name: '火山方舟（豆包）',
+        },
+      ],
+      'openai-responses': [],
+    }
+
+    let savedAdapters = null
+    const originalGet = SystemSettingsService.get
+    const originalSet = SystemSettingsService.set
+
+    SystemSettingsService.get = async (key) => {
+      if (key === 'llm_adapters') return { value: currentAdapters }
+      return null
+    }
+    SystemSettingsService.set = async (key, val) => {
+      if (key === 'llm_adapters') {
+        savedAdapters = JSON.parse(JSON.stringify(val))
+        currentAdapters.openai = val.openai || []
+        currentAdapters['openai-responses'] = val['openai-responses'] || []
+      }
+    }
+
+    global.middleware.llm.llms = {}
+    global.middleware.llm.removeInstance = () => true
+    global.middleware.llm.addInstance = async () => ({ success: true })
+
+    try {
+      const result = await configService.updateLLMInstance(
+        'openai-responses',
+        'adp_volc_test_123',
+        {
+          base_url: 'https://ark.cn-beijing.volces.com/api/v3',
+          enable: true,
+          name: '火山方舟（豆包）',
+        },
+      )
+
+      assert.strictEqual(result.adapterType, 'openai-responses')
+      assert.strictEqual(result.instanceId, 'adp_volc_test_123')
+      assert.strictEqual(savedAdapters.openai.length, 0)
+      assert.strictEqual(savedAdapters['openai-responses'].length, 1)
+      assert.strictEqual(
+        savedAdapters['openai-responses'][0].id,
+        'adp_volc_test_123',
+      )
+      assert.strictEqual(
+        savedAdapters['openai-responses'][0].name,
+        '火山方舟（豆包）',
+      )
+    } finally {
+      SystemSettingsService.get = originalGet
+      SystemSettingsService.set = originalSet
+    }
+  })
 })
