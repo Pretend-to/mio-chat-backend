@@ -54,16 +54,14 @@ test('Zhipu Adapter - Chat Body Preparation', async (_t) => {
   });
   assert.strictEqual(resultWithoutReasoning.reasoning_effort, undefined);
 
-  // 测试 4: 当 extraSettings.zhipu.web_search 开启时
+  // 测试 4: 当 extraSettings.web_search 开启时
   const bodyWithWebSearch = {
     messages: [{ content: 'Hello', role: 'user' }],
     settings: {
       base: { model: 'glm-4.7', stream: true },
       chatParams: { temperature: 0.7 },
       extraSettings: {
-        zhipu: {
-          web_search: { enable: true, search_result: true }
-        }
+        web_search: { enable: true, search_result: true }
       },
       toolCallSettings: { mode: 'NONE', tools: [] }
     }

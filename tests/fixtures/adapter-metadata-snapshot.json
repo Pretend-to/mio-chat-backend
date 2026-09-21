@@ -11,126 +11,124 @@
     "avatarId": "google",
     "description": "企业级 Google Vertex AI 平台适配器。提供对 Google Cloud 项目中部署的 Gemini 系列模型的原生访问。支持高并发、安全性配置及 Google Search、代码执行等企业级增强功能。\\n\\n**获取方式**：在 [Google Cloud Console](https://console.cloud.google.com/) 的 API 和服务中创建 API 密钥，并确保已启用 Vertex AI API。",
     "extraSettingsSchema": {
-      "agentPlatform": {
-        "internalTools": {
-          "fields": {
-            "code_execution": {
-              "default": false,
-              "label": "代码执行 (Code Execution)",
-              "type": "boolean"
-            },
-            "google_search": {
-              "default": false,
-              "label": "Google Search",
-              "type": "boolean"
-            },
-            "url_context": {
-              "default": false,
-              "label": "网页解析 (URL Context)",
-              "type": "boolean"
-            }
+      "internalTools": {
+        "fields": {
+          "code_execution": {
+            "default": false,
+            "label": "代码执行 (Code Execution)",
+            "type": "boolean"
           },
-          "label": "内置工具",
-          "type": "group"
+          "google_search": {
+            "default": false,
+            "label": "Google Search",
+            "type": "boolean"
+          },
+          "url_context": {
+            "default": false,
+            "label": "网页解析 (URL Context)",
+            "type": "boolean"
+          }
         },
-        "safetySettings": {
-          "fields": {
-            "HARM_CATEGORY_DANGEROUS_CONTENT": {
-              "default": "BLOCK_NONE",
-              "label": "危险内容",
-              "options": [
-                {
-                  "label": "不阻止",
-                  "value": "BLOCK_NONE"
-                },
-                {
-                  "label": "仅阻止高可能性",
-                  "value": "BLOCK_ONLY_HIGH"
-                },
-                {
-                  "label": "阻止中等及以上",
-                  "value": "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                {
-                  "label": "最严格",
-                  "value": "BLOCK_LOW_AND_ABOVE"
-                }
-              ],
-              "type": "select"
-            },
-            "HARM_CATEGORY_HARASSMENT": {
-              "default": "BLOCK_NONE",
-              "label": "骚扰内容",
-              "options": [
-                {
-                  "label": "不阻止",
-                  "value": "BLOCK_NONE"
-                },
-                {
-                  "label": "仅阻止高可能性",
-                  "value": "BLOCK_ONLY_HIGH"
-                },
-                {
-                  "label": "阻止中等及以上",
-                  "value": "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                {
-                  "label": "最严格",
-                  "value": "BLOCK_LOW_AND_ABOVE"
-                }
-              ],
-              "type": "select"
-            },
-            "HARM_CATEGORY_HATE_SPEECH": {
-              "default": "BLOCK_NONE",
-              "label": "仇恨言论",
-              "options": [
-                {
-                  "label": "不阻止",
-                  "value": "BLOCK_NONE"
-                },
-                {
-                  "label": "仅阻止高可能性",
-                  "value": "BLOCK_ONLY_HIGH"
-                },
-                {
-                  "label": "阻止中等及以上",
-                  "value": "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                {
-                  "label": "最严格",
-                  "value": "BLOCK_LOW_AND_ABOVE"
-                }
-              ],
-              "type": "select"
-            },
-            "HARM_CATEGORY_SEXUALLY_EXPLICIT": {
-              "default": "BLOCK_NONE",
-              "label": "色情内容",
-              "options": [
-                {
-                  "label": "不阻止",
-                  "value": "BLOCK_NONE"
-                },
-                {
-                  "label": "仅阻止高可能性",
-                  "value": "BLOCK_ONLY_HIGH"
-                },
-                {
-                  "label": "阻止中等及以上",
-                  "value": "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                {
-                  "label": "最严格",
-                  "value": "BLOCK_LOW_AND_ABOVE"
-                }
-              ],
-              "type": "select"
-            }
+        "label": "内置工具",
+        "type": "group"
+      },
+      "safetySettings": {
+        "fields": {
+          "HARM_CATEGORY_DANGEROUS_CONTENT": {
+            "default": "BLOCK_NONE",
+            "label": "危险内容",
+            "options": [
+              {
+                "label": "不阻止",
+                "value": "BLOCK_NONE"
+              },
+              {
+                "label": "仅阻止高可能性",
+                "value": "BLOCK_ONLY_HIGH"
+              },
+              {
+                "label": "阻止中等及以上",
+                "value": "BLOCK_MEDIUM_AND_ABOVE"
+              },
+              {
+                "label": "最严格",
+                "value": "BLOCK_LOW_AND_ABOVE"
+              }
+            ],
+            "type": "select"
           },
-          "label": "安全过滤设置",
-          "type": "group"
-        }
+          "HARM_CATEGORY_HARASSMENT": {
+            "default": "BLOCK_NONE",
+            "label": "骚扰内容",
+            "options": [
+              {
+                "label": "不阻止",
+                "value": "BLOCK_NONE"
+              },
+              {
+                "label": "仅阻止高可能性",
+                "value": "BLOCK_ONLY_HIGH"
+              },
+              {
+                "label": "阻止中等及以上",
+                "value": "BLOCK_MEDIUM_AND_ABOVE"
+              },
+              {
+                "label": "最严格",
+                "value": "BLOCK_LOW_AND_ABOVE"
+              }
+            ],
+            "type": "select"
+          },
+          "HARM_CATEGORY_HATE_SPEECH": {
+            "default": "BLOCK_NONE",
+            "label": "仇恨言论",
+            "options": [
+              {
+                "label": "不阻止",
+                "value": "BLOCK_NONE"
+              },
+              {
+                "label": "仅阻止高可能性",
+                "value": "BLOCK_ONLY_HIGH"
+              },
+              {
+                "label": "阻止中等及以上",
+                "value": "BLOCK_MEDIUM_AND_ABOVE"
+              },
+              {
+                "label": "最严格",
+                "value": "BLOCK_LOW_AND_ABOVE"
+              }
+            ],
+            "type": "select"
+          },
+          "HARM_CATEGORY_SEXUALLY_EXPLICIT": {
+            "default": "BLOCK_NONE",
+            "label": "色情内容",
+            "options": [
+              {
+                "label": "不阻止",
+                "value": "BLOCK_NONE"
+              },
+              {
+                "label": "仅阻止高可能性",
+                "value": "BLOCK_ONLY_HIGH"
+              },
+              {
+                "label": "阻止中等及以上",
+                "value": "BLOCK_MEDIUM_AND_ABOVE"
+              },
+              {
+                "label": "最严格",
+                "value": "BLOCK_LOW_AND_ABOVE"
+              }
+            ],
+            "type": "select"
+          }
+        },
+        "label": "安全过滤设置",
+        "type": "group"
       }
     },
     "initialConfigSchema": {
@@ -215,19 +213,17 @@
     "avatarId": "claude",
     "description": "Anthropic 官方 Claude 大模型服务适配器。原生支持最新 Claude 4.7 自适应思维链及 3.7 经典推理，支持自动提示词缓存与复杂工具回调。\n\n**获取方式**：请前往 [Anthropic Console](https://console.anthropic.com) 注册并创建 API Key。",
     "extraSettingsSchema": {
-      "anthropic": {
-        "web_search": {
-          "fields": {
-            "enable": {
-              "default": false,
-              "description": "启用后，Claude 将能自主调用内置 Brave Search 联网搜索实时信息。仅支持 Anthropic 官方 API，不支持 AWS Bedrock。每次回答将附带官方源引用。",
-              "label": "启用原生网页搜索",
-              "type": "boolean"
-            }
-          },
-          "label": "联网搜索 (Brave Search)",
-          "type": "group"
-        }
+      "web_search": {
+        "fields": {
+          "enable": {
+            "default": false,
+            "description": "启用后，Claude 将能自主调用内置 Brave Search 联网搜索实时信息。仅支持 Anthropic 官方 API，不支持 AWS Bedrock。每次回答将附带官方源引用。",
+            "label": "启用原生网页搜索",
+            "type": "boolean"
+          }
+        },
+        "label": "联网搜索 (Brave Search)",
+        "type": "group"
       }
     },
     "initialConfigSchema": {
@@ -394,126 +390,124 @@
     "avatarId": "gemini",
     "description": "Google AI Studio 专用适配器。提供对 Gemini 系列模型的快速访问，适合开发者原型设计与测试。支持多模态输入（图片、视频、长文本）及 Google Search 插件。\n\n**获取方式**：访问 [Google AI Studio](https://aistudio.google.com/app/apikey) 免费创建 API 密钥。",
     "extraSettingsSchema": {
-      "gemini": {
-        "internalTools": {
-          "fields": {
-            "code_execution": {
-              "default": false,
-              "label": "代码执行 (Code Execution)",
-              "type": "boolean"
-            },
-            "google_search": {
-              "default": false,
-              "label": "Google Search",
-              "type": "boolean"
-            },
-            "url_context": {
-              "default": false,
-              "label": "网页解析 (URL Context)",
-              "type": "boolean"
-            }
+      "internalTools": {
+        "fields": {
+          "code_execution": {
+            "default": false,
+            "label": "代码执行 (Code Execution)",
+            "type": "boolean"
           },
-          "label": "内置工具",
-          "type": "group"
+          "google_search": {
+            "default": false,
+            "label": "Google Search",
+            "type": "boolean"
+          },
+          "url_context": {
+            "default": false,
+            "label": "网页解析 (URL Context)",
+            "type": "boolean"
+          }
         },
-        "safetySettings": {
-          "fields": {
-            "HARM_CATEGORY_DANGEROUS_CONTENT": {
-              "default": "BLOCK_NONE",
-              "label": "危险内容",
-              "options": [
-                {
-                  "label": "不阻止",
-                  "value": "BLOCK_NONE"
-                },
-                {
-                  "label": "仅阻止高可能性",
-                  "value": "BLOCK_ONLY_HIGH"
-                },
-                {
-                  "label": "阻止中等及以上",
-                  "value": "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                {
-                  "label": "最严格",
-                  "value": "BLOCK_LOW_AND_ABOVE"
-                }
-              ],
-              "type": "select"
-            },
-            "HARM_CATEGORY_HARASSMENT": {
-              "default": "BLOCK_NONE",
-              "label": "骚扰内容",
-              "options": [
-                {
-                  "label": "不阻止",
-                  "value": "BLOCK_NONE"
-                },
-                {
-                  "label": "仅阻止高可能性",
-                  "value": "BLOCK_ONLY_HIGH"
-                },
-                {
-                  "label": "阻止中等及以上",
-                  "value": "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                {
-                  "label": "最严格",
-                  "value": "BLOCK_LOW_AND_ABOVE"
-                }
-              ],
-              "type": "select"
-            },
-            "HARM_CATEGORY_HATE_SPEECH": {
-              "default": "BLOCK_NONE",
-              "label": "仇恨言论",
-              "options": [
-                {
-                  "label": "不阻止",
-                  "value": "BLOCK_NONE"
-                },
-                {
-                  "label": "仅阻止高可能性",
-                  "value": "BLOCK_ONLY_HIGH"
-                },
-                {
-                  "label": "阻止中等及以上",
-                  "value": "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                {
-                  "label": "最严格",
-                  "value": "BLOCK_LOW_AND_ABOVE"
-                }
-              ],
-              "type": "select"
-            },
-            "HARM_CATEGORY_SEXUALLY_EXPLICIT": {
-              "default": "BLOCK_NONE",
-              "label": "色情内容",
-              "options": [
-                {
-                  "label": "不阻止",
-                  "value": "BLOCK_NONE"
-                },
-                {
-                  "label": "仅阻止高可能性",
-                  "value": "BLOCK_ONLY_HIGH"
-                },
-                {
-                  "label": "阻止中等及以上",
-                  "value": "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                {
-                  "label": "最严格",
-                  "value": "BLOCK_LOW_AND_ABOVE"
-                }
-              ],
-              "type": "select"
-            }
+        "label": "内置工具",
+        "type": "group"
+      },
+      "safetySettings": {
+        "fields": {
+          "HARM_CATEGORY_DANGEROUS_CONTENT": {
+            "default": "BLOCK_NONE",
+            "label": "危险内容",
+            "options": [
+              {
+                "label": "不阻止",
+                "value": "BLOCK_NONE"
+              },
+              {
+                "label": "仅阻止高可能性",
+                "value": "BLOCK_ONLY_HIGH"
+              },
+              {
+                "label": "阻止中等及以上",
+                "value": "BLOCK_MEDIUM_AND_ABOVE"
+              },
+              {
+                "label": "最严格",
+                "value": "BLOCK_LOW_AND_ABOVE"
+              }
+            ],
+            "type": "select"
           },
-          "label": "安全过滤设置",
-          "type": "group"
-        }
+          "HARM_CATEGORY_HARASSMENT": {
+            "default": "BLOCK_NONE",
+            "label": "骚扰内容",
+            "options": [
+              {
+                "label": "不阻止",
+                "value": "BLOCK_NONE"
+              },
+              {
+                "label": "仅阻止高可能性",
+                "value": "BLOCK_ONLY_HIGH"
+              },
+              {
+                "label": "阻止中等及以上",
+                "value": "BLOCK_MEDIUM_AND_ABOVE"
+              },
+              {
+                "label": "最严格",
+                "value": "BLOCK_LOW_AND_ABOVE"
+              }
+            ],
+            "type": "select"
+          },
+          "HARM_CATEGORY_HATE_SPEECH": {
+            "default": "BLOCK_NONE",
+            "label": "仇恨言论",
+            "options": [
+              {
+                "label": "不阻止",
+                "value": "BLOCK_NONE"
+              },
+              {
+                "label": "仅阻止高可能性",
+                "value": "BLOCK_ONLY_HIGH"
+              },
+              {
+                "label": "阻止中等及以上",
+                "value": "BLOCK_MEDIUM_AND_ABOVE"
+              },
+              {
+                "label": "最严格",
+                "value": "BLOCK_LOW_AND_ABOVE"
+              }
+            ],
+            "type": "select"
+          },
+          "HARM_CATEGORY_SEXUALLY_EXPLICIT": {
+            "default": "BLOCK_NONE",
+            "label": "色情内容",
+            "options": [
+              {
+                "label": "不阻止",
+                "value": "BLOCK_NONE"
+              },
+              {
+                "label": "仅阻止高可能性",
+                "value": "BLOCK_ONLY_HIGH"
+              },
+              {
+                "label": "阻止中等及以上",
+                "value": "BLOCK_MEDIUM_AND_ABOVE"
+              },
+              {
+                "label": "最严格",
+                "value": "BLOCK_LOW_AND_ABOVE"
+              }
+            ],
+            "type": "select"
+          }
+        },
+        "label": "安全过滤设置",
+        "type": "group"
       }
     },
     "initialConfigSchema": {
@@ -573,131 +567,129 @@
     "avatarId": "gemini",
     "description": "Antigravity 专属的 Google 凭证云授权模式。\n\n**使用流程**：\n1. 点击下方\"云授权链接\"并在浏览器中登录 Google 账号；\n2. 授权完成后，浏览器会被重定向到以 `http://localhost:8085/callback...` 开头的地址（页面显示错误是正常现象）；\n3. 请复制浏览器地址栏的**完整 URL**，或者直接复制页面上展示的 **Authorization Code**，将其粘贴到下方的 **Authorization Code / Redirect URL** 输入框中并保存即可。\n\n[🔑 点击前往 Google 云授权链接](https://accounts.google.com/o/oauth2/v2/auth?client_id=1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com&redirect_uri=http%3A%2F%2Flocalhost%3A8085%2Fcallback&response_type=code&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=[DYNAMIC_STATE]&code_challenge=[DYNAMIC_CHALLENGE]&code_challenge_method=S256&access_type=offline&prompt=consent&include_granted_scopes=true)",
     "extraSettingsSchema": {
-      "gemini": {
-        "imageGeneration": {
-          "default": false,
-          "label": "图像生成 (DALL-E style)",
-          "type": "boolean"
-        },
-        "internalTools": {
-          "fields": {
-            "code_execution": {
-              "default": false,
-              "label": "代码执行 (Code Execution)",
-              "type": "boolean"
-            },
-            "google_search": {
-              "default": false,
-              "label": "Google Search",
-              "type": "boolean"
-            },
-            "url_context": {
-              "default": false,
-              "label": "网页解析 (URL Context)",
-              "type": "boolean"
-            }
+      "imageGeneration": {
+        "default": false,
+        "label": "图像生成 (DALL-E style)",
+        "type": "boolean"
+      },
+      "internalTools": {
+        "fields": {
+          "code_execution": {
+            "default": false,
+            "label": "代码执行 (Code Execution)",
+            "type": "boolean"
           },
-          "label": "内置工具",
-          "type": "group"
-        },
-        "safetySettings": {
-          "fields": {
-            "HARM_CATEGORY_DANGEROUS_CONTENT": {
-              "default": "BLOCK_NONE",
-              "label": "危险内容",
-              "options": [
-                {
-                  "label": "不阻止",
-                  "value": "BLOCK_NONE"
-                },
-                {
-                  "label": "仅阻止高可能性",
-                  "value": "BLOCK_ONLY_HIGH"
-                },
-                {
-                  "label": "阻止中等及以上",
-                  "value": "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                {
-                  "label": "最严格",
-                  "value": "BLOCK_LOW_AND_ABOVE"
-                }
-              ],
-              "type": "select"
-            },
-            "HARM_CATEGORY_HARASSMENT": {
-              "default": "BLOCK_NONE",
-              "label": "骚扰内容",
-              "options": [
-                {
-                  "label": "不阻止",
-                  "value": "BLOCK_NONE"
-                },
-                {
-                  "label": "仅阻止高可能性",
-                  "value": "BLOCK_ONLY_HIGH"
-                },
-                {
-                  "label": "阻止中等及以上",
-                  "value": "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                {
-                  "label": "最严格",
-                  "value": "BLOCK_LOW_AND_ABOVE"
-                }
-              ],
-              "type": "select"
-            },
-            "HARM_CATEGORY_HATE_SPEECH": {
-              "default": "BLOCK_NONE",
-              "label": "仇恨言论",
-              "options": [
-                {
-                  "label": "不阻止",
-                  "value": "BLOCK_NONE"
-                },
-                {
-                  "label": "仅阻止高可能性",
-                  "value": "BLOCK_ONLY_HIGH"
-                },
-                {
-                  "label": "阻止中等及以上",
-                  "value": "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                {
-                  "label": "最严格",
-                  "value": "BLOCK_LOW_AND_ABOVE"
-                }
-              ],
-              "type": "select"
-            },
-            "HARM_CATEGORY_SEXUALLY_EXPLICIT": {
-              "default": "BLOCK_NONE",
-              "label": "色情内容",
-              "options": [
-                {
-                  "label": "不阻止",
-                  "value": "BLOCK_NONE"
-                },
-                {
-                  "label": "仅阻止高可能性",
-                  "value": "BLOCK_ONLY_HIGH"
-                },
-                {
-                  "label": "阻止中等及以上",
-                  "value": "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                {
-                  "label": "最严格",
-                  "value": "BLOCK_LOW_AND_ABOVE"
-                }
-              ],
-              "type": "select"
-            }
+          "google_search": {
+            "default": false,
+            "label": "Google Search",
+            "type": "boolean"
           },
-          "label": "安全过滤设置",
-          "type": "group"
-        }
+          "url_context": {
+            "default": false,
+            "label": "网页解析 (URL Context)",
+            "type": "boolean"
+          }
+        },
+        "label": "内置工具",
+        "type": "group"
+      },
+      "safetySettings": {
+        "fields": {
+          "HARM_CATEGORY_DANGEROUS_CONTENT": {
+            "default": "BLOCK_NONE",
+            "label": "危险内容",
+            "options": [
+              {
+                "label": "不阻止",
+                "value": "BLOCK_NONE"
+              },
+              {
+                "label": "仅阻止高可能性",
+                "value": "BLOCK_ONLY_HIGH"
+              },
+              {
+                "label": "阻止中等及以上",
+                "value": "BLOCK_MEDIUM_AND_ABOVE"
+              },
+              {
+                "label": "最严格",
+                "value": "BLOCK_LOW_AND_ABOVE"
+              }
+            ],
+            "type": "select"
+          },
+          "HARM_CATEGORY_HARASSMENT": {
+            "default": "BLOCK_NONE",
+            "label": "骚扰内容",
+            "options": [
+              {
+                "label": "不阻止",
+                "value": "BLOCK_NONE"
+              },
+              {
+                "label": "仅阻止高可能性",
+                "value": "BLOCK_ONLY_HIGH"
+              },
+              {
+                "label": "阻止中等及以上",
+                "value": "BLOCK_MEDIUM_AND_ABOVE"
+              },
+              {
+                "label": "最严格",
+                "value": "BLOCK_LOW_AND_ABOVE"
+              }
+            ],
+            "type": "select"
+          },
+          "HARM_CATEGORY_HATE_SPEECH": {
+            "default": "BLOCK_NONE",
+            "label": "仇恨言论",
+            "options": [
+              {
+                "label": "不阻止",
+                "value": "BLOCK_NONE"
+              },
+              {
+                "label": "仅阻止高可能性",
+                "value": "BLOCK_ONLY_HIGH"
+              },
+              {
+                "label": "阻止中等及以上",
+                "value": "BLOCK_MEDIUM_AND_ABOVE"
+              },
+              {
+                "label": "最严格",
+                "value": "BLOCK_LOW_AND_ABOVE"
+              }
+            ],
+            "type": "select"
+          },
+          "HARM_CATEGORY_SEXUALLY_EXPLICIT": {
+            "default": "BLOCK_NONE",
+            "label": "色情内容",
+            "options": [
+              {
+                "label": "不阻止",
+                "value": "BLOCK_NONE"
+              },
+              {
+                "label": "仅阻止高可能性",
+                "value": "BLOCK_ONLY_HIGH"
+              },
+              {
+                "label": "阻止中等及以上",
+                "value": "BLOCK_MEDIUM_AND_ABOVE"
+              },
+              {
+                "label": "最严格",
+                "value": "BLOCK_LOW_AND_ABOVE"
+              }
+            ],
+            "type": "select"
+          }
+        },
+        "label": "安全过滤设置",
+        "type": "group"
       }
     },
     "initialConfigSchema": {
@@ -1093,48 +1085,46 @@
   {
     "description": "OpenAI Responses (Realtime/Agentic) 协议适配器。支持 OpenAI 最新的状态化会话与原生工具调用能力（如内置 SearchGPT），专为高性能 Agent 场景设计。该接口亦兼容其他实现了 OpenAI Responses 规范的第三方增强网关。\n\n**获取方式**：在 [OpenAI Platform](https://platform.openai.com/api_keys) 创建具有相应权限的 API 密钥。",
     "extraSettingsSchema": {
-      "openai": {
-        "web_search": {
-          "fields": {
-            "allowed_domains": {
-              "default": [],
-              "label": "白名单域名",
-              "placeholder": "openai.com",
-              "type": "array"
-            },
-            "blocked_domains": {
-              "default": [],
-              "label": "黑名单域名",
-              "type": "array"
-            },
-            "enable": {
-              "default": false,
-              "label": "启用",
-              "type": "boolean"
-            },
-            "search_context_size": {
-              "default": "medium",
-              "label": "搜索深度",
-              "options": [
-                {
-                  "label": "低",
-                  "value": "low"
-                },
-                {
-                  "label": "中",
-                  "value": "medium"
-                },
-                {
-                  "label": "高",
-                  "value": "high"
-                }
-              ],
-              "type": "select"
-            }
+      "web_search": {
+        "fields": {
+          "allowed_domains": {
+            "default": [],
+            "label": "白名单域名",
+            "placeholder": "openai.com",
+            "type": "array"
           },
-          "label": "联网搜索 (SearchGPT)",
-          "type": "group"
-        }
+          "blocked_domains": {
+            "default": [],
+            "label": "黑名单域名",
+            "type": "array"
+          },
+          "enable": {
+            "default": false,
+            "label": "启用",
+            "type": "boolean"
+          },
+          "search_context_size": {
+            "default": "medium",
+            "label": "搜索深度",
+            "options": [
+              {
+                "label": "低",
+                "value": "low"
+              },
+              {
+                "label": "中",
+                "value": "medium"
+              },
+              {
+                "label": "高",
+                "value": "high"
+              }
+            ],
+            "type": "select"
+          }
+        },
+        "label": "联网搜索 (SearchGPT)",
+        "type": "group"
       }
     },
     "initialConfigSchema": {
@@ -1354,51 +1344,6 @@
     },
     "avatarId": "volcengine",
     "description": "火山引擎大模型服务平台（火山方舟）适配器。支持豆包等系列大模型，完全兼容 OpenAI 协议。请注意，在火山方舟中调用模型时，需使用控制台创建的 Endpoint ID 作为模型名称。\n\n**获取方式**：请前往 [火山方舟控制台](https://console.volcengine.com/ark) 注册并开通模型接入点，并在 [API Key 管理](https://console.volcengine.com/ark/apiKey) 页面创建 API 密钥。",
-    "extraSettingsSchema": {
-      "volcengine": {
-        "web_search": {
-          "fields": {
-            "allowed_domains": {
-              "default": [],
-              "label": "白名单域名",
-              "placeholder": "openai.com",
-              "type": "array"
-            },
-            "blocked_domains": {
-              "default": [],
-              "label": "黑名单域名",
-              "type": "array"
-            },
-            "enable": {
-              "default": false,
-              "label": "启用",
-              "type": "boolean"
-            },
-            "search_context_size": {
-              "default": "medium",
-              "label": "搜索深度",
-              "options": [
-                {
-                  "label": "低",
-                  "value": "low"
-                },
-                {
-                  "label": "中",
-                  "value": "medium"
-                },
-                {
-                  "label": "高",
-                  "value": "high"
-                }
-              ],
-              "type": "select"
-            }
-          },
-          "label": "联网搜索 (SearchGPT)",
-          "type": "group"
-        }
-      }
-    },
     "initialConfigSchema": {
       "api_key": {
         "default": "",
@@ -1448,7 +1393,55 @@
       "vision",
       "reasoning"
     ],
-    "type": "volcengine"
+    "type": "volcengine",
+    "extraSettingsSchema": {
+      "web_search": {
+        "fields": {
+          "allowed_domains": {
+            "default": [],
+            "label": "白名单域名",
+            "placeholder": "openai.com",
+            "type": "array"
+          },
+          "blocked_domains": {
+            "default": [],
+            "label": "黑名单域名",
+            "type": "array"
+          },
+          "enable": {
+            "default": false,
+            "label": "启用",
+            "type": "boolean"
+          },
+          "search_context_size": {
+            "default": "medium",
+            "label": "搜索深度",
+            "options": [
+              {
+                "label": "低",
+                "value": "low"
+              },
+              {
+                "label": "中",
+                "value": "medium"
+              },
+              {
+                "label": "高",
+                "value": "high"
+              }
+            ],
+            "type": "select"
+          }
+        },
+        "label": "联网搜索 (SearchGPT)",
+        "type": "group"
+      }
+    },
+    "aliases": [
+      "volc",
+      "火山",
+      "火山引擎"
+    ]
   },
   {
     "avatarAliases": {
@@ -1457,66 +1450,64 @@
     "avatarId": "xai",
     "description": "xAI Grok 官方 API 适配器。提供对 Grok 系列模型的访问，具备强大的实时信息处理能力，支持独特的 X 平台（原 Twitter）实时信息搜索。接口设计完全兼容 OpenAI 标准。\n\n**获取方式**：在 [xAI Console](https://console.x.ai/) 创建 API 密钥。",
     "extraSettingsSchema": {
-      "xai": {
-        "web_search": {
-          "fields": {
-            "allowed_domains": {
-              "default": [],
-              "label": "包含域名",
-              "placeholder": "如: x.ai",
-              "type": "array"
-            },
-            "enable": {
-              "default": false,
-              "label": "启用网络搜索 (web_search)",
-              "type": "boolean"
-            },
-            "enable_image_understanding": {
-              "default": false,
-              "label": "搜索结果图片理解",
-              "type": "boolean"
-            },
-            "excluded_domains": {
-              "default": [],
-              "label": "排除域名",
-              "type": "array"
-            }
+      "web_search": {
+        "fields": {
+          "allowed_domains": {
+            "default": [],
+            "label": "包含域名",
+            "placeholder": "如: x.ai",
+            "type": "array"
           },
-          "label": "联网搜索",
-          "type": "group"
+          "enable": {
+            "default": false,
+            "label": "启用网络搜索 (web_search)",
+            "type": "boolean"
+          },
+          "enable_image_understanding": {
+            "default": false,
+            "label": "搜索结果图片理解",
+            "type": "boolean"
+          },
+          "excluded_domains": {
+            "default": [],
+            "label": "排除域名",
+            "type": "array"
+          }
         },
-        "x_search": {
-          "fields": {
-            "allowed_x_handles": {
-              "default": [],
-              "label": "限定账号",
-              "placeholder": "如: elonmusk",
-              "type": "array"
-            },
-            "enable": {
-              "default": false,
-              "label": "启用 X 平台搜索 (x_search)",
-              "type": "boolean"
-            },
-            "enable_image_understanding": {
-              "default": false,
-              "label": "帖子图片理解",
-              "type": "boolean"
-            },
-            "enable_video_understanding": {
-              "default": false,
-              "label": "帖子视频理解",
-              "type": "boolean"
-            },
-            "excluded_x_handles": {
-              "default": [],
-              "label": "排除账号",
-              "type": "array"
-            }
+        "label": "联网搜索",
+        "type": "group"
+      },
+      "x_search": {
+        "fields": {
+          "allowed_x_handles": {
+            "default": [],
+            "label": "限定账号",
+            "placeholder": "如: elonmusk",
+            "type": "array"
           },
-          "label": "X 平台搜索",
-          "type": "group"
-        }
+          "enable": {
+            "default": false,
+            "label": "启用 X 平台搜索 (x_search)",
+            "type": "boolean"
+          },
+          "enable_image_understanding": {
+            "default": false,
+            "label": "帖子图片理解",
+            "type": "boolean"
+          },
+          "enable_video_understanding": {
+            "default": false,
+            "label": "帖子视频理解",
+            "type": "boolean"
+          },
+          "excluded_x_handles": {
+            "default": [],
+            "label": "排除账号",
+            "type": "array"
+          }
+        },
+        "label": "X 平台搜索",
+        "type": "group"
       }
     },
     "initialConfigSchema": {
@@ -1686,26 +1677,6 @@
     },
     "avatarId": "zhipu",
     "description": "智谱 AI（bigmodel.cn）开放平台服务适配器。支持 GLM-4, GLM-5.1 等系列模型，在数学、逻辑推理和多模态理解方面表现优秀，完全兼容 OpenAI 协议。\n\n**获取方式**：请前往 [智谱 AI 开放平台](https://bigmodel.cn) 注册并创建 API Key。",
-    "extraSettingsSchema": {
-      "zhipu": {
-        "web_search": {
-          "fields": {
-            "enable": {
-              "default": false,
-              "label": "启用联网搜索",
-              "type": "boolean"
-            },
-            "search_result": {
-              "default": true,
-              "label": "返回搜索结果明细",
-              "type": "boolean"
-            }
-          },
-          "label": "联网搜索",
-          "type": "group"
-        }
-      }
-    },
     "initialConfigSchema": {
       "api_key": {
         "default": "",
@@ -1755,6 +1726,24 @@
       "vision",
       "reasoning"
     ],
-    "type": "zhipu"
+    "type": "zhipu",
+    "extraSettingsSchema": {
+      "web_search": {
+        "fields": {
+          "enable": {
+            "default": false,
+            "label": "启用联网搜索",
+            "type": "boolean"
+          },
+          "search_result": {
+            "default": true,
+            "label": "返回搜索结果明细",
+            "type": "boolean"
+          }
+        },
+        "label": "联网搜索",
+        "type": "group"
+      }
+    }
   }
 ]

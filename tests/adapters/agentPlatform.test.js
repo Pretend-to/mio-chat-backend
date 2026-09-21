@@ -164,7 +164,7 @@ test('Agent Platform - block_express behavior', async (t) => {
     }
   })
 
-  await t.test('_prepareChatBody prioritizes extraSettings.agentPlatform over default extraSettings.gemini', async () => {
+  await t.test('_prepareChatBody enables internal tools from flat extraSettings.internalTools', async () => {
     const adapter = new AgentPlatformAdapter({
       api_key: 'test-api-key',
       base_url: 'https://us-central1-aiplatform.googleapis.com',
@@ -177,12 +177,7 @@ test('Agent Platform - block_express behavior', async (t) => {
         base: { model: 'gemini-2.5-flash', stream: true },
         chatParams: {},
         extraSettings: {
-          agentPlatform: {
-            internalTools: { google_search: true }
-          },
-          gemini: {
-            internalTools: { google_search: false }
-          }
+          internalTools: { google_search: true }
         },
         toolCallSettings: { mode: 'AUTO', tools: [] }
       }
