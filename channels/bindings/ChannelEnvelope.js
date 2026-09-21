@@ -20,10 +20,7 @@ export function normalizeChannelEnvelope(input = {}) {
   const actor = input.actor || {}
   const message = input.message || {}
   const content = input.content || {}
-  const conversationType = requiredText(
-    conversation.type,
-    'conversation.type',
-  )
+  const conversationType = requiredText(conversation.type, 'conversation.type')
   if (!['private', 'group'].includes(conversationType)) {
     throw new DomainError(
       'invalid_channel_envelope',
@@ -36,7 +33,10 @@ export function normalizeChannelEnvelope(input = {}) {
   return {
     actor: {
       displayName: actor.displayName == null ? null : String(actor.displayName),
-      externalUserId: requiredText(actor.externalUserId, 'actor.externalUserId'),
+      externalUserId: requiredText(
+        actor.externalUserId,
+        'actor.externalUserId',
+      ),
       role: actor.role == null ? null : String(actor.role),
     },
     content: {
@@ -50,9 +50,10 @@ export function normalizeChannelEnvelope(input = {}) {
         conversation.externalConversationId,
         'conversation.externalConversationId',
       ),
-      externalThreadId: conversation.externalThreadId == null
-        ? null
-        : String(conversation.externalThreadId),
+      externalThreadId:
+        conversation.externalThreadId == null
+          ? null
+          : String(conversation.externalThreadId),
       type: conversationType,
     },
     message: {
@@ -61,9 +62,10 @@ export function normalizeChannelEnvelope(input = {}) {
         'message.externalMessageId',
       ),
       receivedAt,
-      replyToMessageId: message.replyToMessageId == null
-        ? null
-        : String(message.replyToMessageId),
+      replyToMessageId:
+        message.replyToMessageId == null
+          ? null
+          : String(message.replyToMessageId),
       sentAt,
     },
     raw: input.raw,
@@ -71,7 +73,8 @@ export function normalizeChannelEnvelope(input = {}) {
       accountId: source.accountId == null ? null : String(source.accountId),
       adapterId: requiredText(source.adapterId, 'source.adapterId'),
       channelId: requiredText(source.channelId, 'source.channelId'),
-      channelName: source.channelName == null ? null : String(source.channelName),
+      channelName:
+        source.channelName == null ? null : String(source.channelName),
     },
     version: 2,
   }

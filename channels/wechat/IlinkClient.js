@@ -128,11 +128,18 @@ export class IlinkClient {
    * 通用 POST JSON。
    * @returns {Promise<object|null>} 成功返回解析后的对象；超时返回 null（长轮询超时属正常控制流）
    */
-  async _post(endpoint, body, { timeoutMs, token = this.token, label = endpoint, signal } = {}) {
+  async _post(
+    endpoint,
+    body,
+    { timeoutMs, token = this.token, label = endpoint, signal } = {},
+  ) {
     const url = new URL(endpoint, this.baseUrl)
     const controller = new AbortController()
-    const timer = timeoutMs != null ? setTimeout(() => controller.abort(), timeoutMs) : null
-    const effSignal = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal
+    const timer =
+      timeoutMs != null ? setTimeout(() => controller.abort(), timeoutMs) : null
+    const effSignal = signal
+      ? AbortSignal.any([controller.signal, signal])
+      : controller.signal
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -156,15 +163,25 @@ export class IlinkClient {
   // ---------------------------------------------------------------
   /** 获取登录二维码。返回 { qrcode, qrcode_img_content, ... } */
   async getLoginQrCode({ botType = 3 } = {}) {
-    const url = new URL(`ilink/bot/get_bot_qrcode?bot_type=${encodeURIComponent(botType)}`, this.baseUrl)
+    const url = new URL(
+      `ilink/bot/get_bot_qrcode?bot_type=${encodeURIComponent(botType)}`,
+      this.baseUrl,
+    )
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), DEFAULT_CONFIG_TIMEOUT_MS)
+    const timer = setTimeout(
+      () => controller.abort(),
+      DEFAULT_CONFIG_TIMEOUT_MS,
+    )
     try {
-      const res = await fetch(url, { headers: this._buildHeaders(), signal: controller.signal })
+      const res = await fetch(url, {
+        headers: this._buildHeaders(),
+        signal: controller.signal,
+      })
       if (!res.ok) throw new Error(`get_bot_qrcode ${res.status}`)
       return await res.json()
     } catch (err) {
-      if (err?.name === 'AbortError') throw new Error('get_bot_qrcode timeout', { cause: err })
+      if (err?.name === 'AbortError')
+        throw new Error('get_bot_qrcode timeout', { cause: err })
       throw err
     } finally {
       clearTimeout(timer)
@@ -172,7 +189,10 @@ export class IlinkClient {
   }
 
   /** 轮询扫码状态（长轮询，GET）。status: wait|scaned|confirmed|expired|... confirmed 后取 token */
-  async pollQrStatus(qrcode, { verifyCode = null, timeoutMs = DEFAULT_CONFIG_TIMEOUT_MS, signal } = {}) {
+  async pollQrStatus(
+    qrcode,
+    { verifyCode = null, timeoutMs = DEFAULT_CONFIG_TIMEOUT_MS, signal } = {},
+  ) {
     let ep = `ilink/bot/get_qrcode_status?qrcode=${encodeURIComponent(qrcode)}`
     if (verifyCode) ep += `&verify_code=${encodeURIComponent(verifyCode)}`
     return await this._get(ep, { timeoutMs, signal })
@@ -182,10 +202,16 @@ export class IlinkClient {
   async _get(endpoint, { timeoutMs, token = this.token, signal } = {}) {
     const url = new URL(endpoint, this.baseUrl)
     const controller = new AbortController()
-    const timer = timeoutMs != null ? setTimeout(() => controller.abort(), timeoutMs) : null
-    const effSignal = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal
+    const timer =
+      timeoutMs != null ? setTimeout(() => controller.abort(), timeoutMs) : null
+    const effSignal = signal
+      ? AbortSignal.any([controller.signal, signal])
+      : controller.signal
     try {
-      const res = await fetch(url, { headers: this._buildHeaders(token), signal: effSignal })
+      const res = await fetch(url, {
+        headers: this._buildHeaders(token),
+        signal: effSignal,
+      })
       const text = await res.text()
       if (!res.ok) throw new Error(`GET ${res.status}: ${text}`)
       return text ? JSON.parse(text) : {}
@@ -205,7 +231,10 @@ export class IlinkClient {
    * @param {string} buff get_updates_buf（上轮返回的游标；首次 ""）
    * @returns {Promise<{ret, msgs, get_updates_buf}>} 超时返回 {ret:0, msgs:[], get_updates_buf: buff}
    */
-  async getUpdates(buff = '', { timeoutMs = DEFAULT_LONG_POLL_TIMEOUT_MS, signal } = {}) {
+  async getUpdates(
+    buff = '',
+    { timeoutMs = DEFAULT_LONG_POLL_TIMEOUT_MS, signal } = {},
+  ) {
     const raw = await this._post(
       'ilink/bot/getupdates',
       { get_updates_buf: buff ?? '', base_info: this._baseInfo() },
@@ -226,7 +255,9 @@ export class IlinkClient {
       { label: 'sendMessage', token, timeoutMs: DEFAULT_API_TIMEOUT_MS },
     )
     if (resp && resp.ret && resp.ret !== 0) {
-      throw new Error(`sendMessage ret=${resp.ret} errmsg=${resp.errmsg ?? '(none)'}`)
+      throw new Error(
+        `sendMessage ret=${resp.ret} errmsg=${resp.errmsg ?? '(none)'}`,
+      )
     }
     return resp
   }
@@ -236,17 +267,30 @@ export class IlinkClient {
     if (!ilinkUserId) throw new Error('getConfig requires ilink_user_id')
     return await this._post(
       'ilink/bot/getconfig',
-      { ilink_user_id: ilinkUserId, context_token: contextToken, base_info: this._baseInfo() },
+      {
+        ilink_user_id: ilinkUserId,
+        context_token: contextToken,
+        base_info: this._baseInfo(),
+      },
       { label: 'getConfig', timeoutMs: DEFAULT_CONFIG_TIMEOUT_MS },
     )
   }
 
   /** 发送输入状态：status 1=typing 2=cancel */
-  async sendTyping({ ilinkUserId = this.userId, typingTicket, status = 1 } = {}) {
+  async sendTyping({
+    ilinkUserId = this.userId,
+    typingTicket,
+    status = 1,
+  } = {}) {
     if (!ilinkUserId) throw new Error('sendTyping requires ilink_user_id')
     await this._post(
       'ilink/bot/sendtyping',
-      { ilink_user_id: ilinkUserId, typing_ticket: typingTicket, status, base_info: this._baseInfo() },
+      {
+        ilink_user_id: ilinkUserId,
+        typing_ticket: typingTicket,
+        status,
+        base_info: this._baseInfo(),
+      },
       { label: 'sendTyping', timeoutMs: DEFAULT_CONFIG_TIMEOUT_MS },
     )
   }
@@ -261,7 +305,15 @@ export class IlinkClient {
    * @param {string} params.aesKeyHex  16 字节 AES 密钥的十六进制字符串（32 字符）
    * @param {number} [params.fileSize] 加密后的文件大小（若未提供则默认等于 rawSize）
    */
-  async getUploadUrl({ filekey, mediaType = 1, toUserId = this.userId, rawSize, rawFileMd5, aesKeyHex, fileSize } = {}) {
+  async getUploadUrl({
+    filekey,
+    mediaType = 1,
+    toUserId = this.userId,
+    rawSize,
+    rawFileMd5,
+    aesKeyHex,
+    fileSize,
+  } = {}) {
     if (!toUserId) throw new Error('getUploadUrl requires to_user_id')
     const resp = await this._post(
       'ilink/bot/getuploadurl',
@@ -279,7 +331,9 @@ export class IlinkClient {
       { label: 'getUploadUrl', timeoutMs: DEFAULT_API_TIMEOUT_MS },
     )
     if (resp && resp.ret && resp.ret !== 0) {
-      throw new Error(`getUploadUrl 失败: ret=${resp.ret} errmsg=${resp.errmsg ?? '(none)'}`)
+      throw new Error(
+        `getUploadUrl 失败: ret=${resp.ret} errmsg=${resp.errmsg ?? '(none)'}`,
+      )
     }
     return resp
   }
@@ -318,7 +372,11 @@ export class IlinkClient {
     const uploadParam = uploadInfo?.upload_param
 
     let cdnUrl = uploadFullUrl
-    if (cdnUrl && cdnUrl.includes('.cdn.weixin.qq.com') && cdnUrl.startsWith('http://')) {
+    if (
+      cdnUrl &&
+      cdnUrl.includes('.cdn.weixin.qq.com') &&
+      cdnUrl.startsWith('http://')
+    ) {
       cdnUrl = cdnUrl.replace('http://', 'https://')
     }
     if (!cdnUrl && uploadParam) {
@@ -359,11 +417,14 @@ export class IlinkClient {
     }
 
     if (!uploadRes || !uploadRes.ok) {
-      throw new Error(`上传媒体到微信 CDN 失败: ${lastErr?.message || uploadRes?.status}`)
+      throw new Error(
+        `上传媒体到微信 CDN 失败: ${lastErr?.message || uploadRes?.status}`,
+      )
     }
 
     // 微信 CDN 成功后会在 Header 中返回 x-encrypted-param
-    const downloadParam = uploadRes.headers.get('x-encrypted-param') || uploadParam || ''
+    const downloadParam =
+      uploadRes.headers.get('x-encrypted-param') || uploadParam || ''
 
     // 微信官方协议要求：sendmessage 中 CDNMedia.aes_key 必须采用 base64(32位hex字符) 格式
     return {
@@ -379,10 +440,18 @@ export class IlinkClient {
 
   /** 通知服务器 channel 正在关闭/启动 */
   async notifyStop() {
-    return await this._post('ilink/bot/msg/notifystop', { base_info: this._baseInfo() }, { label: 'notifyStop', timeoutMs: DEFAULT_CONFIG_TIMEOUT_MS })
+    return await this._post(
+      'ilink/bot/msg/notifystop',
+      { base_info: this._baseInfo() },
+      { label: 'notifyStop', timeoutMs: DEFAULT_CONFIG_TIMEOUT_MS },
+    )
   }
   async notifyStart() {
-    return await this._post('ilink/bot/msg/notifystart', { base_info: this._baseInfo() }, { label: 'notifyStart', timeoutMs: DEFAULT_CONFIG_TIMEOUT_MS })
+    return await this._post(
+      'ilink/bot/msg/notifystart',
+      { base_info: this._baseInfo() },
+      { label: 'notifyStart', timeoutMs: DEFAULT_CONFIG_TIMEOUT_MS },
+    )
   }
 
   /**
@@ -404,6 +473,5 @@ export class IlinkClient {
     return decryptAesEcb(ciphertext, key)
   }
 }
-
 
 export default IlinkClient

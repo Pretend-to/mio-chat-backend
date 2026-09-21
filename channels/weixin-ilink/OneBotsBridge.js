@@ -9,15 +9,25 @@ function normalizeContextTokens(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   return Object.fromEntries(
     Object.entries(value)
-      .filter(([peerId, token]) => nonEmptyString(peerId) && nonEmptyString(token))
+      .filter(
+        ([peerId, token]) => nonEmptyString(peerId) && nonEmptyString(token),
+      )
       .map(([peerId, token]) => [String(peerId), String(token).trim()]),
   )
 }
 
 /** Fix malformed private packets at the Weixin iLink adapter boundary. */
 export function normalizeIlinkInboundPacket(packet) {
-  if (!packet || typeof packet !== 'object' || !Object.hasOwn(packet, 'group_id')) return packet
-  if (packet.group_id !== null && !(typeof packet.group_id === 'string' && !packet.group_id.trim())) {
+  if (
+    !packet ||
+    typeof packet !== 'object' ||
+    !Object.hasOwn(packet, 'group_id')
+  )
+    return packet
+  if (
+    packet.group_id !== null &&
+    !(typeof packet.group_id === 'string' && !packet.group_id.trim())
+  ) {
     return packet
   }
   const normalized = { ...packet }
@@ -27,7 +37,8 @@ export function normalizeIlinkInboundPacket(packet) {
 
 function sessionFile(gateway, accountId) {
   const sessionDir = path.resolve(
-    gateway.options.sessionDataDir ?? path.join(process.cwd(), 'data', 'wechat-clawbot'),
+    gateway.options.sessionDataDir ??
+      path.join(process.cwd(), 'data', 'wechat-clawbot'),
   )
   return path.join(sessionDir, `${encodeURIComponent(accountId)}.json`)
 }
@@ -36,9 +47,10 @@ export const weixinIlinkOneBotsBridge = {
   configureAccount(channelConfig, normalized) {
     return {
       ...normalized,
-      outbound_text_format: channelConfig.config?.outbound_text_format
-        ?? channelConfig.credentials?.outbound_text_format
-        ?? 'markdown',
+      outbound_text_format:
+        channelConfig.config?.outbound_text_format ??
+        channelConfig.credentials?.outbound_text_format ??
+        'markdown',
     }
   },
 
@@ -52,11 +64,18 @@ export const weixinIlinkOneBotsBridge = {
       token,
       accountId: botId,
       ...(nonEmptyString(channelConfig?.userId ?? channelConfig?.user_id)
-        ? { userId: nonEmptyString(channelConfig?.userId ?? channelConfig?.user_id) }
+        ? {
+            userId: nonEmptyString(
+              channelConfig?.userId ?? channelConfig?.user_id,
+            ),
+          }
         : {}),
       contextTokens: normalizeContextTokens(channelConfig?.contextTokens),
     }
-    await fs.promises.mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 })
+    await fs.promises.mkdir(path.dirname(filePath), {
+      recursive: true,
+      mode: 0o700,
+    })
     let handle = null
     let created = false
     try {
@@ -79,7 +98,10 @@ export const weixinIlinkOneBotsBridge = {
     if (typeof client?.ingest !== 'function') return null
     const original = client.ingest
     const wrapped = function (packet, ...args) {
-      return Reflect.apply(original, this, [normalizeIlinkInboundPacket(packet), ...args])
+      return Reflect.apply(original, this, [
+        normalizeIlinkInboundPacket(packet),
+        ...args,
+      ])
     }
     client.ingest = wrapped
     return () => {
@@ -88,7 +110,7 @@ export const weixinIlinkOneBotsBridge = {
   },
 
   async deleteAccountData({ accountId, gateway }) {
-    await fs.promises.unlink(sessionFile(gateway, accountId)).catch(error => {
+    await fs.promises.unlink(sessionFile(gateway, accountId)).catch((error) => {
       if (error?.code !== 'ENOENT') throw error
     })
   },

@@ -46,5 +46,8 @@ export const weixinIlinkAdapter = {
 }
 
 export { WeixinIlinkChannel } from './WeixinIlinkChannel.js'
-export { normalizeIlinkInboundPacket, weixinIlinkOneBotsBridge } from './OneBotsBridge.js'
+export {
+  normalizeIlinkInboundPacket,
+  weixinIlinkOneBotsBridge,
+} from './OneBotsBridge.js'
 export default weixinIlinkAdapter

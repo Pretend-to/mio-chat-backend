@@ -10,7 +10,8 @@ import {
 } from './config.js'
 import defaultLogger from '../../utils/logger.js'
 
-const asError = value => value instanceof Error ? value : new Error(String(value))
+const asError = (value) =>
+  value instanceof Error ? value : new Error(String(value))
 const INBOUND_METADATA_MAX_SIZE = 256
 
 /**
@@ -48,7 +49,8 @@ export class OneBotsGateway {
           // so an injected host can inspect the intended loopback policy.
           port: options.port ?? ONEBOTS_PORT,
           host: '127.0.0.1',
-          log_level: options.logLevel ?? (process.env.LOG_LEVEL || 'info').toLowerCase(),
+          log_level:
+            options.logLevel ?? (process.env.LOG_LEVEL || 'info').toLowerCase(),
           general: {},
         }
         if (this.appFactory) {
@@ -57,9 +59,9 @@ export class OneBotsGateway {
           const { BaseApp } = await import('onebots')
           const runtimeDir = path.resolve(
             options.dataDir ??
-            this.options.dataDir ??
-            process.env.ONEBOTS_DATA_DIR ??
-            'data/onebots',
+              this.options.dataDir ??
+              process.env.ONEBOTS_DATA_DIR ??
+              'data/onebots',
           )
           await fs.promises.mkdir(runtimeDir, { recursive: true })
           BaseApp.configDir = runtimeDir
@@ -91,17 +93,25 @@ export class OneBotsGateway {
       adapterDefinition?.onebots?.platform ?? channelConfig.platform ?? '',
     ).trim()
     if (!platform) throw new TypeError('OneBots account requires a platform')
-    const credentials = channelConfig.credentials && typeof channelConfig.credentials === 'object'
-      ? channelConfig.credentials
-      : {}
-    const protocolName = typeof channelConfig.protocol === 'string'
-      ? channelConfig.protocol.trim().toLowerCase()
-      : ONEBOTS_PROTOCOL
+    const credentials =
+      channelConfig.credentials && typeof channelConfig.credentials === 'object'
+        ? channelConfig.credentials
+        : {}
+    const protocolName =
+      typeof channelConfig.protocol === 'string'
+        ? channelConfig.protocol.trim().toLowerCase()
+        : ONEBOTS_PROTOCOL
     if (protocolName !== ONEBOTS_PROTOCOL) {
-      throw new TypeError(`Unsupported embedded OneBots protocol: ${protocolName}`)
+      throw new TypeError(
+        `Unsupported embedded OneBots protocol: ${protocolName}`,
+      )
     }
-    const protocol = channelConfig[protocolName] ?? channelConfig.protocolConfig ??
-      (channelConfig.protocol && typeof channelConfig.protocol === 'object' ? channelConfig.protocol : {})
+    const protocol =
+      channelConfig[protocolName] ??
+      channelConfig.protocolConfig ??
+      (channelConfig.protocol && typeof channelConfig.protocol === 'object'
+        ? channelConfig.protocol
+        : {})
     const normalized = {
       ...credentials,
       ...channelConfig.config,
@@ -109,7 +119,12 @@ export class OneBotsGateway {
       account_id: id,
       [protocolName]: createProtocolConfig(protocol),
     }
-    return adapterDefinition?.onebots?.bridge?.configureAccount?.(channelConfig, normalized) ?? normalized
+    return (
+      adapterDefinition?.onebots?.bridge?.configureAccount?.(
+        channelConfig,
+        normalized,
+      ) ?? normalized
+    )
   }
 
   async ensurePlatformAdapter(platform, adapterDefinition = null) {
@@ -118,44 +133,64 @@ export class OneBotsGateway {
       throw new TypeError(`Invalid OneBots platform: ${platform}`)
     }
     const loader = this.options.adapterLoaders?.[platform]
-    const packageName = adapterDefinition?.onebots?.package ?? `@onebots/adapter-${platform}`
+    const packageName =
+      adapterDefinition?.onebots?.package ?? `@onebots/adapter-${platform}`
     try {
       if (loader) await loader()
       else await import(packageName)
     } catch (error) {
-      throw new Error(`OneBots adapter is not installed: ${packageName}`, { cause: error })
+      throw new Error(`OneBots adapter is not installed: ${packageName}`, {
+        cause: error,
+      })
     }
   }
 
   findProtocol(account) {
-    return account?.protocols?.find(protocol => `${protocol.name}.${protocol.version}` === ONEBOTS_PROTOCOL)
-      ?? account?.protocols?.[0]
+    return (
+      account?.protocols?.find(
+        (protocol) =>
+          `${protocol.name}.${protocol.version}` === ONEBOTS_PROTOCOL,
+      ) ?? account?.protocols?.[0]
+    )
   }
 
   installPlatformCompatibility(state) {
     state.restorePlatformCompatibility?.()
-    state.restorePlatformCompatibility = state.adapterDefinition?.onebots?.bridge
-      ?.installCompatibility?.({ state, gateway: this }) ?? null
+    state.restorePlatformCompatibility =
+      state.adapterDefinition?.onebots?.bridge?.installCompatibility?.({
+        state,
+        gateway: this,
+      }) ?? null
   }
 
   attachAccountEvents(state) {
     const { account, id } = state
     const client = account.client
-    const onQr = payload => {
-      const qrCodeUrl = payload?.qrCodeUrl ?? payload?.qr_code_url ?? payload?.url ?? ''
+    const onQr = (payload) => {
+      const qrCodeUrl =
+        payload?.qrCodeUrl ?? payload?.qr_code_url ?? payload?.url ?? ''
       const qrcode = payload?.qrcode ?? payload?.qrCode ?? ''
       state.status = 'qr'
-      state.qr = { qrCodeUrl, qrcode, status: 'qr', refreshed: !!payload?.refreshed }
+      state.qr = {
+        qrCodeUrl,
+        qrcode,
+        status: 'qr',
+        refreshed: !!payload?.refreshed,
+      }
       state.error = null
       this.qrSessions.set(id, state.qr)
-      this.logger.info?.(`[OneBots] 账号 ${id} 生成登录二维码: ${qrCodeUrl || qrcode}`)
+      this.logger.info?.(
+        `[OneBots] 账号 ${id} 生成登录二维码: ${qrCodeUrl || qrcode}`,
+      )
     }
-    const onLogin = session => {
+    const onLogin = (session) => {
       state.status = 'login'
       state.session = session ?? null
       state.error = null
       state.qr = state.qr ? { ...state.qr, status: 'login' } : null
-      this.logger.info?.(`[OneBots] 账号 ${id} 扫码登录成功: botId=${session?.accountId}, userId=${session?.userId}`)
+      this.logger.info?.(
+        `[OneBots] 账号 ${id} 扫码登录成功: botId=${session?.accountId}, userId=${session?.userId}`,
+      )
     }
     const onReady = async () => {
       state.status = 'online'
@@ -166,16 +201,20 @@ export class OneBotsGateway {
       }
       if (state.qr) state.qr = { ...state.qr, status: 'online' }
       this.qrSessions.delete(id)
-      this.logger.info?.(`[OneBots] 账号 ${id} 已就绪并上线: botId=${state.session?.accountId}, userId=${state.session?.userId}`)
+      this.logger.info?.(
+        `[OneBots] 账号 ${id} 已就绪并上线: botId=${state.session?.accountId}, userId=${state.session?.userId}`,
+      )
     }
-    const onCredentialStale = error => {
+    const onCredentialStale = (error) => {
       state.status = 'credential_stale'
       state.error = error ? asError(error).message : null
       // Keep the last QR available until the adapter emits a fresh one.
       if (state.qr) state.qr = { ...state.qr, status: 'credential_stale' }
-      this.logger.warn?.(`[OneBots] 账号 ${id} 凭证在服务端失效: ${state.error}`)
+      this.logger.warn?.(
+        `[OneBots] 账号 ${id} 凭证在服务端失效: ${state.error}`,
+      )
     }
-    const onError = error => {
+    const onError = (error) => {
       state.error = asError(error).message
       if (state.status !== 'credential_stale') state.status = 'error'
       this.logger.error?.(`[OneBots] 账号 ${id} 发生异常:`, error)
@@ -211,7 +250,10 @@ export class OneBotsGateway {
   async startAccount(channelConfig, adapterDefinition = null) {
     await this.init()
     if (this.disposed) throw new Error('OneBotsGateway has been disposed')
-    const normalized = this.normalizeChannelConfig(channelConfig, adapterDefinition)
+    const normalized = this.normalizeChannelConfig(
+      channelConfig,
+      adapterDefinition,
+    )
     const id = normalized.account_id
     await adapterDefinition?.onebots?.bridge?.beforeAccountStart?.({
       accountId: id,
@@ -224,19 +266,30 @@ export class OneBotsGateway {
         throw new Error(`账号 ${id} 已绑定平台 ${existing.platform}`)
       }
       if (existing.startPromise) return existing
-      if (existing.status === 'online' || existing.status === 'qr' || existing.status === 'login' || existing.status === 'pending' || existing.status === 'credential_stale') {
+      if (
+        existing.status === 'online' ||
+        existing.status === 'qr' ||
+        existing.status === 'login' ||
+        existing.status === 'pending' ||
+        existing.status === 'credential_stale'
+      ) {
         return existing
       }
     }
 
     await this.ensurePlatformAdapter(normalized.platform, adapterDefinition)
-    const adapter = this.app.adapters?.get?.(normalized.platform)
-      ?? this.app.findOrCreateAdapter?.(normalized.platform)
-    if (!adapter) throw new Error(`OneBots adapter unavailable: ${normalized.platform}`)
+    const adapter =
+      this.app.adapters?.get?.(normalized.platform) ??
+      this.app.findOrCreateAdapter?.(normalized.platform)
+    if (!adapter)
+      throw new Error(`OneBots adapter unavailable: ${normalized.platform}`)
 
     // BaseApp.addAccount is the canonical dynamic account transaction. It
     // creates the real adapter account and keeps its adapter registry in sync.
-    if (existing && (existing.status === 'offline' || existing.status === 'error')) {
+    if (
+      existing &&
+      (existing.status === 'offline' || existing.status === 'error')
+    ) {
       // Account.stop() intentionally removes its lifecycle listeners. Remount
       // through BaseApp for a subsequent start instead of trying to revive a
       // stopped Account instance.
@@ -248,8 +301,13 @@ export class OneBotsGateway {
     if (!existing || !adapter.accounts?.has?.(id)) {
       await this.app.addAccount(normalized)
     }
-    const account = adapter.accounts?.get?.(id) ?? this.app.adapters?.get?.(normalized.platform)?.accounts?.get?.(id)
-    if (!account) throw new Error(`OneBots failed to mount account: ${normalized.platform}.${id}`)
+    const account =
+      adapter.accounts?.get?.(id) ??
+      this.app.adapters?.get?.(normalized.platform)?.accounts?.get?.(id)
+    if (!account)
+      throw new Error(
+        `OneBots failed to mount account: ${normalized.platform}.${id}`,
+      )
     const state = existing ?? {
       id,
       platform: normalized.platform,
@@ -262,7 +320,8 @@ export class OneBotsGateway {
       error: null,
       status: 'pending',
     }
-    state.adapterDefinition = adapterDefinition ?? state.adapterDefinition ?? null
+    state.adapterDefinition =
+      adapterDefinition ?? state.adapterDefinition ?? null
     state.account = account
     state.client = account.client
     state.protocol = this.findProtocol(account)
@@ -272,9 +331,12 @@ export class OneBotsGateway {
     this.accounts.set(id, state)
     state.status = 'pending'
     if (!state.session && typeof state.client?.getSession === 'function') {
-      state.client.getSession().then(s => {
-        if (s) state.session = s
-      }).catch(() => {})
+      state.client
+        .getSession()
+        .then((s) => {
+          if (s) state.session = s
+        })
+        .catch(() => {})
     }
 
     // Login can wait for a QR scan for several minutes. Return the state now,
@@ -287,22 +349,25 @@ export class OneBotsGateway {
     } catch (error) {
       accountStart = Promise.reject(error)
     }
-    state.startPromise = Promise.resolve(accountStart).then(
-      result => {
-        if (state.status === 'pending') state.status = account.status === 'online' ? 'online' : 'ready'
+    state.startPromise = Promise.resolve(accountStart)
+      .then((result) => {
+        if (state.status === 'pending')
+          state.status = account.status === 'online' ? 'online' : 'ready'
         return result
-      },
-    ).catch(error => {
-      // Account.stop() invalidates an in-flight QR/login generation. That is
-      // an expected cancellation, not a startup fault worth surfacing.
-      if (state.status === 'offline' || state.status === 'disposed') return undefined
-      state.error = asError(error).message
-      state.status = 'error'
-      this.logger.warn?.(`[OneBots] account ${id} failed to start`, error)
-      return undefined
-    }).finally(() => {
-      state.startPromise = null
-    })
+      })
+      .catch((error) => {
+        // Account.stop() invalidates an in-flight QR/login generation. That is
+        // an expected cancellation, not a startup fault worth surfacing.
+        if (state.status === 'offline' || state.status === 'disposed')
+          return undefined
+        state.error = asError(error).message
+        state.status = 'error'
+        this.logger.warn?.(`[OneBots] account ${id} failed to start`, error)
+        return undefined
+      })
+      .finally(() => {
+        state.startPromise = null
+      })
     // Promise has a rejection handler above; this explicit void documents that
     // the background login is intentionally not awaited by callers.
     void state.startPromise
@@ -323,17 +388,27 @@ export class OneBotsGateway {
     const force = opts.force === true
 
     let state = this.accounts.get(id)
-    if (!state) state = await this.startAccount({ id, platform: plat, ...channel }, adapterDefinition)
+    if (!state)
+      state = await this.startAccount(
+        { id, platform: plat, ...channel },
+        adapterDefinition,
+      )
 
     // If an existing valid QR is already active and not forced, return it immediately.
-    if (!force && state.qr?.status === 'qr' && (state.qr.qrCodeUrl || state.qr.qrcode)) {
+    if (
+      !force &&
+      state.qr?.status === 'qr' &&
+      (state.qr.qrCodeUrl || state.qr.qrcode)
+    ) {
       return { ...state.qr }
     }
 
     // Account is mounted. If interactive QR login can be triggered on the client:
     const client = state.client ?? state.account?.client
     if (typeof client?.runInteractiveQrLogin === 'function') {
-      state.interactiveLoginAbort?.abort(new DOMException('New QR login requested', 'AbortError'))
+      state.interactiveLoginAbort?.abort(
+        new DOMException('New QR login requested', 'AbortError'),
+      )
       const controller = new AbortController()
       state.interactiveLoginAbort = controller
       let loginPromise
@@ -342,18 +417,21 @@ export class OneBotsGateway {
       } catch (err) {
         loginPromise = Promise.reject(err)
       }
-      Promise.resolve(loginPromise).catch(error => {
+      Promise.resolve(loginPromise).catch((error) => {
         if (controller.signal.aborted) return
         this.logger.warn?.(`[OneBots] account ${id} QR login failed:`, error)
         if (state.status === 'qr') {
-          state.status = (state.session || state.account?.status === 'online') ? 'online' : 'error'
+          state.status =
+            state.session || state.account?.status === 'online'
+              ? 'online'
+              : 'error'
           state.error = asError(error).message
         }
       })
 
       // Wait for the 'qr' event to be emitted by runInteractiveQrLogin
       const waitMs = this.options.qrWaitTimeoutMs ?? 15_000
-      await new Promise(resolve => {
+      await new Promise((resolve) => {
         let timer
         const finish = () => {
           if (timer) clearTimeout(timer)
@@ -370,33 +448,54 @@ export class OneBotsGateway {
         timer.unref?.()
       })
 
-      if (state.qr?.status === 'qr' && (state.qr.qrCodeUrl || state.qr.qrcode)) {
+      if (
+        state.qr?.status === 'qr' &&
+        (state.qr.qrCodeUrl || state.qr.qrcode)
+      ) {
         return { ...state.qr }
       }
-    } else if (typeof client?.createLoginSession === 'function' || typeof state.account?.createLoginSession === 'function') {
+    } else if (
+      typeof client?.createLoginSession === 'function' ||
+      typeof state.account?.createLoginSession === 'function'
+    ) {
       const fn = client?.createLoginSession ?? state.account?.createLoginSession
       const target = client?.createLoginSession ? client : state.account
       try {
         const botType = state.config?.bot_type ?? state.config?.botType
         const session = await fn.call(target, { botType })
-        const qrCodeUrl = session.qrCodeUrl ?? session.qrcode_img_content ?? session.url ?? ''
+        const qrCodeUrl =
+          session.qrCodeUrl ?? session.qrcode_img_content ?? session.url ?? ''
         const qrcode = session.qrcode ?? ''
         state.status = 'qr'
-        state.qr = { qrCodeUrl, qrcode, status: 'qr', sessionKey: session.sessionKey }
+        state.qr = {
+          qrCodeUrl,
+          qrcode,
+          status: 'qr',
+          sessionKey: session.sessionKey,
+        }
         this.qrSessions.set(id, state.qr)
         if (typeof client?.waitForLogin === 'function' && session.sessionKey) {
-          client.waitForLogin(session.sessionKey).then(outcome => {
-            if (outcome?.connected && outcome?.session) {
-              state.status = 'login'
-              state.session = outcome.session
-            }
-          }).catch(err => {
-            this.logger.warn?.(`[OneBots] account ${id} waitForLogin error:`, err)
-          })
+          client
+            .waitForLogin(session.sessionKey)
+            .then((outcome) => {
+              if (outcome?.connected && outcome?.session) {
+                state.status = 'login'
+                state.session = outcome.session
+              }
+            })
+            .catch((err) => {
+              this.logger.warn?.(
+                `[OneBots] account ${id} waitForLogin error:`,
+                err,
+              )
+            })
         }
         return { ...state.qr }
       } catch (err) {
-        this.logger.warn?.(`[OneBots] account ${id} createLoginSession failed:`, err)
+        this.logger.warn?.(
+          `[OneBots] account ${id} createLoginSession failed:`,
+          err,
+        )
       }
     }
 
@@ -405,7 +504,7 @@ export class OneBotsGateway {
     if (startPromise) {
       const targets = [state.account?.client, state.account].filter(Boolean)
       const waitMs = this.options.qrWaitTimeoutMs ?? 15_000
-      await new Promise(resolve => {
+      await new Promise((resolve) => {
         let settled = false
         let timer
         const cleanup = () => {
@@ -441,23 +540,31 @@ export class OneBotsGateway {
         startPromise.then(finish, finish)
       })
     }
-    return state.qr?.status === 'qr' ? { ...state.qr } : this.getAccountState(id)
+    return state.qr?.status === 'qr'
+      ? { ...state.qr }
+      : this.getAccountState(id)
   }
 
   async stopAccount(channelId) {
     const id = String(typeof channelId === 'object' ? channelId.id : channelId)
     const state = this.accounts.get(id)
     if (!state) return false
-    state.interactiveLoginAbort?.abort(new DOMException('Account stopped', 'AbortError'))
+    state.interactiveLoginAbort?.abort(
+      new DOMException('Account stopped', 'AbortError'),
+    )
     state.interactiveLoginAbort = null
     if (state.stopPromise) return state.stopPromise
     state.status = 'offline'
-    state.stopPromise = Promise.resolve().then(() => state.account.stop?.()).catch(error => {
-      state.error = asError(error).message
-      this.logger.warn?.(`[OneBots] account ${id} failed to stop`, error)
-    }).then(() => true).finally(() => {
-      state.stopPromise = null
-    })
+    state.stopPromise = Promise.resolve()
+      .then(() => state.account.stop?.())
+      .catch((error) => {
+        state.error = asError(error).message
+        this.logger.warn?.(`[OneBots] account ${id} failed to stop`, error)
+      })
+      .then(() => true)
+      .finally(() => {
+        state.stopPromise = null
+      })
     await state.stopPromise
     state.clientDetach?.()
     state.detachEvents?.()
@@ -517,8 +624,13 @@ export class OneBotsGateway {
     const state = this.accounts.get(id)
     if (!state) throw new Error(`OneBots account not found: ${id}`)
     if (state.clientFacade) return state.clientFacade
-    if (!state.protocol) throw new Error(`OneBots account has no ${ONEBOTS_PROTOCOL} protocol: ${id}`)
-    const factory = this.clientFactory ?? (await import('@imhelper/onebot-v12')).createOnebot12Client
+    if (!state.protocol)
+      throw new Error(
+        `OneBots account has no ${ONEBOTS_PROTOCOL} protocol: ${id}`,
+      )
+    const factory =
+      this.clientFactory ??
+      (await import('@imhelper/onebot-v12')).createOnebot12Client
     const protocol = state.protocol
     const clientConfig = {
       baseUrl: createLoopbackUrl(options.port ?? ONEBOTS_PORT),
@@ -529,14 +641,21 @@ export class OneBotsGateway {
       call: (action, params) => this.callAction(id, action, params),
     }
     const client = await factory(clientConfig, state)
-    const onDispatch = payload => {
+    const onDispatch = (payload) => {
       try {
-        const event = typeof payload === 'string' ? JSON.parse(payload) : payload
-        const eventType = event?.detail_type || event?.message_type || event?.type || 'unknown'
+        const event =
+          typeof payload === 'string' ? JSON.parse(payload) : payload
+        const eventType =
+          event?.detail_type || event?.message_type || event?.type || 'unknown'
         const senderId = event?.user_id || event?.sender?.id || 'unknown'
-        const rawContent = event?.raw_message || event?.message?.[0]?.data?.text || ''
-        const preview = rawContent ? ` "${rawContent.slice(0, 40)}${rawContent.length > 40 ? '...' : ''}"` : ''
-        this.logger.info?.(`[OneBots] 📥 接收协议事件派发 [${id}] [${eventType}] from=${senderId}${preview}`)
+        const rawContent =
+          event?.raw_message || event?.message?.[0]?.data?.text || ''
+        const preview = rawContent
+          ? ` "${rawContent.slice(0, 40)}${rawContent.length > 40 ? '...' : ''}"`
+          : ''
+        this.logger.info?.(
+          `[OneBots] 📥 接收协议事件派发 [${id}] [${eventType}] from=${senderId}${preview}`,
+        )
         if (event?.type === 'message' && event.message_id != null) {
           state.inboundMetadata ??= new Map()
           state.inboundMetadata.set(String(event.message_id), {
@@ -564,14 +683,17 @@ export class OneBotsGateway {
   getInboundMetadata(channelId, messageId) {
     if (messageId == null) return null
     const id = String(typeof channelId === 'object' ? channelId.id : channelId)
-    return this.accounts.get(id)?.inboundMetadata?.get(String(messageId)) ?? null
+    return (
+      this.accounts.get(id)?.inboundMetadata?.get(String(messageId)) ?? null
+    )
   }
 
   async callAction(channelId, action, params = {}) {
     const id = String(typeof channelId === 'object' ? channelId.id : channelId)
     const state = this.accounts.get(id)
     if (!state) throw new Error(`OneBots account not found: ${id}`)
-    if (!state.protocol?.apply) throw new Error(`OneBots account has no callable protocol: ${id}`)
+    if (!state.protocol?.apply)
+      throw new Error(`OneBots account has no callable protocol: ${id}`)
     return state.protocol.apply(action, params)
   }
 

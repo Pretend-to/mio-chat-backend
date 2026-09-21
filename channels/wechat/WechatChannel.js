@@ -186,7 +186,10 @@ export class WechatChannel extends BaseChannel {
         channelName: this.channel?.name || null,
       },
     })
-    const target = await this.resolveInboundTarget(envelope, { contextToken, from })
+    const target = await this.resolveInboundTarget(envelope, {
+      contextToken,
+      from,
+    })
     if (!target) return
     if (contextToken) {
       target.latestContextToken = contextToken
@@ -289,9 +292,7 @@ export class WechatChannel extends BaseChannel {
 
   buildSendMsg({ to, text, contextToken, fromBot }) {
     const targetTo =
-      to && to !== 'system_trigger' && to !== 'system'
-        ? to
-        : this.masterId
+      to && to !== 'system_trigger' && to !== 'system' ? to : this.masterId
     const targetToken = contextToken || this.latestContextToken || null
     return buildSendMsg({
       contextToken: targetToken,

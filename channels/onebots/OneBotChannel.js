@@ -322,7 +322,8 @@ export class OneBotChannel extends BaseChannel {
 
   async stop() {
     if (this._stopPromise) return this._stopPromise
-    if (!this.running && !this._eventsBound && this.activeJobs.size === 0) return
+    if (!this.running && !this._eventsBound && this.activeJobs.size === 0)
+      return
     this._stopPromise = (async () => {
       const ownsTransport = this._eventsBound
       this._unbindEvents()
@@ -388,9 +389,7 @@ export class OneBotChannel extends BaseChannel {
 
     if (type === 'private') {
       if (userId == null) {
-        this.log?.warn?.(
-          `[${this.channelType}] ⚠️ 忽略缺少 userId 的私聊消息`,
-        )
+        this.log?.warn?.(`[${this.channelType}] ⚠️ 忽略缺少 userId 的私聊消息`)
         return
       }
     } else if (type !== 'group' || groupId == null) {
@@ -426,19 +425,22 @@ export class OneBotChannel extends BaseChannel {
     const contextToken = this.extractContextToken(msg)
     const envelope = normalizeChannelEnvelope({
       actor: {
-        displayName: msg.sender?.card || msg.sender?.nickname || msg.user_name || null,
+        displayName:
+          msg.sender?.card || msg.sender?.nickname || msg.user_name || null,
         externalUserId: String(userId),
         role: msg.sender?.role || null,
       },
       content: { files, images, text },
       conversation: {
-        externalConversationId: type === 'group' ? String(groupId) : String(userId),
+        externalConversationId:
+          type === 'group' ? String(groupId) : String(userId),
         type,
       },
       message: {
         externalMessageId: messageId,
         receivedAt: Date.now(),
-        replyToMessageId: msg.reply?.message_id || msg.reply_to_message_id || null,
+        replyToMessageId:
+          msg.reply?.message_id || msg.reply_to_message_id || null,
         sentAt: Number(msg.time) > 0 ? Number(msg.time) * 1000 : Date.now(),
       },
       raw: msg,
@@ -449,7 +451,10 @@ export class OneBotChannel extends BaseChannel {
         channelName: this.channel?.name || null,
       },
     })
-    const target = await this.resolveInboundTarget(envelope, { contextToken, from })
+    const target = await this.resolveInboundTarget(envelope, {
+      contextToken,
+      from,
+    })
     if (!target) return
     const messageContext = {
       messageId: msg.message_id ?? msg.messageId,

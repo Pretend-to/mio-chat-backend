@@ -8,7 +8,10 @@ import { encode, isSilk } from 'silk-wasm'
  * @param {number} [opts.sampleRate=24000]
  * @returns {Promise<{ silkBuffer: Buffer, durationMs: number }>}
  */
-export async function convertAudioToSilk(audioBuffer, { sampleRate = 24000 } = {}) {
+export async function convertAudioToSilk(
+  audioBuffer,
+  { sampleRate = 24000 } = {},
+) {
   if (!audioBuffer || audioBuffer.length === 0) {
     throw new Error('音频数据为空，无法转码')
   }
@@ -26,7 +29,9 @@ export async function convertAudioToSilk(audioBuffer, { sampleRate = 24000 } = {
     const directSilk = await encode(audioBuffer, sampleRate)
     if (directSilk?.data?.length > 0) {
       return {
-        durationMs: directSilk.duration || Math.round((audioBuffer.length / (sampleRate * 2)) * 1000),
+        durationMs:
+          directSilk.duration ||
+          Math.round((audioBuffer.length / (sampleRate * 2)) * 1000),
         silkBuffer: Buffer.from(directSilk.data),
       }
     }
@@ -35,10 +40,14 @@ export async function convertAudioToSilk(audioBuffer, { sampleRate = 24000 } = {
   // 3. 通过 ffmpeg 将压缩音频（MP3/AAC/OGG/FLAC/M4A）转为 16-bit 24000Hz 单声道 PCM
   const pcmBuffer = await new Promise((resolve, reject) => {
     const ff = spawn('ffmpeg', [
-      '-i', 'pipe:0',
-      '-f', 's16le',
-      '-ar', String(sampleRate),
-      '-ac', '1',
+      '-i',
+      'pipe:0',
+      '-f',
+      's16le',
+      '-ar',
+      String(sampleRate),
+      '-ac',
+      '1',
       'pipe:1',
     ])
 
@@ -58,7 +67,9 @@ export async function convertAudioToSilk(audioBuffer, { sampleRate = 24000 } = {
       if (code === 0) {
         resolve(Buffer.concat(chunks))
       } else {
-        reject(new Error(`ffmpeg 转码失败 (code=${code}): ${errOutput.slice(-200)}`))
+        reject(
+          new Error(`ffmpeg 转码失败 (code=${code}): ${errOutput.slice(-200)}`),
+        )
       }
     })
 
@@ -70,7 +81,9 @@ export async function convertAudioToSilk(audioBuffer, { sampleRate = 24000 } = {
   const silkData = Buffer.from(silkRes.data)
 
   return {
-    durationMs: silkRes.duration || Math.round((pcmBuffer.length / (sampleRate * 2)) * 1000),
+    durationMs:
+      silkRes.duration ||
+      Math.round((pcmBuffer.length / (sampleRate * 2)) * 1000),
     silkBuffer: silkData,
   }
 }
