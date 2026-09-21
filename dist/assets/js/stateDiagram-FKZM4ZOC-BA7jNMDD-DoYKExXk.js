@@ -1,2 +1,519 @@
-import{Bn as t,C as e,Gn as a,Kn as i,Ln as r,On as d,Q as n,an as s,rt as o,sn as g}from"./vendor_editor_preview-Ccdt85Fz.js";import{t as p}from"./graphlib-CduCindt-C8aGiKlX.js";import"./chunk-55IACEB6-DWUqxxdp-ClblAteD.js";import"./chunk-QN33PNHL-BFbXAWI4-CKMEtEdN.js";import{t as l}from"./dagre-ISqDEl60-CbishIV6.js";import{i as h,r as c,t as x}from"./chunk-DI55MBZ5-BaCDwrxO-5lgaE1RI.js";var u,f=a(t=>t.append("circle").attr("class","start-state").attr("r",g().state.sizeUnit).attr("cx",g().state.padding+g().state.sizeUnit).attr("cy",g().state.padding+g().state.sizeUnit),"drawStartState"),y=a(t=>t.append("line").style("stroke","grey").style("stroke-dasharray","3").attr("x1",g().state.textHeight).attr("class","divider").attr("x2",2*g().state.textHeight).attr("y1",0).attr("y2",0),"drawDivider"),w=a((t,e)=>{let a=t.append("text").attr("x",2*g().state.padding).attr("y",g().state.textHeight+2*g().state.padding).attr("font-size",g().state.fontSize).attr("class","state-title").text(e.id),i=a.node().getBBox();return t.insert("rect",":first-child").attr("x",g().state.padding).attr("y",g().state.padding).attr("width",i.width+2*g().state.padding).attr("height",i.height+2*g().state.padding).attr("rx",g().state.radius),a},"drawSimpleState"),m=a((t,e)=>{let i=a(function(t,e,a){let i=t.append("tspan").attr("x",2*g().state.padding).text(e);a||i.attr("dy",g().state.textHeight)},"addTspan"),r=t.append("text").attr("x",2*g().state.padding).attr("y",g().state.textHeight+1.3*g().state.padding).attr("font-size",g().state.fontSize).attr("class","state-title").text(e.descriptions[0]).node().getBBox(),d=r.height,n=t.append("text").attr("x",g().state.padding).attr("y",d+.4*g().state.padding+g().state.dividerMargin+g().state.textHeight).attr("class","state-description"),s=!0,o=!0;e.descriptions.forEach(function(t){s||(i(n,t,o),o=!1),s=!1});let p=t.append("line").attr("x1",g().state.padding).attr("y1",g().state.padding+d+g().state.dividerMargin/2).attr("y2",g().state.padding+d+g().state.dividerMargin/2).attr("class","descr-divider"),l=n.node().getBBox(),h=Math.max(l.width,r.width);return p.attr("x2",h+3*g().state.padding),t.insert("rect",":first-child").attr("x",g().state.padding).attr("y",g().state.padding).attr("width",h+2*g().state.padding).attr("height",l.height+d+2*g().state.padding).attr("rx",g().state.radius),t},"drawDescrState"),B=a((t,e,a)=>{let i=g().state.padding,r=2*g().state.padding,d=t.node().getBBox(),n=d.width,s=d.x,o=t.append("text").attr("x",0).attr("y",g().state.titleShift).attr("font-size",g().state.fontSize).attr("class","state-title").text(e.id),p=o.node().getBBox().width+r,l=Math.max(p,n);l===n&&(l+=r);let h,c=t.node().getBBox();e.doc,h=s-i,p>n&&(h=(n-l)/2+i),Math.abs(s-c.x)<i&&p>n&&(h=s-(p-n)/2);let x=1-g().state.textHeight;return t.insert("rect",":first-child").attr("x",h).attr("y",x).attr("class",a?"alt-composit":"composit").attr("width",l).attr("height",c.height+g().state.textHeight+g().state.titleShift+1).attr("rx","0"),o.attr("x",h+i),p<=n&&o.attr("x",s+(l-r)/2-p/2+i),t.insert("rect",":first-child").attr("x",h).attr("y",g().state.titleShift-g().state.textHeight-g().state.padding).attr("width",l).attr("height",3*g().state.textHeight).attr("rx",g().state.radius),t.insert("rect",":first-child").attr("x",h).attr("y",g().state.titleShift-g().state.textHeight-g().state.padding).attr("width",l).attr("height",c.height+3+2*g().state.textHeight).attr("rx",g().state.radius),t},"addTitleAndBox"),b=a(t=>(t.append("circle").attr("class","end-state-outer").attr("r",g().state.sizeUnit+g().state.miniPadding).attr("cx",g().state.padding+g().state.sizeUnit+g().state.miniPadding).attr("cy",g().state.padding+g().state.sizeUnit+g().state.miniPadding),t.append("circle").attr("class","end-state-inner").attr("r",g().state.sizeUnit).attr("cx",g().state.padding+g().state.sizeUnit+2).attr("cy",g().state.padding+g().state.sizeUnit+2)),"drawEndState"),k=a((t,e)=>{let a=g().state.forkWidth,i=g().state.forkHeight;if(e.parentId){let t=a;a=i,i=t}return t.append("rect").style("stroke","black").style("fill","black").attr("width",a).attr("height",i).attr("x",g().state.padding).attr("y",g().state.padding)},"drawForkJoinState"),N=a((t,e,a,i)=>{let r=0,d=i.append("text");d.style("text-anchor","start"),d.attr("class","noteText");let n=t.replace(/\r\n/g,"<br/>");n=n.replace(/\n/g,"<br/>");let o=n.split(s.lineBreakRegex),p=1.25*g().state.noteMargin;for(let s of o){let t=s.trim();if(t.length>0){let i=d.append("tspan");if(i.text(t),0===p){p+=i.node().getBBox().height}r+=p,i.attr("x",e+g().state.noteMargin),i.attr("y",a+r+1.25*g().state.noteMargin)}}return{textWidth:d.node().getBBox().width,textHeight:r}},"_drawLongText"),S=a((t,e)=>{e.attr("class","state-note");let a=e.append("rect").attr("x",0).attr("y",g().state.padding),{textWidth:i,textHeight:r}=N(t,0,0,e.append("g"));return a.attr("height",r+2*g().state.noteMargin),a.attr("width",i+2*g().state.noteMargin),a},"drawNote"),E=a(function(t,e){let a=e.id,i={id:a,label:e.id,width:0,height:0},r=t.append("g").attr("id",a).attr("class","stateGroup");"start"===e.type&&f(r),"end"===e.type&&b(r),("fork"===e.type||"join"===e.type)&&k(r,e),"note"===e.type&&S(e.note.text,r),"divider"===e.type&&y(r),"default"===e.type&&0===e.descriptions.length&&w(r,e),"default"===e.type&&e.descriptions.length>0&&m(r,e);let d=r.node().getBBox();return i.width=d.width+2*g().state.padding,i.height=d.height+2*g().state.padding,i},"drawState"),M=0,v=a(function(t,d,p){let l=a(function(t){switch(t){case c.relationType.AGGREGATION:return"aggregation";case c.relationType.EXTENSION:return"extension";case c.relationType.COMPOSITION:return"composition";case c.relationType.DEPENDENCY:return"dependency"}},"getRelationType");d.points=d.points.filter(t=>!Number.isNaN(t.y));let h=d.points,x=e().x(function(t){return t.x}).y(function(t){return t.y}).curve(n),u=t.append("path").attr("d",x(h)).attr("id","edge"+M).attr("class","transition"),f="";if(g().state.arrowMarkerAbsolute&&(f=r(!0)),u.attr("marker-end","url("+f+"#"+l(c.relationType.DEPENDENCY)+"End)"),void 0!==p.title){let e=t.append("g").attr("class","stateLabel"),{x:a,y:r}=o.calcLabelPosition(d.points),n=s.getRows(p.title),l=0,h=[],c=0,x=0;for(let t=0;t<=n.length;t++){let d=e.append("text").attr("text-anchor","middle").text(n[t]).attr("x",a).attr("y",r+l),s=d.node().getBBox();c=Math.max(c,s.width),x=Math.min(x,s.x),i.info(s.x,a,r+l),0===l&&(l=d.node().getBBox().height,i.info("Title height",l,r)),h.push(d)}let u=l*n.length;if(n.length>1){let t=(n.length-1)*l*.5;h.forEach((e,a)=>e.attr("y",r+a*l-t)),u=l*n.length}let f=e.node().getBBox();e.insert("rect",":first-child").attr("class","box").attr("x",a-c/2-g().state.padding/2).attr("y",r-u/2-g().state.padding/2-3.5).attr("width",c+g().state.padding).attr("height",u+g().state.padding),i.info(f)}M++},"drawEdge"),H={},z=a(function(){},"setConf"),D=a(function(t){t.append("defs").append("marker").attr("id","dependencyEnd").attr("refX",19).attr("refY",7).attr("markerWidth",20).attr("markerHeight",28).attr("orient","auto").append("path").attr("d","M 19,7 L9,13 L14,7 L9,1 Z")},"insertMarkers"),T=a(function(e,a,r,n){u=g().state;let s,o=g().securityLevel;"sandbox"===o&&(s=t("#i"+a));let p=t("sandbox"===o?s.nodes()[0].contentDocument.body:"body"),l="sandbox"===o?s.nodes()[0].contentDocument:document;i.debug("Rendering diagram "+e);let h=p.select(`[id='${a}']`);D(h),C(n.db.getRootDoc(),h,void 0,!1,p,l,n);let c=u.padding,x=h.node().getBBox(),f=x.width+2*c,y=x.height+2*c;d(h,y,1.75*f,u.useMaxWidth),h.attr("viewBox",`${x.x-u.padding}  ${x.y-u.padding} `+f+" "+y)},"draw"),L=a(t=>t?t.length*u.fontSizeFactor:1,"getLabelWidth"),C=a((t,e,a,r,d,n,o)=>{let g,h=new p({compound:!0,multigraph:!0}),c=!0;for(g=0;g<t.length;g++)if("relation"===t[g].stmt){c=!1;break}a?h.setGraph({rankdir:"LR",multigraph:!0,compound:!0,ranker:"tight-tree",ranksep:c?1:u.edgeLengthFactor,nodeSep:c?1:50,isMultiGraph:!0}):h.setGraph({rankdir:"TB",multigraph:!0,compound:!0,ranksep:c?1:u.edgeLengthFactor,nodeSep:c?1:50,ranker:"tight-tree",isMultiGraph:!0}),h.setDefaultEdgeLabel(function(){return{}});let x=o.db.getStates(),f=o.db.getRelations(),y=Object.keys(x);for(let i of y){let t,s=x[i];if(a&&(s.parentId=a),s.doc){let a=e.append("g").attr("id",s.id).attr("class","stateGroup");t=C(s.doc,a,s.id,!r,d,n,o);{a=B(a,s,r);let e=a.node().getBBox();t.width=e.width,t.height=e.height+u.padding/2,H[s.id]={y:u.compositTitleSize}}}else t=E(e,s,h);if(s.note){let a=E(e,{descriptions:[],id:s.id+"-note",note:s.note,type:"note"},h);"left of"===s.note.position?(h.setNode(t.id+"-note",a),h.setNode(t.id,t)):(h.setNode(t.id,t),h.setNode(t.id+"-note",a)),h.setParent(t.id,t.id+"-group"),h.setParent(t.id+"-note",t.id+"-group")}else h.setNode(t.id,t)}i.debug("Count=",h.nodeCount(),h);let w=0;f.forEach(function(t){w++,i.debug("Setting edge",t),h.setEdge(t.id1,t.id2,{relation:t,width:L(t.title),height:u.labelHeight*s.getRows(t.title).length,labelpos:"c"},"id"+w)}),l(h),i.debug("Graph after layout",h.nodes());let m=e.node();h.nodes().forEach(function(t){void 0!==t&&void 0!==h.node(t)?(i.warn("Node "+t+": "+JSON.stringify(h.node(t))),d.select("#"+m.id+" #"+t).attr("transform","translate("+(h.node(t).x-h.node(t).width/2)+","+(h.node(t).y+(H[t]?H[t].y:0)-h.node(t).height/2)+" )"),d.select("#"+m.id+" #"+t).attr("data-x-shift",h.node(t).x-h.node(t).width/2),n.querySelectorAll("#"+m.id+" #"+t+" .divider").forEach(t=>{let e=t.parentElement,a=0,i=0;e&&(e.parentElement&&(a=e.parentElement.getBBox().width),i=parseInt(e.getAttribute("data-x-shift"),10),Number.isNaN(i)&&(i=0)),t.setAttribute("x1",0-i+8),t.setAttribute("x2",a-i-8)})):i.debug("No Node "+t+": "+JSON.stringify(h.node(t)))});let b=m.getBBox();h.edges().forEach(function(t){void 0!==t&&void 0!==h.edge(t)&&(i.debug("Edge "+t.v+" -> "+t.w+": "+JSON.stringify(h.edge(t))),v(e,h.edge(t),h.edge(t).relation))}),b=m.getBBox();let k={id:a||"root",label:a||"root",width:0,height:0};return k.width=b.width+2*u.padding,k.height=b.height+2*u.padding,i.debug("Doc rendered",k,h),k},"renderDoc"),A={parser:x,get db(){return new c(1)},renderer:{setConf:z,draw:T},styles:h,init:a(t=>{t.state||={},t.state.arrowMarkerAbsolute=t.arrowMarkerAbsolute},"init")};export{A as diagram};
+import {
+  Bn as t,
+  C as e,
+  Gn as a,
+  Kn as i,
+  Ln as r,
+  On as d,
+  Q as n,
+  an as s,
+  rt as o,
+  sn as g,
+} from './vendor_editor_preview-Ccdt85Fz.js'
+import { t as p } from './graphlib-CduCindt-C8aGiKlX.js'
+import './chunk-55IACEB6-DWUqxxdp-ClblAteD.js'
+import './chunk-QN33PNHL-BFbXAWI4-CKMEtEdN.js'
+import { t as l } from './dagre-ISqDEl60-CbishIV6.js'
+import { i as h, r as c, t as x } from './chunk-DI55MBZ5-BaCDwrxO-5lgaE1RI.js'
+var u,
+  f = a(
+    (t) =>
+      t
+        .append('circle')
+        .attr('class', 'start-state')
+        .attr('r', g().state.sizeUnit)
+        .attr('cx', g().state.padding + g().state.sizeUnit)
+        .attr('cy', g().state.padding + g().state.sizeUnit),
+    'drawStartState',
+  ),
+  y = a(
+    (t) =>
+      t
+        .append('line')
+        .style('stroke', 'grey')
+        .style('stroke-dasharray', '3')
+        .attr('x1', g().state.textHeight)
+        .attr('class', 'divider')
+        .attr('x2', 2 * g().state.textHeight)
+        .attr('y1', 0)
+        .attr('y2', 0),
+    'drawDivider',
+  ),
+  w = a((t, e) => {
+    let a = t
+        .append('text')
+        .attr('x', 2 * g().state.padding)
+        .attr('y', g().state.textHeight + 2 * g().state.padding)
+        .attr('font-size', g().state.fontSize)
+        .attr('class', 'state-title')
+        .text(e.id),
+      i = a.node().getBBox()
+    return (
+      t
+        .insert('rect', ':first-child')
+        .attr('x', g().state.padding)
+        .attr('y', g().state.padding)
+        .attr('width', i.width + 2 * g().state.padding)
+        .attr('height', i.height + 2 * g().state.padding)
+        .attr('rx', g().state.radius),
+      a
+    )
+  }, 'drawSimpleState'),
+  m = a((t, e) => {
+    let i = a(function (t, e, a) {
+        let i = t
+          .append('tspan')
+          .attr('x', 2 * g().state.padding)
+          .text(e)
+        a || i.attr('dy', g().state.textHeight)
+      }, 'addTspan'),
+      r = t
+        .append('text')
+        .attr('x', 2 * g().state.padding)
+        .attr('y', g().state.textHeight + 1.3 * g().state.padding)
+        .attr('font-size', g().state.fontSize)
+        .attr('class', 'state-title')
+        .text(e.descriptions[0])
+        .node()
+        .getBBox(),
+      d = r.height,
+      n = t
+        .append('text')
+        .attr('x', g().state.padding)
+        .attr(
+          'y',
+          d +
+            0.4 * g().state.padding +
+            g().state.dividerMargin +
+            g().state.textHeight,
+        )
+        .attr('class', 'state-description'),
+      s = !0,
+      o = !0
+    e.descriptions.forEach(function (t) {
+      ;(s || (i(n, t, o), (o = !1)), (s = !1))
+    })
+    let p = t
+        .append('line')
+        .attr('x1', g().state.padding)
+        .attr('y1', g().state.padding + d + g().state.dividerMargin / 2)
+        .attr('y2', g().state.padding + d + g().state.dividerMargin / 2)
+        .attr('class', 'descr-divider'),
+      l = n.node().getBBox(),
+      h = Math.max(l.width, r.width)
+    return (
+      p.attr('x2', h + 3 * g().state.padding),
+      t
+        .insert('rect', ':first-child')
+        .attr('x', g().state.padding)
+        .attr('y', g().state.padding)
+        .attr('width', h + 2 * g().state.padding)
+        .attr('height', l.height + d + 2 * g().state.padding)
+        .attr('rx', g().state.radius),
+      t
+    )
+  }, 'drawDescrState'),
+  B = a((t, e, a) => {
+    let i = g().state.padding,
+      r = 2 * g().state.padding,
+      d = t.node().getBBox(),
+      n = d.width,
+      s = d.x,
+      o = t
+        .append('text')
+        .attr('x', 0)
+        .attr('y', g().state.titleShift)
+        .attr('font-size', g().state.fontSize)
+        .attr('class', 'state-title')
+        .text(e.id),
+      p = o.node().getBBox().width + r,
+      l = Math.max(p, n)
+    l === n && (l += r)
+    let h,
+      c = t.node().getBBox()
+    ;(e.doc,
+      (h = s - i),
+      p > n && (h = (n - l) / 2 + i),
+      Math.abs(s - c.x) < i && p > n && (h = s - (p - n) / 2))
+    let x = 1 - g().state.textHeight
+    return (
+      t
+        .insert('rect', ':first-child')
+        .attr('x', h)
+        .attr('y', x)
+        .attr('class', a ? 'alt-composit' : 'composit')
+        .attr('width', l)
+        .attr(
+          'height',
+          c.height + g().state.textHeight + g().state.titleShift + 1,
+        )
+        .attr('rx', '0'),
+      o.attr('x', h + i),
+      p <= n && o.attr('x', s + (l - r) / 2 - p / 2 + i),
+      t
+        .insert('rect', ':first-child')
+        .attr('x', h)
+        .attr(
+          'y',
+          g().state.titleShift - g().state.textHeight - g().state.padding,
+        )
+        .attr('width', l)
+        .attr('height', 3 * g().state.textHeight)
+        .attr('rx', g().state.radius),
+      t
+        .insert('rect', ':first-child')
+        .attr('x', h)
+        .attr(
+          'y',
+          g().state.titleShift - g().state.textHeight - g().state.padding,
+        )
+        .attr('width', l)
+        .attr('height', c.height + 3 + 2 * g().state.textHeight)
+        .attr('rx', g().state.radius),
+      t
+    )
+  }, 'addTitleAndBox'),
+  b = a(
+    (t) => (
+      t
+        .append('circle')
+        .attr('class', 'end-state-outer')
+        .attr('r', g().state.sizeUnit + g().state.miniPadding)
+        .attr(
+          'cx',
+          g().state.padding + g().state.sizeUnit + g().state.miniPadding,
+        )
+        .attr(
+          'cy',
+          g().state.padding + g().state.sizeUnit + g().state.miniPadding,
+        ),
+      t
+        .append('circle')
+        .attr('class', 'end-state-inner')
+        .attr('r', g().state.sizeUnit)
+        .attr('cx', g().state.padding + g().state.sizeUnit + 2)
+        .attr('cy', g().state.padding + g().state.sizeUnit + 2)
+    ),
+    'drawEndState',
+  ),
+  k = a((t, e) => {
+    let a = g().state.forkWidth,
+      i = g().state.forkHeight
+    if (e.parentId) {
+      let t = a
+      ;((a = i), (i = t))
+    }
+    return t
+      .append('rect')
+      .style('stroke', 'black')
+      .style('fill', 'black')
+      .attr('width', a)
+      .attr('height', i)
+      .attr('x', g().state.padding)
+      .attr('y', g().state.padding)
+  }, 'drawForkJoinState'),
+  N = a((t, e, a, i) => {
+    let r = 0,
+      d = i.append('text')
+    ;(d.style('text-anchor', 'start'), d.attr('class', 'noteText'))
+    let n = t.replace(/\r\n/g, '<br/>')
+    n = n.replace(/\n/g, '<br/>')
+    let o = n.split(s.lineBreakRegex),
+      p = 1.25 * g().state.noteMargin
+    for (let s of o) {
+      let t = s.trim()
+      if (t.length > 0) {
+        let i = d.append('tspan')
+        if ((i.text(t), 0 === p)) {
+          p += i.node().getBBox().height
+        }
+        ;((r += p),
+          i.attr('x', e + g().state.noteMargin),
+          i.attr('y', a + r + 1.25 * g().state.noteMargin))
+      }
+    }
+    return { textWidth: d.node().getBBox().width, textHeight: r }
+  }, '_drawLongText'),
+  S = a((t, e) => {
+    e.attr('class', 'state-note')
+    let a = e.append('rect').attr('x', 0).attr('y', g().state.padding),
+      { textWidth: i, textHeight: r } = N(t, 0, 0, e.append('g'))
+    return (
+      a.attr('height', r + 2 * g().state.noteMargin),
+      a.attr('width', i + 2 * g().state.noteMargin),
+      a
+    )
+  }, 'drawNote'),
+  E = a(function (t, e) {
+    let a = e.id,
+      i = { id: a, label: e.id, width: 0, height: 0 },
+      r = t.append('g').attr('id', a).attr('class', 'stateGroup')
+    ;('start' === e.type && f(r),
+      'end' === e.type && b(r),
+      ('fork' === e.type || 'join' === e.type) && k(r, e),
+      'note' === e.type && S(e.note.text, r),
+      'divider' === e.type && y(r),
+      'default' === e.type && 0 === e.descriptions.length && w(r, e),
+      'default' === e.type && e.descriptions.length > 0 && m(r, e))
+    let d = r.node().getBBox()
+    return (
+      (i.width = d.width + 2 * g().state.padding),
+      (i.height = d.height + 2 * g().state.padding),
+      i
+    )
+  }, 'drawState'),
+  M = 0,
+  v = a(function (t, d, p) {
+    let l = a(function (t) {
+      switch (t) {
+        case c.relationType.AGGREGATION:
+          return 'aggregation'
+        case c.relationType.EXTENSION:
+          return 'extension'
+        case c.relationType.COMPOSITION:
+          return 'composition'
+        case c.relationType.DEPENDENCY:
+          return 'dependency'
+      }
+    }, 'getRelationType')
+    d.points = d.points.filter((t) => !Number.isNaN(t.y))
+    let h = d.points,
+      x = e()
+        .x(function (t) {
+          return t.x
+        })
+        .y(function (t) {
+          return t.y
+        })
+        .curve(n),
+      u = t
+        .append('path')
+        .attr('d', x(h))
+        .attr('id', 'edge' + M)
+        .attr('class', 'transition'),
+      f = ''
+    if (
+      (g().state.arrowMarkerAbsolute && (f = r(!0)),
+      u.attr(
+        'marker-end',
+        'url(' + f + '#' + l(c.relationType.DEPENDENCY) + 'End)',
+      ),
+      void 0 !== p.title)
+    ) {
+      let e = t.append('g').attr('class', 'stateLabel'),
+        { x: a, y: r } = o.calcLabelPosition(d.points),
+        n = s.getRows(p.title),
+        l = 0,
+        h = [],
+        c = 0,
+        x = 0
+      for (let t = 0; t <= n.length; t++) {
+        let d = e
+            .append('text')
+            .attr('text-anchor', 'middle')
+            .text(n[t])
+            .attr('x', a)
+            .attr('y', r + l),
+          s = d.node().getBBox()
+        ;((c = Math.max(c, s.width)),
+          (x = Math.min(x, s.x)),
+          i.info(s.x, a, r + l),
+          0 === l &&
+            ((l = d.node().getBBox().height), i.info('Title height', l, r)),
+          h.push(d))
+      }
+      let u = l * n.length
+      if (n.length > 1) {
+        let t = (n.length - 1) * l * 0.5
+        ;(h.forEach((e, a) => e.attr('y', r + a * l - t)), (u = l * n.length))
+      }
+      let f = e.node().getBBox()
+      ;(e
+        .insert('rect', ':first-child')
+        .attr('class', 'box')
+        .attr('x', a - c / 2 - g().state.padding / 2)
+        .attr('y', r - u / 2 - g().state.padding / 2 - 3.5)
+        .attr('width', c + g().state.padding)
+        .attr('height', u + g().state.padding),
+        i.info(f))
+    }
+    M++
+  }, 'drawEdge'),
+  H = {},
+  z = a(function () {}, 'setConf'),
+  D = a(function (t) {
+    t.append('defs')
+      .append('marker')
+      .attr('id', 'dependencyEnd')
+      .attr('refX', 19)
+      .attr('refY', 7)
+      .attr('markerWidth', 20)
+      .attr('markerHeight', 28)
+      .attr('orient', 'auto')
+      .append('path')
+      .attr('d', 'M 19,7 L9,13 L14,7 L9,1 Z')
+  }, 'insertMarkers'),
+  T = a(function (e, a, r, n) {
+    u = g().state
+    let s,
+      o = g().securityLevel
+    'sandbox' === o && (s = t('#i' + a))
+    let p = t('sandbox' === o ? s.nodes()[0].contentDocument.body : 'body'),
+      l = 'sandbox' === o ? s.nodes()[0].contentDocument : document
+    i.debug('Rendering diagram ' + e)
+    let h = p.select(`[id='${a}']`)
+    ;(D(h), C(n.db.getRootDoc(), h, void 0, !1, p, l, n))
+    let c = u.padding,
+      x = h.node().getBBox(),
+      f = x.width + 2 * c,
+      y = x.height + 2 * c
+    ;(d(h, y, 1.75 * f, u.useMaxWidth),
+      h.attr(
+        'viewBox',
+        `${x.x - u.padding}  ${x.y - u.padding} ` + f + ' ' + y,
+      ))
+  }, 'draw'),
+  L = a((t) => (t ? t.length * u.fontSizeFactor : 1), 'getLabelWidth'),
+  C = a((t, e, a, r, d, n, o) => {
+    let g,
+      h = new p({ compound: !0, multigraph: !0 }),
+      c = !0
+    for (g = 0; g < t.length; g++)
+      if ('relation' === t[g].stmt) {
+        c = !1
+        break
+      }
+    ;(a
+      ? h.setGraph({
+          rankdir: 'LR',
+          multigraph: !0,
+          compound: !0,
+          ranker: 'tight-tree',
+          ranksep: c ? 1 : u.edgeLengthFactor,
+          nodeSep: c ? 1 : 50,
+          isMultiGraph: !0,
+        })
+      : h.setGraph({
+          rankdir: 'TB',
+          multigraph: !0,
+          compound: !0,
+          ranksep: c ? 1 : u.edgeLengthFactor,
+          nodeSep: c ? 1 : 50,
+          ranker: 'tight-tree',
+          isMultiGraph: !0,
+        }),
+      h.setDefaultEdgeLabel(function () {
+        return {}
+      }))
+    let x = o.db.getStates(),
+      f = o.db.getRelations(),
+      y = Object.keys(x)
+    for (let i of y) {
+      let t,
+        s = x[i]
+      if ((a && (s.parentId = a), s.doc)) {
+        let a = e.append('g').attr('id', s.id).attr('class', 'stateGroup')
+        t = C(s.doc, a, s.id, !r, d, n, o)
+        {
+          a = B(a, s, r)
+          let e = a.node().getBBox()
+          ;((t.width = e.width),
+            (t.height = e.height + u.padding / 2),
+            (H[s.id] = { y: u.compositTitleSize }))
+        }
+      } else t = E(e, s, h)
+      if (s.note) {
+        let a = E(
+          e,
+          { descriptions: [], id: s.id + '-note', note: s.note, type: 'note' },
+          h,
+        )
+        ;('left of' === s.note.position
+          ? (h.setNode(t.id + '-note', a), h.setNode(t.id, t))
+          : (h.setNode(t.id, t), h.setNode(t.id + '-note', a)),
+          h.setParent(t.id, t.id + '-group'),
+          h.setParent(t.id + '-note', t.id + '-group'))
+      } else h.setNode(t.id, t)
+    }
+    i.debug('Count=', h.nodeCount(), h)
+    let w = 0
+    ;(f.forEach(function (t) {
+      ;(w++,
+        i.debug('Setting edge', t),
+        h.setEdge(
+          t.id1,
+          t.id2,
+          {
+            relation: t,
+            width: L(t.title),
+            height: u.labelHeight * s.getRows(t.title).length,
+            labelpos: 'c',
+          },
+          'id' + w,
+        ))
+    }),
+      l(h),
+      i.debug('Graph after layout', h.nodes()))
+    let m = e.node()
+    h.nodes().forEach(function (t) {
+      void 0 !== t && void 0 !== h.node(t)
+        ? (i.warn('Node ' + t + ': ' + JSON.stringify(h.node(t))),
+          d
+            .select('#' + m.id + ' #' + t)
+            .attr(
+              'transform',
+              'translate(' +
+                (h.node(t).x - h.node(t).width / 2) +
+                ',' +
+                (h.node(t).y + (H[t] ? H[t].y : 0) - h.node(t).height / 2) +
+                ' )',
+            ),
+          d
+            .select('#' + m.id + ' #' + t)
+            .attr('data-x-shift', h.node(t).x - h.node(t).width / 2),
+          n
+            .querySelectorAll('#' + m.id + ' #' + t + ' .divider')
+            .forEach((t) => {
+              let e = t.parentElement,
+                a = 0,
+                i = 0
+              ;(e &&
+                (e.parentElement && (a = e.parentElement.getBBox().width),
+                (i = parseInt(e.getAttribute('data-x-shift'), 10)),
+                Number.isNaN(i) && (i = 0)),
+                t.setAttribute('x1', 0 - i + 8),
+                t.setAttribute('x2', a - i - 8))
+            }))
+        : i.debug('No Node ' + t + ': ' + JSON.stringify(h.node(t)))
+    })
+    let b = m.getBBox()
+    ;(h.edges().forEach(function (t) {
+      void 0 !== t &&
+        void 0 !== h.edge(t) &&
+        (i.debug(
+          'Edge ' + t.v + ' -> ' + t.w + ': ' + JSON.stringify(h.edge(t)),
+        ),
+        v(e, h.edge(t), h.edge(t).relation))
+    }),
+      (b = m.getBBox()))
+    let k = { id: a || 'root', label: a || 'root', width: 0, height: 0 }
+    return (
+      (k.width = b.width + 2 * u.padding),
+      (k.height = b.height + 2 * u.padding),
+      i.debug('Doc rendered', k, h),
+      k
+    )
+  }, 'renderDoc'),
+  A = {
+    parser: x,
+    get db() {
+      return new c(1)
+    },
+    renderer: { setConf: z, draw: T },
+    styles: h,
+    init: a((t) => {
+      ;((t.state ||= {}), (t.state.arrowMarkerAbsolute = t.arrowMarkerAbsolute))
+    }, 'init'),
+  }
+export { A as diagram }
 //# sourceMappingURL=stateDiagram-FKZM4ZOC-BA7jNMDD-DoYKExXk.js.map
