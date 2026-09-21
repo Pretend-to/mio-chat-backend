@@ -47,4 +47,3 @@ Follow the repository's history with concise Conventional Commit-style messages 
 > **Upstream Dependency & Branch Release Gate (OneBots Patch)**:
 > The backend WeChat integration on `codex/onebots-wechat-migration` relies on a custom patch (`patches/@onebots__adapter-wechat-clawbot@3.0.12.patch`).
 > **DO NOT merge this branch into `master` or release `master`** until the upstream `onebots` repository merges our PR and officially publishes the new version to npm. Once published upstream, remove `patchedDependencies` from `package.json`, bump the dependency, verify all tests, and only then proceed with merging to `master`.
-

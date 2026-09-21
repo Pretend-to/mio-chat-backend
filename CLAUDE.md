@@ -28,11 +28,12 @@ pnpm test:all     # 全部
 ```
 
 > 已知失败：`tests/channels/wechat_channel.test.js` 目前在全量套件中是红的，与本次改动无关，先别当成回归信号。
-pnpm db:push      # prisma db push（改完 schema 用这个，开发阶段够了）
-pnpm db:migrate   # prisma migrate dev
-pnpm db:studio    # 可视化查看 data/app.db
+> pnpm db:push # prisma db push（改完 schema 用这个，开发阶段够了）
+> pnpm db:migrate # prisma migrate dev
+> pnpm db:studio # 可视化查看 data/app.db
 
 pnpm docker:up / docker:down / docker:logs
+
 ```
 
 测试用 Node 内置的 `node --test`，无第三方框架。测试分布：`tests/{adapters,integration,plugins,routes,unit}/`。适配器测试最全（每个 provider 一个文件），业务逻辑覆盖较薄。
@@ -42,16 +43,18 @@ pnpm docker:up / docker:down / docker:logs
 `app.js` 是入口，**所有依赖都是动态 import 的**（`await import(...)`），因为初始化有严格顺序：
 
 ```
-performFullInitialization()   # 确保 .env 存在、数据库目录存在、schema 已同步
-  → prismaManager.initialize()
-  → 各 Service.initialize()（Preset / SystemSettings / PluginConfig / Task）
-  → imageService / searchService / visionService .initialize()
-  → initializeDefaults()         # scripts/initialize-defaults.js
-  → checkAndPerformAutoMigration(AutoMigrationDetector)
-  → config.reload()              # 同步刚写入的默认值，避免状态检查重复生成访问码
-  → statusCheck()                # lib/check.js，在这里创建 global.middleware
-  → taskScheduler.initialize()
-  → startServer()                # lib/server/http/index.js
+
+performFullInitialization() # 确保 .env 存在、数据库目录存在、schema 已同步
+→ prismaManager.initialize()
+→ 各 Service.initialize()（Preset / SystemSettings / PluginConfig / Task）
+→ imageService / searchService / visionService .initialize()
+→ initializeDefaults() # scripts/initialize-defaults.js
+→ checkAndPerformAutoMigration(AutoMigrationDetector)
+→ config.reload() # 同步刚写入的默认值，避免状态检查重复生成访问码
+→ statusCheck() # lib/check.js，在这里创建 global.middleware
+→ taskScheduler.initialize()
+→ startServer() # lib/server/http/index.js
+
 ```
 
 > 以上是导航性的，**精确顺序以 `app.js` 为准**。
@@ -71,32 +74,34 @@ performFullInitialization()   # 确保 .env 存在、数据库目录存在、sch
 ## 架构
 
 ```
+
 lib/
 ├── server/
-│   ├── http/          Express 5：routes(index.js) + controllers/ + middleware/
-│   └── socket.io/     实时层，与前端的主通道
-├── agents/            AgentService —— Agent 是主体（人格 / 模型 / 工具 / 记忆 / Session 列表）
-├── subagents/         SubAgent 编排：Dispatcher / RunService / Executor / StateMachine / ResourcePolicy
-├── approvals/         ApprovalNotificationBroker —— 工具挂起的通知与唤醒
-├── triggers/          TriggerRegistry / TriggerRunner / WakeInjector / WakeProtocol
+│ ├── http/ Express 5：routes(index.js) + controllers/ + middleware/
+│ └── socket.io/ 实时层，与前端的主通道
+├── agents/ AgentService —— Agent 是主体（人格 / 模型 / 工具 / 记忆 / Session 列表）
+├── subagents/ SubAgent 编排：Dispatcher / RunService / Executor / StateMachine / ResourcePolicy
+├── approvals/ ApprovalNotificationBroker —— 工具挂起的通知与唤醒
+├── triggers/ TriggerRegistry / TriggerRunner / WakeInjector / WakeProtocol
 ├── chat/
-│   ├── llm/           适配器、Skills、结晶服务、ChatEvent 流
-│   ├── sessions/      SessionTurnService —— 单轮执行
-│   ├── persistence/   SessionPersistence —— 消息链落库
-│   ├── search/        搜索调度（两层降级 + 适配器注册表）
-│   ├── image/ vision/ 多模态服务
-│   └── onebot/        OneBot v11（反向 WS 客户端）
-├── hooks/             全局 Hook 架构（V3，16 个挂载点）
-├── plugins/           内置插件（ai / web / terminal-pty / agent-manager / mcp / config / ...）
-├── database/          Prisma 封装 + Service 层
-├── storage/           本地 / S3 兼容存储适配
-├── ratelimit/ push/   限流与推送
-├── initialization/    首次启动自愈
-└── migration/         自动迁移检测
+│ ├── llm/ 适配器、Skills、结晶服务、ChatEvent 流
+│ ├── sessions/ SessionTurnService —— 单轮执行
+│ ├── persistence/ SessionPersistence —— 消息链落库
+│ ├── search/ 搜索调度（两层降级 + 适配器注册表）
+│ ├── image/ vision/ 多模态服务
+│ └── onebot/ OneBot v11（反向 WS 客户端）
+├── hooks/ 全局 Hook 架构（V3，16 个挂载点）
+├── plugins/ 内置插件（ai / web / terminal-pty / agent-manager / mcp / config / ...）
+├── database/ Prisma 封装 + Service 层
+├── storage/ 本地 / S3 兼容存储适配
+├── ratelimit/ push/ 限流与推送
+├── initialization/ 首次启动自愈
+└── migration/ 自动迁移检测
 
-channels/              渠道适配层（BaseChannel / ChannelRuntime / ChannelStore /
-                       ChannelAdapterRegistry + wechat / weixin-ilink / onebots / bindings / triggers）
-plugins/               独立成包的插件：custom/、email-plugin/、note-plugin/（pnpm workspace）
+channels/ 渠道适配层（BaseChannel / ChannelRuntime / ChannelStore /
+ChannelAdapterRegistry + wechat / weixin-ilink / onebots / bindings / triggers）
+plugins/ 独立成包的插件：custom/、email-plugin/、note-plugin/（pnpm workspace）
+
 ```
 
 > 注：旧文档里的 `lib/chat/acp/`（Agent Client Protocol）**已不存在**，由下面的 Agent / Session / SubAgent 体系取代。
@@ -120,21 +125,23 @@ plugins/               独立成包的插件：custom/、email-plugin/、note-pl
 ### Socket.IO 层（与前端交互最频繁）
 
 ```
+
 lib/server/socket.io/
 ├── services/
-│   ├── loader.js       消息入口，分发 llm_message / onebot_message / logs_message
-│   ├── client.js       WebUser 类，一个连接一个实例
-│   ├── sessions.js     SessionPool，同一 userId 多端共享，跨连接缓存
-│   └── streamCache.js  流式内容缓存，用于断线重连补发
+│ ├── loader.js 消息入口，分发 llm_message / onebot_message / logs_message
+│ ├── client.js WebUser 类，一个连接一个实例
+│ ├── sessions.js SessionPool，同一 userId 多端共享，跨连接缓存
+│ └── streamCache.js 流式内容缓存，用于断线重连补发
 └── utils/
-    └── LLMMessageEvent.js   单次 LLM 请求的生命周期对象
-```
+└── LLMMessageEvent.js 单次 LLM 请求的生命周期对象
+
+````
 
 **协议帧格式**（两个方向都是 JSON 字符串走 `message` 事件）：
 
 ```js
 { request_id, protocol: 'llm'|'onebot'|'system'|'logs', type, data, metaData }
-```
+````
 
 `client.js` 会校验 `request_id`、`protocol`、`data` 三个字段必须存在。
 
@@ -174,12 +181,12 @@ lib/server/socket.io/
 
 **热重载范围（极易踩坑）**：`Plugin._setupWatchers()` 只用 chokidar 监听四个子路径，且 `depth: 0`（不递归）：
 
-| 会热重载 | 不会热重载（必须重启进程） |
-| --- | --- |
-| `tools/` | 插件根目录的 `index.js` |
-| `hooks/` | 插件的 `lib/` 子目录 |
-| `presets/` | **核心 lib**（`lib/chat/**`、`lib/agents/**`、`lib/triggers/**` …） |
-| `skills/`（depth 2） | |
+| 会热重载             | 不会热重载（必须重启进程）                                          |
+| -------------------- | ------------------------------------------------------------------- |
+| `tools/`             | 插件根目录的 `index.js`                                             |
+| `hooks/`             | 插件的 `lib/` 子目录                                                |
+| `presets/`           | **核心 lib**（`lib/chat/**`、`lib/agents/**`、`lib/triggers/**` …） |
+| `skills/`（depth 2） |                                                                     |
 
 典型症状是"一半新一半旧"：改了 `plugins/x/tools/a.js` 立即生效，同时改了 `lib/chat/y.js` 却没生效，很容易被误判成 bug。判断标准就一条：**文件是否落在上表左侧四个目录里**。`reload` 工具能热重载插件，但也覆盖不到核心 `lib/`。
 
@@ -202,33 +209,33 @@ lib/server/socket.io/
 
 ## 常见改动的落点
 
-| 任务 | 改哪里 |
-| --- | --- |
-| 加 HTTP 路由 | `lib/server/http/index.js` + `controllers/` 下新增 controller |
-| 加 Socket 事件 | `lib/server/socket.io/services/loader.js` + `lib/middleware.js` 映射 |
-| 加 LLM 适配器 | `lib/chat/llm/adapters/implementations/` + `registry.js` |
-| 加插件 | `plugins/custom/<name>/index.js`，export default 类实现 `initialize()` / `getTools()` |
-| 加 Hook | `lib/hooks/builtins/` + 在 `types.js` 确认挂载点 |
-| 改数据库结构 | `prisma/schema.prisma` → `pnpm db:push` → 相应 Service |
-| 改 Agent 领域模型 | `lib/agents/AgentService.js` + schema，**先读 Spec.md** |
-| 改 SubAgent 编排 | `lib/subagents/`（Dispatcher / RunService / Executor / StateMachine / ResourcePolicy） |
-| 改渠道接入 | `channels/` 下对应适配器 + `ChannelAdapterRegistry.js` 注册 |
-| 改定时 / 唤醒 | `lib/triggers/`（Registry / Runner / WakeInjector）+ `lib/cron.js` |
-| 改搜索通道 | `lib/chat/search/`：适配器放 `implementations/`，在 `SearchRegistry.js` 注册 |
-| 改命令执行 / 审批挂起 | `lib/plugins/terminal-pty/` + `lib/approvals/` |
+| 任务                  | 改哪里                                                                                 |
+| --------------------- | -------------------------------------------------------------------------------------- |
+| 加 HTTP 路由          | `lib/server/http/index.js` + `controllers/` 下新增 controller                          |
+| 加 Socket 事件        | `lib/server/socket.io/services/loader.js` + `lib/middleware.js` 映射                   |
+| 加 LLM 适配器         | `lib/chat/llm/adapters/implementations/` + `registry.js`                               |
+| 加插件                | `plugins/custom/<name>/index.js`，export default 类实现 `initialize()` / `getTools()`  |
+| 加 Hook               | `lib/hooks/builtins/` + 在 `types.js` 确认挂载点                                       |
+| 改数据库结构          | `prisma/schema.prisma` → `pnpm db:push` → 相应 Service                                 |
+| 改 Agent 领域模型     | `lib/agents/AgentService.js` + schema，**先读 Spec.md**                                |
+| 改 SubAgent 编排      | `lib/subagents/`（Dispatcher / RunService / Executor / StateMachine / ResourcePolicy） |
+| 改渠道接入            | `channels/` 下对应适配器 + `ChannelAdapterRegistry.js` 注册                            |
+| 改定时 / 唤醒         | `lib/triggers/`（Registry / Runner / WakeInjector）+ `lib/cron.js`                     |
+| 改搜索通道            | `lib/chat/search/`：适配器放 `implementations/`，在 `SearchRegistry.js` 注册           |
+| 改命令执行 / 审批挂起 | `lib/plugins/terminal-pty/` + `lib/approvals/`                                         |
 
 改前后端交互的消息格式时，**两个仓库要同步改** —— socket 层和 `lib/chat/*` 的协议适配器都可能涉及。
 
 ## 文档索引
 
-| 想了解 | 看哪 |
-| --- | --- |
-| **Agent / Session / Channel 领域模型（权威）** | `docs/architecture/channel-agent-refactor/Spec.md` |
-| SubAgent 异步编排实施计划 | `docs/architecture/channel-agent-refactor/SubAgentAsyncDevelopmentPlan.md` |
-| 定时任务与 Trigger | `docs/architecture/trigger-system.md` |
-| Session 持久化 | `docs/architecture/session-persistence.md` |
-| 渠道架构 | `docs/architecture/channel-v1.0.md` |
-| 会话中止与操控 UX | `docs/architecture/steering-and-abort-ux-spec.md` |
-| 整体特性与架构图 | `README.md` / `docs/README.md` |
+| 想了解                                         | 看哪                                                                       |
+| ---------------------------------------------- | -------------------------------------------------------------------------- |
+| **Agent / Session / Channel 领域模型（权威）** | `docs/architecture/channel-agent-refactor/Spec.md`                         |
+| SubAgent 异步编排实施计划                      | `docs/architecture/channel-agent-refactor/SubAgentAsyncDevelopmentPlan.md` |
+| 定时任务与 Trigger                             | `docs/architecture/trigger-system.md`                                      |
+| Session 持久化                                 | `docs/architecture/session-persistence.md`                                 |
+| 渠道架构                                       | `docs/architecture/channel-v1.0.md`                                        |
+| 会话中止与操控 UX                              | `docs/architecture/steering-and-abort-ux-spec.md`                          |
+| 整体特性与架构图                               | `README.md` / `docs/README.md`                                             |
 
 > `docs/architecture/subagent-system.md` 是**早期设计稿**，开头已声明以 Spec.md 和实施计划为准 —— 别照它实现。
