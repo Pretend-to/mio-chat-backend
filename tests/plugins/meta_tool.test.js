@@ -10,6 +10,23 @@ import SentinelTool from '../../lib/plugins/ai-plugin/tools/sentinel.js'
 import { MioFunction } from '../../lib/function.js'
 import { parseConcatenatedJson } from '../../utils/jsonParser.js'
 
+/**
+ * meta_tool.findTool 的唯一数据源是 `global.middleware.llm.getAllTools()`
+ * （生产里 llm.plugins 就是 middleware.plugins）。测试 mock 只给 plugins 时
+ * 工具解析会全部落空，这里统一补齐 llm 视图。
+ */
+function withLlm(middleware) {
+  const plugins = middleware?.plugins || []
+  const allTools = new Map()
+  for (const plugin of plugins) {
+    if (typeof plugin?.getTools !== 'function') continue
+    for (const [, toolsArray] of plugin.getTools()) {
+      for (const tool of toolsArray) allTools.set(tool.name, tool)
+    }
+  }
+  return { ...middleware, llm: { getAllTools: () => allTools } }
+}
+
 test('MetaTool - parameter extraction', () => {
   // 1. Standard call parameters
   const r1 = extractTargetCall({
@@ -57,9 +74,9 @@ test('MetaTool - repairs a missing outer brace without string-encoding HTML', as
   }
 
   const publish = new PublishTool()
-  global.middleware = {
+  global.middleware = withLlm({
     plugins: [{ getTools: () => new Map([['web', [publish]]]), name: 'web' }],
-  }
+  })
   const raw =
     '{"action":"call","tool_name":"publish","schema":{"html":"<div data-json=\\"{&quot;x&quot;:1}\\">hello</div>"}'
   const params = parseConcatenatedJson(raw)
@@ -116,14 +133,14 @@ test('MetaTool - action: list', async () => {
   const toolA = new ToolA()
   const agentTool = new AgentOnlyTool()
 
-  global.middleware = {
+  global.middleware = withLlm({
     plugins: [
       {
         getTools: () => new Map([['plugin-one', [toolA, agentTool]]]),
         name: 'plugin-one',
       },
     ],
-  }
+  })
 
   // 1. Frontend OpenAI WebSession (Agent-scoped tool should be hidden)
   const webList = await meta._execute({
@@ -193,7 +210,7 @@ test('MetaTool - action: query', async () => {
   const replaceTool = new FileEditorTool()
   const ttsTool = new TtsTool()
 
-  global.middleware = {
+  global.middleware = withLlm({
     plugins: [
       {
         getTools: () =>
@@ -204,7 +221,7 @@ test('MetaTool - action: query', async () => {
         name: 'test-plugins',
       },
     ],
-  }
+  })
 
   // Query multiple tools with array
   const res = await meta._execute({
@@ -264,14 +281,14 @@ test('MetaTool - action: call without extraRender duplication', async () => {
   }
 
   const soundTool = new SoundTool()
-  global.middleware = {
+  global.middleware = withLlm({
     plugins: [
       {
         getTools: () => new Map([['tts', [soundTool]]]),
         name: 'tts-plugin',
       },
     ],
-  }
+  })
 
   let extraRenderCallCount = 0
   const e = {
@@ -327,7 +344,7 @@ test('MetaTool cannot call a tool not exposed to meta or when meta_tool is not a
       }
     }
   }
-  global.middleware = {
+  global.middleware = withLlm({
     plugins: [
       {
         getTools: () =>
@@ -338,7 +355,7 @@ test('MetaTool cannot call a tool not exposed to meta or when meta_tool is not a
         name: 'test-plugin',
       },
     ],
-  }
+  })
 
   // 1. Tool with exposure: ['schema'] cannot be called via meta_tool
   const resNotExposed = await meta._execute({
@@ -384,14 +401,14 @@ test('MetaTool can discover and call universal tools (like tts_speech) when pare
     }
   }
 
-  global.middleware = {
+  global.middleware = withLlm({
     plugins: [
       {
         getTools: () => new Map([['edge-tts', [new UniversalTtsTool()]]]),
         name: 'edge-tts-plugin',
       },
     ],
-  }
+  })
 
   // Agent parent event has the core Agent tool allowlist (ai-plugin, meta_tool, etc.)
   const channelParentEvent = {
@@ -442,14 +459,14 @@ test('MetaTool can discover and call universal tools (like tts_speech) when pare
 test('MetaTool list exposes sentinel to an admin Web Agent', async () => {
   const previous = global.middleware
   const sentinel = new SentinelTool()
-  global.middleware = {
+  global.middleware = withLlm({
     plugins: [
       {
         getTools: () => new Map([['ai-plugin', [sentinel]]]),
         name: 'ai-plugin',
       },
     ],
-  }
+  })
 
   try {
     const result = await new MetaTool()._execute({
@@ -489,14 +506,14 @@ test('MetaTool - text display echo (getDisplayName)', () => {
   }
 
   const editorTool = new EditorTool()
-  global.middleware = {
+  global.middleware = withLlm({
     plugins: [
       {
         getTools: () => new Map([['editor', [editorTool]]]),
         name: 'editor',
       },
     ],
-  }
+  })
 
   // 1. list display name
   assert.strictEqual(
