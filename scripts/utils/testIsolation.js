@@ -19,6 +19,8 @@ export const projectRoot = path.resolve(
  */
 const LINKED_ENTRIES = [
   '.env.example',
+  // 隔离根不是 git 仓库，而部分用例会调用 getCurrentLocalBranch() 等 git 命令
+  '.git',
   '.gitignore',
   'channels',
   'config',
