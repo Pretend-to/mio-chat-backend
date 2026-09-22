@@ -154,9 +154,26 @@ async function getLocalFileAsBase64(url) {
  * @param {string} [id] - 日志追踪 ID
  * @returns {Promise<string>} 标准 data:image/...;base64,... 格式的 Data URI
  */
+/**
+ * 判定字符串是否为「裸 base64 载荷」（不含 data: 前缀）。
+ * 必须严格校验字符集：仅凭"长度>50 且无空白"会把 blob:/相对路径等地址误判为 base64。
+ */
+function isRawBase64Payload(value) {
+  if (typeof value !== 'string' || value.length <= 50) return false
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(value)
+}
+
 async function resolveImageAsBase64(url, id = 'default') {
-  if (!url || typeof url !== 'string') return url
+  if (!url || typeof url !== 'string') return null
   if (url.startsWith('data:')) return url
+
+  // 0. 浏览器本地临时地址（blob:）只存在于用户浏览器内，后端永远取不到。
+  //    历史上这里会把它当成裸 base64 包装成 data:image/jpeg;base64,blob:http://...，
+  //    上游随即报 400 Invalid base64 data，并且这轮消息会一直留在上下文里反复触发。
+  if (/^blob:/i.test(url)) {
+    logger.warn(`[${id}] 图片为浏览器本地 blob 地址，后端无法解析，已跳过：${url}`)
+    return null
+  }
 
   // 1. 本地文件（file:// 协议、虚拟存储 /f/up/...、/f/gen/...、绝对路径或相对路径）
   if (
@@ -176,15 +193,21 @@ async function resolveImageAsBase64(url, id = 'default') {
     const res = await imgUrlToBase64(url, id)
     if (typeof res === 'object' && res?.data) return res.data
     if (typeof res === 'string' && res.startsWith('data:')) return res
+    // 远程取图失败：原样回传 URL，交给上游自行拉取
     return url
   }
 
   // 3. 纯 Base64 字符串（不带 data: 前缀）
-  if (url.length > 50 && !url.includes(' ') && !url.includes('\n')) {
+  if (isRawBase64Payload(url)) {
     return `data:image/jpeg;base64,${url}`
   }
 
-  return url
+  // 4. 既不是可解析地址、也不是合法 base64：直接丢弃。
+  //    绝不能把脏值包装成 base64 丢给上游，否则整轮请求会被 400 打挂。
+  logger.warn(
+    `[${id}] 无法解析的图片地址，已跳过：${String(url).slice(0, 120)}`,
+  )
+  return null
 }
 
 export { imgUrlToBase64, getBufferName, base64ToImageUrl, bufferToImageUrl, getLocalFileAsBase64, resolveImageAsBase64 }
