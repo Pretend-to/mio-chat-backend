@@ -39,7 +39,7 @@ Mio-Chat is a complete **Agent ecosystem** built from multiple modules:
 
 Traditional AI chat platforms are little more than "API relay stations". **MioChat** is an **Agent Operating System** designed for complex production environments. Through precise context management, bidirectional security authorization, Multi-Agent orchestration and aspect-oriented Hook interception, it lets AI operate on the physical world autonomously *and* safely.
 
-The core agent loop everyone uses is five lines of ReAct. The observable differences live entirely **outside** the loop: context management, permissions, tool contracts, streaming reliability, memory. MioChat owns all of those layers directly — model-agnostic, self-hosted, with nothing between the code and your machine. ~100k lines across two repositories are the difference between a demo and a system that runs unattended tasks without losing context, messages, or trust.
+The core agent loop everyone uses is five lines of ReAct. The observable differences live entirely **outside** the loop: context management, permissions, tool contracts, streaming reliability, memory. MioChat owns all of those layers directly — model-agnostic, self-hosted, with nothing between the code and your machine. ~174k lines across both repositories (tests included, build output excluded) are the difference between a demo and a system that runs unattended tasks without losing context, messages, or trust.
 
 </details>
 
@@ -75,6 +75,14 @@ Uniting cross-language open ecosystems with zero-downtime runtime extensibility.
   ```
 - **Zero-Downtime Hot-Reload**: Dynamically load, unload, or hot-swap plugin code without restarting the backend; paired with the frontend **Tools Manager** to toggle individual tools or plugin packs per conversation.
 - **Three-Layer Seamless Fusion**: Open standard **Agent Skills** (scans `.claude/`, `.cursor/`, `.gemini/`) + **MCP (Model Context Protocol)** adapter + native high-performance tools.
+
+### 🤖 OneBot (QQ) integration
+
+Bring the QQ ecosystem into the same agent runtime.
+
+- **Outbound long connection with visible state** — the backend dials the configured OneBot implementation (go-cqhttp / NapCat / Lagrange, …) and the admin panel shows the live phase (online / connecting / offline / incomplete config), the last connection attempt with its result, the attempt count and the last error.
+- **Save-and-reconnect** — saving the config immediately rebuilds the connection (old socket closed gracefully), and the panel offers a manual reconnect.
+- **Same pipeline** — group/private messages, images, forwarded bundles and recalls share the same contacts, message chain and tooling as Web.
 
 ### 📱 Multi-Platform Channels (Beta — WeChat First)
 Seamlessly embed Agents into real-world IM apps. *Currently in Beta stage, debuting with full native WeChat (iLink Bot) integration.*
@@ -157,6 +165,24 @@ Offline autonomy with a visual inspection dashboard.
 - **Artifacts canvas** with `mio-previewer`: independent preview of code, HTML, SVG, Mermaid diagrams and dynamic UI components — side-by-side interaction.
 - **Tools Manager**: toggle tools / plugin groups in real time from the conversation UI.
 
+## Taxonomy & scale
+
+> Numbers are taken from the current repository — keep this section in sync. Conventions and hard rules live in [`AGENTS.md`](./AGENTS.md).
+
+| Dimension | Count | Notes |
+| :--- | :--- | :--- |
+| Built-in plugins | 9 | `lib/plugins/`: ai / agent-manager / anyui / config / edge-tts / file-editor / mcp / terminal-pty / web |
+| Workspace plugin packages | 3 | `plugins/` (pnpm workspace): custom / email-plugin / note-plugin |
+| Declared tools | 43 | `lib/plugins/*/tools/`; MCP dynamic tools and Skills excluded |
+| Hook mount points | 16 | 9 built-in hooks in `lib/hooks/builtins/` |
+| LLM adapter implementations | 7 | openai / openai-responses / anthropic / gemini / gemini-oauth / xai / agent-platform (plus many OpenAI-compatible vendors) |
+| Search adapters | 5 | baidu / bing / duckduckgo / tavily / volcengine, plus a browser bridge |
+| Image generation adapters | 6 | openai / google / sd-webui / siliconflow / tukuai / volcengine |
+| Channel adapters | 1 | WeChat iLink (native + onebots runtimes); the registry is definition-driven |
+| Prisma models | 40 | `prisma/schema.prisma` |
+| HTTP routes | 126 | `lib/server/http/index.js` |
+| Socket protocols | 4 | `llm` / `onebot` / `system` / `logs` |
+
 ## Hooks
 
 Mio-Chat V3 is built around aspect-oriented interception. The **7 core mount points** (16 in total system-wide) let you control every step of the agent:
@@ -171,7 +197,7 @@ Mio-Chat V3 is built around aspect-oriented interception. The **7 core mount poi
 | `LLM_TOOL_RESULTS` | tool-call audit | record tool arguments & outputs after batch execution |
 | `TOOL_NOT_FOUND` | smart fallback | strip MD5 suffix, lookup resolution, user guidance |
 
-Backed by 10 built-in hooks (audit, rate-limit, response-size cap, permission checks, model permissions, param validation, …). Every tool runs through `MioFunction.run()` — guarded, content-hashed, timeout-bounded, and impossible to bypass via subclassing. See [Hooks guide](./docs/core/hooks.md).
+Backed by 9 built-in hooks (audit, rate-limit, response-size cap, permission checks, model permissions, param validation, …). Every tool runs through `MioFunction.run()` — guarded, content-hashed, timeout-bounded, and impossible to bypass via subclassing. See [Hooks guide](./docs/core/hooks.md).
 
 ## Frontend & Plugins
 
@@ -196,6 +222,16 @@ Frontend (separate repo, syncs with backend models automatically):
 git clone https://github.com/Pretend-to/mio-chat-frontend.git
 cd mio-chat-frontend && pnpm install && pnpm dev
 ```
+
+## Testing
+
+```bash
+pnpm test:unit         # day-to-day: unit tests (isolated, never touches your real DB)
+pnpm test:integration  # integration / OneBot cases; needs the backend on http://localhost:3080
+pnpm test              # full suite
+```
+
+`pnpm test:unit` runs inside an isolated workspace and hands the test process a *copy* of the current database — your `data/app.db` is never written to. Integration cases target `http://localhost:3080` by default; override the target with `BASE_URL` and `ADMIN_CODE`.
 
 ## Documentation
 
