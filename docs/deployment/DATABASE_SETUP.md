@@ -2,7 +2,7 @@
 
 ## ⚠️ 重要安全提醒
 
-数据库文件 (`data/app.db` 或 `prisma/data/app.db`) 包含敏感配置信息，包括：
+数据库文件 (`data/app.db`) 包含敏感配置信息，包括：
 - API 密钥
 - 访问令牌
 - 用户凭据
@@ -18,7 +18,7 @@
    ```
 
 2. **数据库位置**：
-   - 默认位置：`prisma/data/app.db`
+   - 默认位置：`data/app.db`
    - 可通过环境变量 `DATABASE_URL` 自定义
 
 3. **初始化配置**：
@@ -38,10 +38,10 @@ node scripts/migrate-to-sqlite.js
 
 ```bash
 # 备份数据库
-cp prisma/data/app.db backup/app-$(date +%Y%m%d).db
+cp data/app.db backup/app-$(date +%Y%m%d).db
 
 # 恢复数据库
-cp backup/app-20241217.db prisma/data/app.db
+cp backup/app-20241217.db data/app.db
 ```
 
 ## 环境变量配置
@@ -63,7 +63,7 @@ export DEBUG=true
 
 1. **重置数据库**：
    ```bash
-   rm prisma/data/app.db
+   rm data/app.db
    pnpm start  # 会重新创建数据库
    ```
 

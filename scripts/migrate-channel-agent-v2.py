@@ -734,5 +734,5 @@ def run_migration(db_path, schema_hash=DEFAULT_SCHEMA_HASH, do_backup=False):
         conn.close()
 
 if __name__ == "__main__":
-    target = sys.argv[1] if len(sys.argv) > 1 else "/www/fake_mio/servers/mio-chat-backend/prisma/data/app.db"
+    target = sys.argv[1] if len(sys.argv) > 1 else "data/app.db"
     run_migration(target)

@@ -13,10 +13,10 @@ import { discoverTestRuntime, probeMioChat } from './test-runtime.js'
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
 
-function run(command, args, { env = process.env, quiet = false } = {}) {
+function run(command, args, { env = process.env, quiet = false, cwd = projectRoot } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      cwd: projectRoot,
+      cwd,
       env,
       stdio: quiet ? ['ignore', 'pipe', 'pipe'] : 'inherit',
     })
@@ -73,13 +73,13 @@ async function stopService(child) {
   }
 }
 
-async function launchFreshService(env) {
+async function launchFreshService(env, cwd = projectRoot) {
   const baseUrl = `http://127.0.0.1:${env.PORT}`
   let recentOutput = ''
 
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const child = spawn(process.execPath, ['app.js'], {
-      cwd: projectRoot,
+    const child = spawn(process.execPath, [path.join(projectRoot, 'app.js')], {
+      cwd,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -112,14 +112,48 @@ export async function findExistingService(discover = discoverTestRuntime) {
   return (await discover()).baseUrl || null
 }
 
+/**
+ * 运行时数据库路径唯一（`<cwd>/data/app.db`，无环境变量覆盖），
+ * 所以测试隔离靠「换 cwd」：把仓库里运行期需要的入口软链到临时根，
+ * `data/` 留空交给隔离实例自己创建。
+ */
+async function createIsolatedRoot() {
+  const root = await fs.mkdtemp('/tmp/miochat-test-')
+  const linked = [
+    '.env.example',
+    '.gitignore',
+    'channels',
+    'config',
+    'dist',
+    'docs',
+    'lib',
+    'node_modules',
+    'package.json',
+    'plugins',
+    'prisma',
+    'scripts',
+    'tests',
+    'utils',
+  ]
+  for (const entry of linked) {
+    try {
+      await fs.symlink(path.join(projectRoot, entry), path.join(root, entry))
+    } catch {
+      // 缺失的可选目录（如 docs/dist）忽略
+    }
+  }
+  await fs.mkdir(path.join(root, 'data'), { recursive: true })
+  return root
+}
+
 async function main() {
   const existingService = await findExistingService()
   if (existingService) {
     console.log(`检测到存量 MioChat ${existingService}；它将保持在线，测试会使用独立实例。`)
   }
 
-  const temporaryRoot = await fs.mkdtemp('/tmp/miochat-test-')
-  const databasePath = path.join(temporaryRoot, 'app.db')
+  const temporaryRoot = await createIsolatedRoot()
+  const databasePath = path.join(temporaryRoot, 'data', 'app.db')
   const port = await reservePort()
   const adminCode = crypto.randomBytes(24).toString('base64url')
   const userCode = crypto.randomBytes(24).toString('base64url')
@@ -127,7 +161,6 @@ async function main() {
     ...process.env,
     ADMIN_CODE: adminCode,
     HOST: '127.0.0.1',
-    MIOCHAT_DATABASE_PATH: databasePath,
     MIOCHAT_TEST_ISOLATED: '1',
     NODE_ENV: 'test',
     PORT: String(port),
@@ -138,7 +171,7 @@ async function main() {
   try {
     console.log(`正在创建隔离数据库快照并启动全新服务（随机端口 ${port}）…`)
     await prepareIsolatedDatabase(databasePath, { adminCode, port, userCode })
-    service = await launchFreshService(testEnv)
+    service = await launchFreshService(testEnv, temporaryRoot)
     console.log(`全新测试服务已就绪：${service.baseUrl}`)
 
     if (!process.argv.includes('--integration-only')) {
@@ -146,9 +179,11 @@ async function main() {
       // fixture's auth/port overrides into those processes.
       await run(pnpmCommand, ['test:unit'])
     }
-    await run(process.execPath, ['scripts/utils/run-integration-tests.js'], {
-      env: { ...testEnv, BASE_URL: service.baseUrl },
-    })
+    await run(
+      process.execPath,
+      [path.join(projectRoot, 'scripts/utils/run-integration-tests.js')],
+      { cwd: temporaryRoot, env: { ...testEnv, BASE_URL: service.baseUrl } },
+    )
   } finally {
     await stopService(service?.child)
     await fs.rm(temporaryRoot, { force: true, recursive: true })

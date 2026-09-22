@@ -283,7 +283,7 @@ Channel 与 Session 兼容层仍保留四种显式诊断模式：
 后续重启直接跳过。Trigger 元数据和执行审计同样以 Prisma 为唯一权威来源；只有 Trigger
 脚本本体继续保存在 `channels-data/triggers/scripts/`。任一步失败都会阻止
 本次启动，旧数据不会被改名或删除。快照和实例密钥分别保存在
-`prisma/data/backups/channel-storage/` 与 `prisma/data/channel-storage.key`，均位于 Git
+`data/backups/channel-storage/` 与 `data/channel-storage.key`，均位于 Git
 忽略的运行时数据目录。
 
 已经人工导入过数据库、但尚未写入上述 init 完成标记的过渡实例，不属于首次自动迁移
