@@ -44,8 +44,8 @@
     "@imhelper/onebot-v12": "1.0.9",
     "@lobehub/icons": "^5.8.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@onebots/adapter-wechat-clawbot": "3.0.12",
-    "@onebots/protocol-onebot-v12": "3.0.12",
+    "@onebots/adapter-wechat-clawbot": "3.0.14",
+    "@onebots/protocol-onebot-v12": "3.0.14",
     "@prisma/adapter-better-sqlite3": "^7.9.0",
     "@prisma/client": "^7.9.0",
     "@prisma/client-runtime-utils": "^7.9.0",
@@ -69,7 +69,7 @@
     "node-pty": "^1.1.0-beta21",
     "nodemailer": "^9.0.3",
     "officeparser": "^5.2.2",
-    "onebots": "1.2.12",
+    "onebots": "1.2.14",
     "openai": "^6.49.0",
     "puppeteer-core": "^25.3.0",
     "silk-wasm": "^3.7.1",
@@ -122,9 +122,6 @@
       "find-my-way": ">=9.7.0",
       "engine.io": "6.6.7",
       "deepmerge-ts": ">=8.0.0"
-    },
-    "patchedDependencies": {
-      "@onebots/adapter-wechat-clawbot@3.0.12": "patches/@onebots__adapter-wechat-clawbot@3.0.12.patch"
     }
   }
 }
