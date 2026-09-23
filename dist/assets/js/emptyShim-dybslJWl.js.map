@@ -1,0 +1,1 @@
+{"version":3,"file":"emptyShim-dybslJWl.js","names":[],"sources":["../../../src/utils/emptyShim.js"],"sourcesContent":["// Empty browser shim for Node.js native binary dependencies\nexport const createCanvas = () => null;\nexport const loadImage = () => null;\nexport default {};\n"],"mappings":"AACA,IAAa,EAAA,IAAqB,KACrB,EAAA,IAAkB,KAC/B,EAAe,CAAC"}

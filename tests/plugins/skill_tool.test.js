@@ -14,7 +14,11 @@ test('SkillTool: 统一 skill 工具 (list, load, refresh) 与 Progressive Discl
     assert.ok(tool.description.includes('list'))
     assert.ok(tool.description.includes('load'))
     assert.ok(tool.description.includes('refresh'))
-    assert.deepStrictEqual(tool.parameters.properties.action.enum, ['list', 'load', 'refresh'])
+    assert.deepStrictEqual(tool.parameters.properties.action.enum, [
+      'list',
+      'load',
+      'refresh',
+    ])
     assert.deepStrictEqual(tool.parameters.required, ['action'])
   })
 
@@ -30,7 +34,7 @@ test('SkillTool: 统一 skill 工具 (list, load, refresh) 与 Progressive Discl
         params: { action: 'list', query: firstSkillName },
       })
       assert.strictEqual(searchRes.success, true)
-      assert.ok(searchRes.skills.some(s => s.name === firstSkillName))
+      assert.ok(searchRes.skills.some((s) => s.name === firstSkillName))
     }
   })
 
@@ -69,58 +73,45 @@ test('SkillTool: 统一 skill 工具 (list, load, refresh) 与 Progressive Discl
   })
 
   await t.test('action="refresh": 刷新技能目录', async () => {
-    const refreshRes = await tool.executeAction({ params: { action: 'refresh' } })
+    const refreshRes = await tool.executeAction({
+      params: { action: 'refresh' },
+    })
     assert.strictEqual(refreshRes.success, true)
     assert.ok(refreshRes.total_skills >= 0)
     assert.ok(Array.isArray(refreshRes.available_skills))
   })
 
-  await t.test('Prompt Cache 保护：_injectSkillCatalog 不再向 System Prompt 注入 <skill_registry>', async () => {
-    const { default: llmService } = await import('../../lib/chat/llm/index.js')
-    const event = {
-      body: {
-        messages: [{ content: 'You are a helpful assistant.', role: 'system' }],
-        settings: {
-          toolCallSettings: {
-            tools: ['skill', 'Skill'],
-          },
-        },
-      },
-    }
+  await t.test(
+    '工具解析兼容性：getLLMTools 与 runTool 支持大小写兼容',
+    async () => {
+      const { default: llmService } =
+        await import('../../lib/chat/llm/index.js')
+      const mockPlugin = {
+        getTools: () => new Map([['ai-plugin', [tool]]]),
+      }
+      llmService.setPlugins([mockPlugin])
 
-    llmService._injectSkillCatalog(event)
-    const systemMsg = event.body.messages.find(m => m.role === 'system')
-    assert.strictEqual(systemMsg.content, 'You are a helpful assistant.')
-    assert.strictEqual(systemMsg.content.includes('<skill_registry>'), false)
-  })
+      // getLLMTools 支持 'Skill' 与 'skill'
+      const toolsSkillUpper = llmService.getLLMTools(['Skill'], 'openai')
+      assert.strictEqual(toolsSkillUpper.length, 1)
+      assert.strictEqual(toolsSkillUpper[0].function.name, tool.name)
 
-  await t.test('工具解析兼容性：getLLMTools 与 runTool 支持大小写兼容', async () => {
-    const { default: llmService } = await import('../../lib/chat/llm/index.js')
-    const mockPlugin = {
-      getTools: () => new Map([['ai-plugin', [tool]]]),
-    }
-    llmService.setPlugins([mockPlugin])
+      const toolsSkillLower = llmService.getLLMTools(['skill'], 'openai')
+      assert.strictEqual(toolsSkillLower.length, 1)
+      assert.strictEqual(toolsSkillLower[0].function.name, tool.name)
 
-    // getLLMTools 支持 'Skill' 与 'skill'
-    const toolsSkillUpper = llmService.getLLMTools(['Skill'], 'openai')
-    assert.strictEqual(toolsSkillUpper.length, 1)
-    assert.strictEqual(toolsSkillUpper[0].function.name, tool.name)
+      // runTool 支持 'Skill' 与 'skill'
+      const runUpper = await llmService.runTool(
+        { name: 'Skill', parameters: { action: 'list' } },
+        { role: 'admin' },
+      )
+      assert.strictEqual(runUpper.result.success, true)
 
-    const toolsSkillLower = llmService.getLLMTools(['skill'], 'openai')
-    assert.strictEqual(toolsSkillLower.length, 1)
-    assert.strictEqual(toolsSkillLower[0].function.name, tool.name)
-
-    // runTool 支持 'Skill' 与 'skill'
-    const runUpper = await llmService.runTool(
-      { name: 'Skill', parameters: { action: 'list' } },
-      { role: 'admin' },
-    )
-    assert.strictEqual(runUpper.result.success, true)
-
-    const runLower = await llmService.runTool(
-      { name: 'skill', parameters: { action: 'list' } },
-      { role: 'admin' },
-    )
-    assert.strictEqual(runLower.result.success, true)
-  })
+      const runLower = await llmService.runTool(
+        { name: 'skill', parameters: { action: 'list' } },
+        { role: 'admin' },
+      )
+      assert.strictEqual(runLower.result.success, true)
+    },
+  )
 })

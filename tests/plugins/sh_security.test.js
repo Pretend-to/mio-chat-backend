@@ -66,3 +66,63 @@ test('session yolo bypasses every shell approval entry point', async () => {
     shellPolicyService.evaluate = originalEvaluate
   }
 })
+
+test('SubAgent tasks may wait for parent-window approval while scheduled tasks fail closed', async (t) => {
+  const originalEvaluate = shellPolicyService.evaluate
+  shellPolicyService.evaluate = async () => ({
+    reason: 'no-rule-hit',
+    verdict: 'unknown',
+  })
+  t.after(() => {
+    shellPolicyService.evaluate = originalEvaluate
+  })
+
+  const hook = new ShSecurityHook({ namespace: 'terminal-pty' })
+  let approvals = 0
+  const tool = {
+    name: 'bash',
+    requestUserApproval: async () => {
+      approvals += 1
+      return { approved: true }
+    },
+  }
+  const subagentAllowed = await hook.execute({
+    event: {
+      body: { settings: {} },
+      subagentRunId: 'run-1',
+      triggerKind: 'task',
+    },
+    params: { command: 'custom-command' },
+    tool,
+  })
+  const scheduledContext = {
+    event: { body: { settings: {} }, triggerKind: 'task' },
+    params: { command: 'custom-command' },
+    tool,
+  }
+  const scheduledAllowed = await hook.execute(scheduledContext)
+
+  assert.equal(subagentAllowed, true)
+  assert.equal(scheduledAllowed, false)
+  assert.match(scheduledContext.ctx?.error || scheduledContext.error, /后台任务/)
+  assert.equal(approvals, 1)
+})
+
+test('event.settings.yolo directly bypasses approval for WebChatEvent', async () => {
+  const hook = new ShSecurityHook({ namespace: 'terminal-pty' })
+  const tool = {
+    name: 'bash',
+    requestUserApproval: async () => {
+      throw new Error('approval should not be requested when event.settings.yolo is true')
+    },
+  }
+  const allowed = await hook.execute({
+    event: {
+      settings: { yolo: true },
+      body: { settings: { yolo: true } },
+    },
+    params: { command: 'rm -rf /' },
+    tool,
+  })
+  assert.equal(allowed, true)
+})

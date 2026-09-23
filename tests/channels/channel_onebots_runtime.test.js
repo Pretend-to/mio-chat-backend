@@ -46,6 +46,7 @@ test('ChannelRuntime uses injected OneBots gateway/factory and stops account', a
     async stop() { calls.push('channel.stop') },
   }
   const runtime = new ChannelRuntime({
+    bindingResolver: async () => [],
     channelStore: store,
     onebotsGateway: gateway,
     onebotChannelFactory: options => {
@@ -80,6 +81,7 @@ test('ChannelRuntime rolls back a OneBots account when Channel startup fails', a
     async stopAccount() { calls.push('account.stop') },
   }
   const runtime = new ChannelRuntime({
+    bindingResolver: async () => [],
     channelStore: store,
     onebotsGateway: gateway,
     onebotChannelFactory: () => ({
@@ -93,53 +95,50 @@ test('ChannelRuntime rolls back a OneBots account when Channel startup fails', a
   assert.equal(runtime.isRunning('onebot-fail'), false)
 })
 
-test('ChannelRuntime migrates legacy wechat identity into native iLink', async () => {
+test('ChannelRuntime keeps an authenticated native iLink online without an Agent binding', async () => {
   const store = makeStore({
-    id: 'legacy-wechat', type: 'wechat', agentId: 'agent',
-    token: 'legacy-token', botId: 'legacy-bot', userId: 'legacy-user', status: 'bound',
+    id: 'wechat-passive', type: 'weixin-ilink',
+    token: 'token', botId: 'bot', userId: 'user', status: 'bound',
   })
-  let mounted = null
   const client = {
-    botId: 'legacy-bot',
+    botId: 'bot',
     async getUpdates() {
       await new Promise(resolve => setTimeout(resolve, 5))
       return { get_updates_buf: '', msgs: [], ret: 0 }
     },
+    async notifyStop() {},
   }
   const runtime = new ChannelRuntime({
+    bindingResolver: async () => [],
     channelStore: store,
-    clientFactory: channel => { mounted = channel; return client },
-    persistenceFactory: async () => ({
-      ...makeMemory(),
-      async getAgentMeta(key, fallback) {
-        return key === 'latestContextToken' ? 'legacy-context' : fallback
-      },
-    }),
+    clientFactory: () => client,
   })
 
-  await runtime.start('legacy-wechat')
-  assert.equal(mounted.token, 'legacy-token')
-  assert.equal(mounted.botId, 'legacy-bot')
-  assert.equal(store.snapshot().driver, 'native')
-  assert.equal(store.snapshot().platform, 'weixin-ilink')
-  assert.equal(store.snapshot().protocol, 'weixin.ilink')
-  assert.equal(runtime.running.get('legacy-wechat').chn.latestContextToken, 'legacy-context')
-  await runtime.dispose()
+  try {
+    await runtime.start('wechat-passive')
+    assert.equal(runtime.isRunning('wechat-passive'), true)
+    assert.equal(runtime.running.get('wechat-passive').agents.size, 0)
+    assert.equal(store.snapshot().status, 'running')
+  } finally {
+    await runtime.dispose()
+  }
 })
 
-test('ChannelRuntime migrates legacy agent model config and persists later channel updates', async () => {
+test('ChannelRuntime takes model config from Agent and persists updates back to Agent', async () => {
   const store = makeStore({
     id: 'model-channel', type: 'onebots:qq', driver: 'onebots', platform: 'qq', protocol: 'onebot.v12',
-    agentId: 'shared-agent', userId: 'user', botId: 'bot', status: 'bound',
-    provider: 'OldProvider', model: 'old-model',
+    userId: 'user', botId: 'bot', status: 'bound',
   })
-  const meta = new Map([
-    ['provider', 'NewProvider'],
-    ['model', 'new-model'],
-  ])
+  const updates = []
   let channelOptions = null
   const channelInstance = { async start() {}, async stop() {} }
   const runtime = new ChannelRuntime({
+    bindingResolver: async () => [{
+      agent: { id: 'agent-1', model: 'new-model', provider: 'NewProvider' },
+      agentId: 'agent-1',
+      id: 'binding-1',
+      outboundEnabled: true,
+    }],
     channelStore: store,
     onebotsGateway: {
       async init() {},
@@ -154,26 +153,26 @@ test('ChannelRuntime migrates legacy agent model config and persists later chann
         provider: options.provider,
       })
     },
-    persistenceFactory: async () => ({
-      ...makeMemory(),
-      async getAgentMeta(key, fallback) { return meta.has(key) ? meta.get(key) : fallback },
-      async setAgentMeta(key, value) { meta.set(key, value) },
-    }),
+    persistenceFactory: async () => makeMemory(),
+    prisma: {
+      agent: {
+        async update(args) {
+          updates.push(args)
+          return { id: 'agent-1', ...args.data }
+        },
+      },
+    },
   })
 
   await runtime.start('model-channel')
   assert.equal(channelOptions.provider, 'NewProvider')
   assert.equal(channelOptions.model, 'new-model')
-  assert.equal(store.snapshot().provider, 'NewProvider')
-  assert.equal(store.snapshot().model, 'new-model')
-  assert.equal(meta.get('provider'), null)
-  assert.equal(meta.get('model'), null)
 
   await channelOptions.onConfigUpdate({ provider: 'FinalProvider', model: 'final-model' })
-  assert.equal(store.snapshot().provider, 'FinalProvider')
-  assert.equal(store.snapshot().model, 'final-model')
-  assert.equal(channelInstance.provider, 'FinalProvider')
-  assert.equal(channelInstance.model, 'final-model')
+  assert.deepEqual(updates[0], {
+    data: { model: 'final-model', provider: 'FinalProvider' },
+    where: { id: 'agent-1' },
+  })
   await runtime.dispose()
 })
 

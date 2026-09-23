@@ -30,9 +30,11 @@ iLink-App-ClientVersion: <0x00MMNNPP>                      # major<<16|minor<<8|
 GET ilink/bot/get_bot_qrcode?bot_type=3        → { qrcode, qrcode_url / qrcode_img_content }
 GET ilink/bot/get_qrcode_status?qrcode=<qrcode>[&verify_code=]   # 长轮询扫码状态
 ```
+
 状态机：`wait → scaned → confirmed`（另有 `expired / scaned_but_redirect / need_verifycode / verify_code_blocked / binded_redirect`）。
 
 扫码 confirmed 后得到三值：
+
 - `bot_token` —— 后续鉴权 Bearer
 - `ilink_bot_id` —— Bot 账户 ID
 - `ilink_user_id` —— 格式 `xxx@im.wechat`
@@ -40,19 +42,20 @@ GET ilink/bot/get_qrcode_status?qrcode=<qrcode>[&verify_code=]   # 长轮询扫�
 ## 3. Endpoints & Body（全部 POST，均带 `base_info`）
 
 公共段：
+
 ```json
 { "base_info": { "channel_version": "x.y.z", "bot_agent": "OpenClaw" } }
 ```
 
-| 能力 | endpoint | body（+base_info） | 说明 |
-|------|----------|--------------------|------|
-| 收消息 | `ilink/bot/getupdates` | `{ get_updates_buf }` | 长轮询。返回 `{ret, msgs, get_updates_buf}`；客户端超时正常返回 `{ret:0, msgs:[], get_updates_buf}`，直接重试 |
-| 发消息 | `ilink/bot/sendmessage` | `{ msg: WeixinMessage }` | 返回 `{ret, errmsg}`，`ret!==0` 抛错 |
-| 上传URL | `ilink/bot/getuploadurl` | `{ filekey, media_type, to_user_id, rawsize, rawfilemd5, filesize, thumb_*, no_need_thumb, aeskey }` | 返回 `{ upload_param, thumb_upload_param, upload_full_url }` |
-| 配置 | `ilink/bot/getconfig` | `{ ilink_user_id, context_token }` | 返回 `{ typing_ticket }`（sendTyping 用） |
-| 正在输入 | `ilink/bot/sendtyping` | `{ ilink_user_id, typing_ticket, status }`（1=typing 2=cancel） | |
-| 停通知 | `ilink/bot/msg/notifystop` | `{ base_info }` | 通道关闭时通知服务器 |
-| 启通知 | `ilink/bot/msg/notifystart` | `{ base_info }` | |
+| 能力     | endpoint                    | body（+base_info）                                                                                   | 说明                                                                                                          |
+| -------- | --------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| 收消息   | `ilink/bot/getupdates`      | `{ get_updates_buf }`                                                                                | 长轮询。返回 `{ret, msgs, get_updates_buf}`；客户端超时正常返回 `{ret:0, msgs:[], get_updates_buf}`，直接重试 |
+| 发消息   | `ilink/bot/sendmessage`     | `{ msg: WeixinMessage }`                                                                             | 返回 `{ret, errmsg}`，`ret!==0` 抛错                                                                          |
+| 上传URL  | `ilink/bot/getuploadurl`    | `{ filekey, media_type, to_user_id, rawsize, rawfilemd5, filesize, thumb_*, no_need_thumb, aeskey }` | 返回 `{ upload_param, thumb_upload_param, upload_full_url }`                                                  |
+| 配置     | `ilink/bot/getconfig`       | `{ ilink_user_id, context_token }`                                                                   | 返回 `{ typing_ticket }`（sendTyping 用）                                                                     |
+| 正在输入 | `ilink/bot/sendtyping`      | `{ ilink_user_id, typing_ticket, status }`（1=typing 2=cancel）                                      |                                                                                                               |
+| 停通知   | `ilink/bot/msg/notifystop`  | `{ base_info }`                                                                                      | 通道关闭时通知服务器                                                                                          |
+| 启通知   | `ilink/bot/msg/notifystart` | `{ base_info }`                                                                                      |                                                                                                               |
 
 ## 4. 消息结构
 
@@ -76,6 +79,7 @@ NONE:0 TEXT:1 IMAGE:2 VOICE:3 FILE:4 VIDEO:5 TOOL_CALL_START:11 TOOL_CALL_RESULT
 ```
 
 **关键点**：
+
 - `get_updates_buf`：从 `getupdates` 响应里拿，本地缓存，下次请求带回（"" 表示首次/重置）。错误码 `-14` = 会话超时需重新扫码。
 - `context_token`：收消息时从消息体带出；**发回复必须在 sendmessage 的 msg 里带回**（否则消息不投递）；可持久化复用。
 

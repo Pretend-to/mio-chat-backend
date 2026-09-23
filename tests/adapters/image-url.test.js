@@ -42,9 +42,7 @@ test('Image URL pre-processing and data wrapping', async (t) => {
         base: { model: 'gemini-2.5-flash', stream: true },
         chatParams: { temperature: 0.7 },
         extraSettings: {
-          gemini: {
-            imageGeneration: { enabled: false }
-          }
+          imageGeneration: { enabled: false }
         },
         toolCallSettings: { mode: 'NONE', tools: [] }
       }

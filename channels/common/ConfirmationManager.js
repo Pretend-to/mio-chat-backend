@@ -35,16 +35,19 @@ export class ConfirmationManager {
    * @param {object} ctx 上下文信息
    * @returns {Promise<{approved:boolean, rememberType?:'prefix1'|'prefix2', reason?:string}>}
    */
-  request({
-    description,
-    title = '安全操作确认',
-    command = '',
-    commandPrefix1 = '',
-    commandPrefix2 = '',
-    rememberable = false,
-    from = null,
-    contextToken = null,
-  }, ctx = {}) {
+  request(
+    {
+      description,
+      title = '安全操作确认',
+      command = '',
+      commandPrefix1 = '',
+      commandPrefix2 = '',
+      rememberable = false,
+      from = null,
+      contextToken = null,
+    },
+    ctx = {},
+  ) {
     return new Promise((resolve, reject) => {
       const pendingId = `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
       const sendCtx = {
@@ -79,20 +82,35 @@ export class ConfirmationManager {
   }
 
   _notifyNext() {
-    if (Array.from(this.pendingConfirmations.values()).some(entry => entry.notified)) return
-    const item = Array.from(this.pendingConfirmations.values()).find(entry => !entry.notified)
+    if (
+      Array.from(this.pendingConfirmations.values()).some(
+        (entry) => entry.notified,
+      )
+    )
+      return
+    const item = Array.from(this.pendingConfirmations.values()).find(
+      (entry) => !entry.notified,
+    )
     if (!item) return
     item.notified = true
     item.timer = setTimeout(() => {
       if (!this.pendingConfirmations.has(item.pendingId)) return
       this.pendingConfirmations.delete(item.pendingId)
-      const noticePromise = this.channel._safeSend(item.sendCtx.from, item.sendCtx.contextToken,
-        `⏰ 操作确认超时已自动取消：${item.description}`)
+      const noticePromise = this.channel._safeSend(
+        item.sendCtx.from,
+        item.sendCtx.contextToken,
+        `⏰ 操作确认超时已自动取消：${item.description}`,
+      )
       item.resolve({ approved: false, reason: '操作确认超时已取消' })
-      Promise.resolve(noticePromise).catch(() => {}).finally(() => this._notifyNext())
+      Promise.resolve(noticePromise)
+        .catch(() => {})
+        .finally(() => this._notifyNext())
     }, this.ttlMs)
 
-    const descBlock = (item.description || '').split('\n').map(line => `> ${line}`).join('\n')
+    const descBlock = (item.description || '')
+      .split('\n')
+      .map((line) => `> ${line}`)
+      .join('\n')
     const lines = [`⚠️ **${item.title}**`, descBlock, '']
     if (item.command && item.rememberable && item.commandPrefix2) {
       lines.push(`👉 回复【1】执行并记住「${item.commandPrefix2}」`)
@@ -105,15 +123,21 @@ export class ConfirmationManager {
       lines.push('👉 回复【确认】或【/allow】执行')
     }
     lines.push('👉 回复【取消】或【拒绝 理由】放弃')
-    this.channel._safeSend(item.sendCtx.from, item.sendCtx.contextToken, lines.join('\n')).catch(() => {})
+    this.channel
+      ._safeSend(item.sendCtx.from, item.sendCtx.contextToken, lines.join('\n'))
+      .catch(() => {})
   }
 
   _findPending(ctx) {
-    return Array.from(this.pendingConfirmations.values()).find(item => item.notified && this._ownerMatches(item, ctx))
+    return Array.from(this.pendingConfirmations.values()).find(
+      (item) => item.notified && this._ownerMatches(item, ctx),
+    )
   }
 
   _findOwned(ctx) {
-    return Array.from(this.pendingConfirmations.values()).find(item => this._ownerMatches(item, ctx))
+    return Array.from(this.pendingConfirmations.values()).find((item) =>
+      this._ownerMatches(item, ctx),
+    )
   }
 
   _ownerMatches(item, ctx) {
@@ -139,8 +163,13 @@ export class ConfirmationManager {
     if (!item) {
       const queuedItem = this._findOwned(ctx)
       if (!queuedItem) return false
-      this.channel._safeSend(ctx?.from || queuedItem.sendCtx.from, ctx?.contextToken || queuedItem.sendCtx.contextToken,
-        '⏳ 前面还有待确认操作，请先完成当前确认。').catch(() => {})
+      this.channel
+        ._safeSend(
+          ctx?.from || queuedItem.sendCtx.from,
+          ctx?.contextToken || queuedItem.sendCtx.contextToken,
+          '⏳ 前面还有待确认操作，请先完成当前确认。',
+        )
+        .catch(() => {})
       return true
     }
 
@@ -153,19 +182,46 @@ export class ConfirmationManager {
         isAllow = true
         rememberType = 'prefix2'
       }
-      if (item.commandPrefix1 !== item.commandPrefix2 && ['2', '确认 2', '允许 2', '/allow 2'].includes(normalized)) {
+      if (
+        item.commandPrefix1 !== item.commandPrefix2 &&
+        ['2', '确认 2', '允许 2', '/allow 2'].includes(normalized)
+      ) {
         isAllow = true
         rememberType = 'prefix1'
       }
     } else {
-      isAllow = ['确认', '允许', 'yes', 'y', 'ok', '/allow', '继续', '同意', '好的', '行', '通过'].includes(normalized)
+      isAllow = [
+        '确认',
+        '允许',
+        'yes',
+        'y',
+        'ok',
+        '/allow',
+        '继续',
+        '同意',
+        '好的',
+        '行',
+        '通过',
+      ].includes(normalized)
     }
-    let isReject = ['取消', '拒绝', 'no', 'n', 'cancel', '/deny', '放弃', '不行', '不通过'].includes(normalized)
+    let isReject = [
+      '取消',
+      '拒绝',
+      'no',
+      'n',
+      'cancel',
+      '/deny',
+      '放弃',
+      '不行',
+      '不通过',
+    ].includes(normalized)
     let rejectReason = ''
 
     if (!isAllow && !isReject) {
       // 提取“拒绝/取消/不通过”后面跟随的具体原因（如：“拒绝 因为当前是生产环境”）
-      const match = raw.match(/^(?:拒绝|取消|不通过|不同意|cancel|\/deny)\s*[:：,\s]?\s*(.+)$/i)
+      const match = raw.match(
+        /^(?:拒绝|取消|不通过|不同意|cancel|\/deny)\s*[:：,\s]?\s*(.+)$/i,
+      )
       if (match) {
         isReject = true
         rejectReason = match[1]?.trim() || ''
@@ -174,8 +230,13 @@ export class ConfirmationManager {
 
     // 有归属的挂起确认必须消费所有输入，避免普通文字绕过确认流进入旁路会话。
     if (!isAllow && !isReject) {
-      this.channel._safeSend(ctx?.from || item.sendCtx.from, ctx?.contextToken || item.sendCtx.contextToken,
-        '⚠️ 当前有待确认操作，请按提示回复确认选项，或回复【取消】放弃。').catch(() => {})
+      this.channel
+        ._safeSend(
+          ctx?.from || item.sendCtx.from,
+          ctx?.contextToken || item.sendCtx.contextToken,
+          '⚠️ 当前有待确认操作，请按提示回复确认选项，或回复【取消】放弃。',
+        )
+        .catch(() => {})
       return true
     }
 
@@ -187,23 +248,42 @@ export class ConfirmationManager {
     if (ctx?.contextToken) {
       this.channel.latestContextToken = ctx.contextToken
       if (this.channel.memory) {
-        this.channel.memory.setAgentMeta('latestContextToken', ctx.contextToken).catch(() => {})
+        this.channel.memory
+          .setAgentMeta('latestContextToken', ctx.contextToken)
+          .catch(() => {})
       }
     }
 
-    const replyToken = ctx?.contextToken || this.channel.latestContextToken || null
+    const replyToken =
+      ctx?.contextToken || this.channel.latestContextToken || null
 
     let feedbackPromise
     if (isAllow) {
-      feedbackPromise = this.channel._safeSend(ctx?.from || item.sendCtx.from, replyToken, '✅ 已确认授权，正在继续执行...')
+      feedbackPromise = this.channel._safeSend(
+        ctx?.from || item.sendCtx.from,
+        replyToken,
+        '✅ 已确认授权，正在继续执行...',
+      )
       item.resolve({ approved: true, contextToken: replyToken, rememberType })
     } else {
-      const feedback = rejectReason ? `🚫 已拒绝该操作（理由: ${rejectReason}）` : '🚫 已取消该操作'
-      feedbackPromise = this.channel._safeSend(ctx?.from || item.sendCtx.from, replyToken, feedback)
-      item.resolve({ approved: false, contextToken: replyToken, reason: rejectReason || '用户已手动取消该操作' })
+      const feedback = rejectReason
+        ? `🚫 已拒绝该操作（理由: ${rejectReason}）`
+        : '🚫 已取消该操作'
+      feedbackPromise = this.channel._safeSend(
+        ctx?.from || item.sendCtx.from,
+        replyToken,
+        feedback,
+      )
+      item.resolve({
+        approved: false,
+        contextToken: replyToken,
+        reason: rejectReason || '用户已手动取消该操作',
+      })
     }
 
-    Promise.resolve(feedbackPromise).catch(() => {}).finally(() => this._notifyNext())
+    Promise.resolve(feedbackPromise)
+      .catch(() => {})
+      .finally(() => this._notifyNext())
     return true
   }
 

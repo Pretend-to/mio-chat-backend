@@ -8,7 +8,7 @@ import { WechatChannel } from '../../channels/wechat/WechatChannel.js'
 
 /**
  * WechatChannel 渠道核心测试（mock IlinkClient + MemoryStore + llmProcessor）
- * 覆盖：单用户边界、聚合回复、context_token、记忆装配、typing 时序、slash 会话路由
+ * 覆盖：多用户入站、聚合回复、context_token、记忆装配、typing 时序、slash 会话路由
  */
 
 const MASTER = 'master@im.wechat'
@@ -52,6 +52,32 @@ function makeHarness() {
     llm,
     typing: true,
   })
+  channel.routeTargetResolver = async (envelope) => ({
+    enqueueInboundDebounce: (from, packet = {}) =>
+      channel.enqueueInboundDebounce(from, {
+        ...packet,
+        ctx: {
+          ...packet.ctx,
+          principal: {
+            externalUserId: envelope.actor.externalUserId,
+            id: `test:${envelope.actor.externalUserId}`,
+            isAdmin: envelope.actor.externalUserId === MASTER,
+            role:
+              envelope.actor.externalUserId === MASTER
+                ? 'system_admin'
+                : 'user',
+          },
+        },
+      }),
+    get latestContextToken() {
+      return channel.latestContextToken
+    },
+    set latestContextToken(value) {
+      channel.latestContextToken = value
+    },
+    keepAlive: channel.keepAlive,
+    memory,
+  })
   const lastSent = () =>
     mockClient.sendLog[mockClient.sendLog.length - 1]?.item_list?.[0]?.text ||
     ''
@@ -88,12 +114,19 @@ test('WechatChannel 渠道核心', async () => {
   // 预置默认灵魂（灵魂引导有独立 M3 test 块覆盖）；此处测正常对话路径
   await memory.writeSoul('你叫小助手')
 
-  await test('单用户边界：非绑定者消息被忽略', async () => {
+  await test('已认证 Channel 接受任意外部用户并保留其身份', async () => {
     await channel._handleMessage(
       userMsg('你是谁', { from: 'stranger@im.wechat' }),
     )
-    assert.strictEqual(llmCalls.length, 0)
-    assert.strictEqual(mockClient.sendLog.length, 0)
+    assert.strictEqual(llmCalls.length, 1)
+    assert.strictEqual(
+      llmCalls[0].envelope.actor.externalUserId,
+      'stranger@im.wechat',
+    )
+    assert.strictEqual(mockClient.sendLog.length, 1)
+    await memory.clearChat(await memory.getActiveSession())
+    llmCalls.length = 0
+    mockClient.sendLog.length = 0
   })
 
   await test('普通消息：自动建会话 + 聚合回复 + context_token + 落盘', async () => {
@@ -226,9 +259,11 @@ test('WechatChannel 渠道核心', async () => {
     })
     const last3 = () =>
       client3.sendLog[client3.sendLog.length - 1]?.item_list?.[0]?.text || ''
+    let messageSeq = 0
     const msg = (text) => ({
       from_user_id: MASTER,
       context_token: 'c',
+      message_id: `m3-${++messageSeq}`,
       message_type: 1,
       item_list: [{ type: 1, text }],
     })
@@ -298,6 +333,28 @@ test('WechatChannel 渠道核心', async () => {
     assert.ok(sent.includes('⚠️ 请求处理失败'))
     assert.ok(sent.includes('credit insufficient balance'))
     assert.ok(sent.includes('20260907132209787259049c955d568fNCxOw6a'))
+  })
+
+  await test('无 Agent 绑定时保持 Channel 可用并回复明确提示', async () => {
+    mockClient.sendLog.length = 0
+    const passiveChannel = new WechatChannel({
+      channelId: 'wechat-passive',
+      client: mockClient,
+      llm: { process: async () => assert.fail('不得触发模型执行') },
+      logger: { debug() {}, error() {}, info() {}, warn() {} },
+      masterId: MASTER,
+      memory,
+      routeTargetResolver: async () => {
+        const error = new Error('No enabled Agent binding')
+        error.code = 'binding_not_found'
+        throw error
+      },
+      typing: false,
+    })
+
+    await passiveChannel.handleIncomingMessage(userMsg('有人吗'))
+
+    assert.ok(lastSent().includes('没有关联可用的 Agent'))
   })
 
   fs.rmSync(baseDir, { recursive: true, force: true })

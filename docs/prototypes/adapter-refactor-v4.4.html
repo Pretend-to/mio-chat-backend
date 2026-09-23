@@ -1,0 +1,2036 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MioChat 适配器系统 v3 · 交互原型（协议普通下拉 / 模型标签流 / 获取模型与测试连接解耦）</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%;overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;background:radial-gradient(1200px 620px at 8% -12%,#e6f0ff 0%,transparent 58%),radial-gradient(1000px 520px at 102% -4%,#f1e9ff 0%,transparent 52%),#f5f7fa;color:#303133;font-size:14px;line-height:1.65;min-height:100vh;overflow-x:hidden}
+.wrap{max-width:1280px;margin:0 auto;padding:20px 18px 70px}
+
+/* ===== 顶部 ===== */
+.top{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;padding:16px 20px;background:rgba(255,255,255,.86);backdrop-filter:blur(12px);border:1px solid #e4e7ed;border-radius:16px;box-shadow:0 8px 28px rgba(31,45,61,.07)}
+.brand{display:flex;gap:12px;align-items:center;min-width:0}
+.logo{width:42px;height:42px;flex:0 0 auto;border-radius:13px;background:linear-gradient(135deg,#409eff,#7c5cff);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:17px;box-shadow:0 8px 18px rgba(64,158,255,.32)}
+h1{margin:0;font-size:16.5px;font-weight:650;letter-spacing:.2px}
+.sub{margin:3px 0 0;color:#909399;font-size:12.5px}
+.seg{display:inline-flex;background:#f0f2f5;border:1px solid #e4e7ed;border-radius:11px;padding:3px;gap:2px;flex:0 0 auto;flex-wrap:wrap}
+.seg button{border:0;background:transparent;padding:8px 15px;border-radius:8px;font-size:13px;color:#606266;cursor:pointer;transition:.18s;font-family:inherit;white-space:nowrap}
+.seg button.on{background:#fff;color:#409eff;font-weight:650;box-shadow:0 2px 8px rgba(31,45,61,.13)}
+.seg button:hover{color:#409eff}
+
+/* ===== 布局 ===== */
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 384px;gap:18px;margin-top:18px;align-items:start}
+@media (max-width:1050px){.grid{grid-template-columns:minmax(0,1fr)}}
+.card{background:#fff;border:1px solid #e4e7ed;border-radius:14px;box-shadow:0 4px 18px rgba(31,45,61,.05)}
+.card .hd{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;border-bottom:1px solid #eef0f3}
+.card .hd h2{margin:0;font-size:14.5px;font-weight:650;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.card .bd{padding:16px 18px}
+.side{display:flex;flex-direction:column;gap:14px;position:sticky;top:16px}
+@media (max-width:1050px){.side{position:static}}
+
+/* ===== 按钮 ===== */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:0 15px;border-radius:9px;border:1px solid #dcdfe6;background:#fff;color:#606266;font-size:13.5px;font-family:inherit;cursor:pointer;transition:.16s;white-space:nowrap}
+.btn:hover{border-color:#c6d4e6;background:#f7faff;color:#409eff}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:linear-gradient(135deg,#409eff,#5b7cff);border-color:transparent;color:#fff;box-shadow:0 6px 16px rgba(64,158,255,.28)}
+.btn.primary:hover{filter:brightness(1.06);color:#fff}
+.btn.primary:disabled{background:#c8d6ea;box-shadow:none;cursor:not-allowed;filter:none;color:#fff}
+.btn.ghost{background:#f5f7fa;border-color:#e4e7ed}
+.btn.sm{min-height:29px;padding:0 11px;font-size:12.5px;border-radius:8px}
+.btn.sel{background:#ecf5ff;border-color:#b3d8ff;color:#409eff;font-weight:600}
+.btn .i{font-size:12.5px}
+.row{display:flex;flex-wrap:wrap;gap:9px;align-items:center}
+.spacer{flex:1 1 auto}
+
+/* ===== 输入 ===== */
+.field{margin-bottom:15px}
+.field>label,.lbl{display:flex;align-items:center;gap:8px;font-size:13px;color:#606266;margin-bottom:7px;font-weight:550;flex-wrap:wrap}
+.req{color:#f56c6c;font-size:12px}
+.inp{display:flex;align-items:center;gap:8px;min-height:38px;padding:0 12px;border:1px solid #dcdfe6;border-radius:9px;background:#fff;transition:.16s}
+.inp:focus-within{border-color:#409eff;box-shadow:0 0 0 3px rgba(64,158,255,.12)}
+.inp.err{border-color:#f56c6c;box-shadow:0 0 0 3px rgba(245,108,108,.12)}
+.inp input{flex:1 1 auto;min-width:0;border:0;outline:0;font-size:13.5px;font-family:inherit;background:transparent;color:#303133;height:36px}
+.inp .addon{flex:0 0 auto;color:#909399;font-size:12px;cursor:pointer;user-select:none}
+.inp .addon:hover{color:#409eff}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.8px}
+.hint{font-size:12px;color:#a8abb2;margin-top:6px;line-height:1.7}
+.hint.warn{color:#e6a23c}
+.hint.bad{color:#f56c6c}
+.hint.ok{color:#529b2e}
+.switch{width:40px;height:22px;border-radius:20px;background:#dcdfe6;position:relative;cursor:pointer;transition:.2s;flex:0 0 auto}
+.switch.on{background:#409eff}
+.switch i{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.switch.on i{left:20px}
+.switch.sm{width:32px;height:18px}
+.switch.sm i{width:14px;height:14px}
+.switch.sm.on i{left:16px}
+.mockfail{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 9px;border:1px dashed #dcdfe6;border-radius:9px;background:#fff;cursor:pointer;user-select:none;transition:.16s;flex:0 0 auto}
+.mockfail:hover{border-color:#e6a23c;background:#fffdf7}
+.mockfail.on{border-style:solid;border-color:#f5dab1;background:#fffaf3}
+.mockfail .mftxt{font-size:12px;color:#909399;white-space:nowrap}
+.mockfail.on .mftxt{color:#b88230;font-weight:650}
+
+/* ===== 普通下拉（原生 select，无自定义推断） ===== */
+select.native{width:100%;height:38px;border:1px solid #dcdfe6;border-radius:9px;background:#fff;color:#303133;font-size:13.5px;font-family:inherit;padding:0 10px;outline:0;cursor:pointer;transition:.16s}
+select.native:hover{border-color:#b3d8ff}
+select.native:focus{border-color:#409eff;box-shadow:0 0 0 3px rgba(64,158,255,.12)}
+select.native.plain{height:34px;font-size:13px}
+.selwrap{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.selwrap select.native{flex:1 1 240px}
+
+/* ===== 标签 ===== */
+.tag{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:6px;font-size:11.5px;line-height:1.7;border:1px solid transparent;white-space:nowrap}
+.tag.blue{background:#ecf5ff;border-color:#d9ecff;color:#409eff}
+.tag.green{background:#f0f9eb;border-color:#e1f3d8;color:#529b2e}
+.tag.orange{background:#fdf6ec;border-color:#faecd8;color:#b88230}
+.tag.red{background:#fef0f0;border-color:#fde2e2;color:#c45656}
+.tag.gray{background:#f4f4f5;border-color:#e9e9eb;color:#909399}
+.tag.purple{background:#f3f0ff;border-color:#e5ddff;color:#6b4ee6}
+.tag.plain{background:#fff;border-color:#e4e7ed;color:#606266}
+
+/* ===== 标签流（模型列表） ===== */
+.page{height:100vh;overflow-y:auto;overflow-x:hidden}
+.page.lock{overflow:hidden}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start;align-items:center;height:168px;padding:6px 8px;border:1px solid #dcdfe6;border-radius:10px;background:#fff;transition:.16s;cursor:text;overflow-y:auto;overflow-x:hidden}
+.chips.small{height:92px}
+.chips:focus-within{border-color:#409eff;box-shadow:0 0 0 3px rgba(64,158,255,.12)}
+.chips.hot{border-color:#b3d8ff;background:#fbfdff}
+.chips.err{border-color:#f56c6c;box-shadow:0 0 0 3px rgba(245,108,108,.12)}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:1px 5px 1px 9px;border-radius:8px;background:#f2f7ff;border:1px solid #d9ecff;color:#2f6bd8;font-size:12.2px;line-height:1.9;max-width:100%;animation:chipin .18s ease}
+@keyframes chipin{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:none}}
+.chip .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:210px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.chip .x{cursor:pointer;color:#9db8dc;font-size:12px;padding:0 3px;border-radius:5px;line-height:1.4}
+.chip .x:hover{color:#f56c6c;background:#fff}
+.chip.fetched{background:#f0f9eb;border-color:#d7efc4;color:#3f7a22}
+.chip.fetched .x{color:#a3c987}
+.chip.fetched .x:hover{color:#f56c6c}
+.chip.manual{background:#f3f0ff;border-color:#e0d8ff;color:#5b45c9}
+.chip.manual .x{color:#b0a4e6}
+.chip .src{font-size:10px;opacity:.7;letter-spacing:.2px}
+.chips input{flex:1 1 120px;min-width:120px;border:0;outline:0;height:28px;font-size:13.2px;font-family:inherit;background:transparent;color:#303133}
+.chips .ph{color:#c0c4cc;font-size:12.6px;pointer-events:none}
+.chips::-webkit-scrollbar,.dlg::-webkit-scrollbar,.page::-webkit-scrollbar{width:12px;height:12px}
+.chips::-webkit-scrollbar-track,.dlg::-webkit-scrollbar-track{background:#f4f6f9;border-radius:8px}
+.chips::-webkit-scrollbar-thumb,.dlg::-webkit-scrollbar-thumb{background:#8fa3bd;border-radius:8px;border:2px solid transparent;background-clip:content-box}
+.chips::-webkit-scrollbar-thumb:hover,.dlg::-webkit-scrollbar-thumb:hover{background:#6f86a3;background-clip:content-box}
+/* ===== v4.3 连接方式 / 凭据区（v4.4：连接方式 4 项：API Key / Vertex Express / Vertex ADC / OAuth） ===== */
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:560px){.row2{grid-template-columns:1fr}}
+.inp.locked{background:#f7f8fa;border-style:dashed}
+.inp.locked input{color:#7a8290}
+.cred{border:1px solid #eef0f3;border-radius:11px;background:#fbfcfe;padding:12px}
+.cred-api{background:#fff}
+.cred-vx{background:#fff}
+.cred-adc{background:#fff}
+.ta{width:100%;min-height:96px;border:1px solid #dcdfe6;border-radius:9px;padding:9px 11px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.2px;line-height:1.6;outline:0;resize:vertical;color:#303133;background:#fff;transition:.16s}
+.ta:focus{border-color:#409eff;box-shadow:0 0 0 3px rgba(64,158,255,.12)}
+.ta.err{border-color:#f56c6c;box-shadow:0 0 0 3px rgba(245,108,108,.12)}
+.lbl2{font-size:12.5px;color:#606266;font-weight:550;margin-bottom:6px}
+.sa-sum{margin-top:9px;font-size:12.3px;line-height:1.9;color:#606266;background:#fff;border:1px dashed #e4e7ed;border-radius:9px;padding:9px 11px}
+.sa-sum .k{color:#a8abb2;margin-right:4px}
+.sa-sum.ok{border-style:solid;border-color:#e1f3d8;background:#f7fdf3}
+.sa-sum.bad{border-style:solid;border-color:#fde2e2;background:#fff8f8;color:#c45656}
+.oauth-card{border:1px dashed #dcdfe6;border-radius:11px;background:#fff;padding:12px}
+.oauth-card.on{border-style:solid;border-color:#d9ecff;background:#f7fbff}
+/* v4.3 补完：授权过期只是“运行时不可用”，不是“表单没填完” → 卡片变黄，保存不禁用 */
+.oauth-card.warn{border-style:solid;border-color:#f3d19e;background:#fffbf2}
+.oa-warn{color:#b88230;font-size:12.3px}
+.usercode{font-family:ui-monospace,Menlo,monospace;font-size:18px;font-weight:700;letter-spacing:2px;color:#409eff;background:#ecf5ff;border:1px solid #d9ecff;border-radius:9px;padding:5px 12px}
+.oauth-btn{min-height:44px;padding:0 20px;font-size:14.5px;border-radius:11px}
+.matrix-note{font-size:11.5px;color:#b0b6c0;font-weight:400}
+.combo{border:1px solid #dcdfe6;border-radius:10px;background:#fff;padding:8px;transition:.16s}
+.combo:focus-within{border-color:#409eff;box-shadow:0 0 0 3px rgba(64,158,255,.12)}
+.combo-top{display:flex;align-items:center;gap:7px;padding:0 2px 7px;border-bottom:1px dashed #eef0f3;margin-bottom:7px}
+.combo-top .ci{font-size:11.5px;color:#a8abb2;background:#f4f6f9;border:1px solid #eef0f3;border-radius:6px;padding:0 6px;line-height:1.7}
+.combo-top input{flex:1 1 auto;min-width:0;border:0;outline:0;font-size:12.8px;font-family:inherit;background:transparent;color:#303133;height:26px}
+.cand{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:8px;border:1px dashed #dcdfe6;background:#fff;color:#606266;font-size:12px;font-family:ui-monospace,Menlo,monospace;cursor:pointer;transition:.14s}
+.cand:hover{border-color:#b3d8ff;color:#409eff;background:#f7faff}
+.cand.on{border-style:solid;border-color:#d7efc4;background:#f0f9eb;color:#3f7a22;font-weight:600}
+.preview{margin-top:11px;padding:10px 12px;border-radius:10px;background:#f7fbff;border:1px solid #e8eefb;font-size:12.8px;color:#3d5a80;line-height:1.8}
+.preview b{color:#409eff;font-size:15px;font-variant-numeric:tabular-nums}
+.preview .names{color:#8a97a8;font-size:12px}
+.chipswrap{position:relative}
+/* 仅原型演示用：本机 headless Chrome 原生滚动条为 overlay 且宽度为 0，故自绘；生产实现必须用原生滚动或 el-scrollbar，禁止照抄此实现。 */
+.rail{position:absolute;right:3px;top:7px;bottom:7px;width:6px;border-radius:4px;background:#f0f3f7;display:none;pointer-events:none;z-index:3}
+.rail.on{display:block}
+.rail i{position:absolute;left:0;width:100%;border-radius:4px;background:#b7c5d8;min-height:22px}
+.drail{position:absolute;width:6px;border-radius:4px;background:#f0f3f7;display:none;pointer-events:none;z-index:20}
+.drail.on{display:block}
+.drail i{position:absolute;left:0;width:100%;border-radius:4px;background:#b7c5d8;min-height:26px}
+.chipbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:7px}
+.legend{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:11.5px;color:#a8abb2}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+
+/* ===== 双按钮状态（解耦） ===== */
+.statuses{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 100%}
+.st{display:flex;align-items:center;gap:7px;font-size:12px;color:#a0a6b0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st .b{width:7px;height:7px;border-radius:50%;background:#dcdfe6;flex:0 0 auto}
+.st.run{color:#409eff}.st.run .b{background:#409eff;animation:blink 1s ease infinite}
+.st.ok{color:#529b2e}.st.ok .b{background:#67c23a}
+.st.bad{color:#c45656}.st.bad .b{background:#f56c6c}
+@keyframes blink{50%{opacity:.25}}
+.spin{width:12px;height:12px;border-radius:50%;border:2px solid #d9ecff;border-top-color:#409eff;animation:rot .7s linear infinite;display:inline-block;flex:0 0 auto}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+/* ===== 统计 / 列表 ===== */
+.statbar{display:flex;flex-wrap:wrap;gap:8px;padding:12px 14px;background:linear-gradient(180deg,#fbfdff,#f6f9ff);border:1px solid #e8eefb;border-radius:12px;margin-bottom:14px}
+.stat{display:flex;align-items:baseline;gap:6px;font-size:12.5px;color:#909399;padding-right:14px;border-right:1px dashed #e0e6f0}
+.stat:last-child{border-right:0}
+.stat b{font-size:15px;color:#303133;font-weight:650}
+table{width:100%;border-collapse:collapse;font-size:13px}
+table th{text-align:left;font-weight:550;color:#909399;font-size:12.5px;padding:9px 10px;border-bottom:1px solid #ebeef5;background:#fafbfc}
+table td{padding:11px 10px;border-bottom:1px solid #f2f4f7;vertical-align:middle}
+table tr:last-child td{border-bottom:0}
+table tr.newrow{animation:flashrow 1.6s ease}
+@keyframes flashrow{0%{background:#ecf5ff}100%{background:transparent}}
+.ava{width:28px;height:28px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12.5px;font-weight:650;flex:0 0 auto}
+.cellname{display:flex;align-items:center;gap:9px;min-width:0;white-space:nowrap}
+.cellname span{white-space:nowrap}
+.mchip{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap;white-space:nowrap}
+td.urlcell{max-width:250px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mchip .mnm{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.6px;color:#7a8290;background:#f7f8fa;border:1px solid #eef0f3;border-radius:6px;padding:0 6px;line-height:1.8;white-space:nowrap}
+.empty{padding:26px 10px;text-align:center;color:#a8abb2;font-size:13px}
+
+/* ===== 弹窗 ===== */
+.overlay{position:fixed;inset:0;background:rgba(28,34,48,.48);backdrop-filter:blur(3px);display:flex;align-items:flex-start;justify-content:center;padding:22px 14px;z-index:60;overflow:hidden;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .2s,visibility .2s}
+.overlay.show{opacity:1;visibility:visible;pointer-events:auto}
+.dlg{width:760px;max-width:100%;max-height:85vh;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.28);transform:translateY(12px) scale(.985);transition:transform .22s cubic-bezier(.2,.9,.3,1.1);overflow-y:auto;overflow-x:hidden;margin-bottom:0}
+.overlay.show .dlg{transform:none}
+.dlg .dh{display:flex;align-items:flex-start;gap:11px;padding:16px 18px;border-bottom:1px solid #eef0f3;position:sticky;top:0;z-index:6;background:#fff;border-radius:16px 16px 0 0}
+.dlg .dh h3{margin:0;font-size:15px;font-weight:650;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.dlg .dh p{margin:3px 0 0;font-size:12.2px;color:#909399}
+.xbtn{margin-left:auto;width:30px;height:30px;border-radius:8px;border:0;background:#f5f7fa;color:#909399;font-size:16px;cursor:pointer;flex:0 0 auto;line-height:1}
+.xbtn:hover{background:#eef1f6;color:#606266}
+.dlg .db{padding:16px 18px}
+.dlg .df{display:flex;flex-wrap:wrap;gap:9px;align-items:center;padding:13px 18px;border-top:1px solid #eef0f3;background:#fbfcfe;border-radius:0 0 16px 16px;position:sticky;bottom:0;z-index:6}
+
+/* ===== 预设下拉 ===== */
+.pd{position:relative}
+.pd-trigger{width:100%;display:flex;align-items:center;gap:10px;min-height:42px;padding:6px 12px;border:1px solid #dcdfe6;border-radius:10px;background:#fff;cursor:pointer;transition:.16s;font-family:inherit;text-align:left}
+.pd-trigger:hover{border-color:#b3d8ff;background:#fafcff}
+.pd-trigger.open{border-color:#409eff;box-shadow:0 0 0 3px rgba(64,158,255,.12)}
+.pd-trigger .txt{flex:1 1 auto;min-width:0;font-size:13.5px;color:#303133;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pd-trigger .txt.ph{color:#a8abb2}
+.caret{color:#c0c4cc;font-size:11px;transition:.2s}
+.pd-trigger.open .caret{transform:rotate(180deg)}
+.pd-panel{position:absolute;left:0;right:0;top:calc(100% + 6px);background:#fff;border:1px solid #e4e7ed;border-radius:12px;box-shadow:0 16px 44px rgba(15,23,42,.16);z-index:20;padding:8px;display:none}
+.pd-panel.show{display:block;animation:dropin .18s ease}
+@keyframes dropin{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.pd-panel .srch{padding:2px 2px 8px}
+.pd-panel .srch input{width:100%;height:34px;border:1px solid #e4e7ed;border-radius:8px;padding:0 11px;font-size:13px;font-family:inherit;outline:0}
+.pd-panel .srch input:focus{border-color:#409eff}
+.pd-list{max-height:284px;overflow:auto}
+.pd-group{font-size:11.5px;color:#a8abb2;padding:9px 8px 5px;letter-spacing:.4px}
+.pd-item{display:flex;align-items:center;gap:10px;padding:8px 9px;border-radius:9px;cursor:pointer;transition:.13s}
+.pd-item:hover{background:#f2f7ff}
+.pd-item .nm{font-size:13.2px;font-weight:550;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.pd-item .url{font-size:11.6px;color:#a8abb2;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pd-item .mid{flex:1 1 auto;min-width:0}
+
+/* ===== 提示 / 说明 ===== */
+.note{display:flex;gap:9px;padding:11px 13px;border-radius:11px;font-size:12.6px;line-height:1.75;border:1px solid #d9ecff;background:#f4faff;color:#3d5a80}
+.note.warn{border-color:#faecd8;background:#fffaf3;color:#8a6a2a}
+.note.bad{border-color:#fde2e2;background:#fff8f8;color:#a04b4b}
+.note.ok{border-color:#e1f3d8;background:#f7fdf3;color:#4a7a2c}
+.note .ico{flex:0 0 auto;font-weight:700}
+.del{font-size:12.3px;color:#7a8290;line-height:2}
+.del s{color:#b6bcc6}
+.rm{display:inline-block;font-size:10.5px;padding:0 6px;border-radius:5px;background:#fef0f0;color:#c45656;border:1px solid #fde2e2;text-decoration:none;margin-right:6px;vertical-align:1px}
+.todock{position:fixed;left:20px;bottom:20px;transform:translateY(14px);background:#fff;border:1px solid #e4e7ed;border-radius:11px;box-shadow:0 14px 40px rgba(15,23,42,.16);padding:10px 16px;font-size:13px;display:flex;gap:9px;align-items:center;z-index:120;opacity:0;pointer-events:none;transition:.24s;max-width:min(460px,calc(100vw - 40px))}
+.todock.show{opacity:1;transform:none}
+.dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.dot.g{background:#67c23a}.dot.r{background:#f56c6c}.dot.b{background:#409eff}.dot.y{background:#e6a23c}
+.kv{display:flex;gap:8px;flex-wrap:wrap;font-size:12.2px;color:#7a8290}
+.kv b{color:#303133;font-weight:600}
+pre.json{margin:0;padding:12px;background:#1f2430;color:#c8d3e8;border-radius:10px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.8px;line-height:1.65;overflow:auto;max-height:280px}
+pre.json .s{color:#8fd6a9}
+pre.json .k2{color:#87b8ff}
+pre.json .c{color:#6b7c99}
+.tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.tabs button{border:1px solid #e4e7ed;background:#fff;border-radius:8px;padding:5px 11px;font-size:12.3px;color:#606266;cursor:pointer;font-family:inherit}
+.tabs button.on{background:#ecf5ff;border-color:#b3d8ff;color:#409eff;font-weight:600}
+.metric{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px dashed #eef0f3;font-size:12.8px;flex-wrap:wrap}
+.metric:last-child{border-bottom:0}
+.metric .k{flex:1 1 auto;color:#606266;min-width:110px}
+.metric .v1{color:#909399;font-variant-numeric:tabular-nums;text-decoration:line-through;text-decoration-color:#f0b4b4}
+.metric .v2{color:#409eff;font-weight:650;font-variant-numeric:tabular-nums}
+.metric .dlt{font-size:11px;padding:0 6px;border-radius:5px;background:#f0f9eb;color:#529b2e}
+.chk{display:flex;gap:9px;padding:8px 0;font-size:12.7px;color:#606266;border-bottom:1px dashed #f2f4f7}
+.chk:last-child{border-bottom:0}
+.chk .box{width:17px;height:17px;flex:0 0 auto;border-radius:5px;border:1.5px solid #dcdfe6;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;margin-top:2px;transition:.2s}
+.chk.done .box{background:#67c23a;border-color:#67c23a}
+.chk.done{color:#303133}
+.chk.done .box:after{content:'✓'}
+.pulse{animation:pulse 1.1s ease 2}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(64,158,255,.45)}70%{box-shadow:0 0 0 12px rgba(64,158,255,0)}100%{box-shadow:0 0 0 0 rgba(64,158,255,0)}}
+.adv{border:1px solid #eef0f3;border-radius:11px;background:#fbfcfe;margin-top:4px}
+.adv summary{cursor:pointer;padding:10px 13px;font-size:12.8px;color:#606266;list-style:none;display:flex;align-items:center;gap:8px}
+.adv summary::-webkit-details-marker{display:none}
+.adv summary:before{content:'›';color:#c0c4cc;font-size:16px;transition:.2s;line-height:1}
+.adv[open] summary:before{transform:rotate(90deg)}
+.adv .advbd{padding:2px 13px 14px}
+.kbd{display:inline-block;padding:0 5px;border-radius:4px;border:1px solid #dcdfe6;border-bottom-width:2px;background:#fafbfc;font-size:11px;font-family:ui-monospace,monospace;color:#606266}
+@media (max-width:560px){
+  .wrap{padding:14px 12px 60px}
+  .dlg{width:100%}
+  .seg button{padding:7px 10px;font-size:12.3px}
+  h1{font-size:15px}
+  .statuses{max-width:100%}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="page" id="pageScroll">
+<div class="wrap">
+
+  <!-- ===== 顶部 ===== -->
+  <div class="top">
+    <div class="brand">
+      <div class="logo">M</div>
+      <div>
+        <h1>MioChat · LLM 适配器系统 v3 · 交互原型</h1>
+        <p class="sub">可点原型 · 验证「协议普通下拉 + 模型标签流 + 获取模型 / 测试连接解耦」</p>
+      </div>
+    </div>
+    <div class="seg">
+      <button id="segV3" class="on" onclick="setMode('v3')">v3 · 一跳表单（当前）</button>
+      <button id="segV2" onclick="setMode('v2')">v2 · 协议自动推断（已删除 · 对照）</button>
+    </div>
+  </div>
+
+  <!-- ===== 本次验证目标 ===== -->
+  <div class="card" style="margin-top:14px">
+    <div class="bd" style="padding:13px 16px">
+      <div class="row" style="gap:8px">
+        <span style="font-size:12.5px;color:#909399;margin-right:2px">本次验证：</span>
+        <button class="btn sm" id="goal1" onclick="focusGoal(1)">① 协议改普通下拉，默认 OpenAI Chat Completions，无任何推断</button>
+        <button class="btn sm" id="goal2" onclick="focusGoal(2)">② 模型列表改标签流（空格 / 手打 / 批量粘贴 / 拉取自动落地）</button>
+        <button class="btn sm" id="goal3" onclick="focusGoal(3)">③ 「获取模型列表」与「测试连接」彻底解耦</button>
+        <span class="spacer"></span>
+        <span class="tag gray" id="modeBadge">当前展示：v3</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 主体 ===== -->
+  <div class="grid">
+    <div>
+      <div class="card">
+        <div class="hd">
+          <h2><span id="mainTitle">服务商实例</span></h2>
+          <div class="row">
+            <button class="btn ghost sm" onclick="resetDemo()">重置演示</button>
+            <button class="btn primary" id="addBtn" onclick="onAdd()">＋ 添加服务商</button>
+          </div>
+        </div>
+        <div class="bd">
+          <div class="statbar">
+            <div class="stat">实例总数 <b id="statTotal">2</b></div>
+            <div class="stat">已启用 <b id="statOn">2</b></div>
+            <div class="stat">协议选项 <b>4</b></div>
+            <div class="stat">连接方式 <b>3</b></div>
+            <div class="stat">已入库模型标签 <b id="statModels">8</b></div>
+          </div>
+          <div id="modeNote"></div>
+          <div id="instWrap" style="margin-top:13px;overflow-x:auto"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 右侧面板 ===== -->
+    <div class="side">
+
+      <div class="card">
+        <div class="hd"><h2>v2 → v3 对照</h2><span class="tag gray" id="metricMode">v3 视角</span></div>
+        <div class="bd" style="padding:10px 16px 14px">
+          <div class="kv" style="justify-content:flex-end;margin-bottom:4px;font-size:11.5px"><span style="color:#a8abb2;text-decoration:line-through">v2 旧行为</span><span style="color:#409eff;font-weight:650">v3 新行为</span></div>
+          <div class="metric"><span class="k">协议如何确定</span><span class="v1">URL 自动推断（8 条规则）</span><span class="v2">手动普通下拉</span><span class="dlt">去推断</span></div>
+          <div class="metric"><span class="k">协议默认值</span><span class="v1">无（“自动/待定”）</span><span class="v2">Chat Completions</span><span class="dlt">有默认</span></div>
+          <div class="metric"><span class="k">模型录入方式</span><span class="v1">单行逗号文本，拉取会覆盖</span><span class="v2">标签流，可视化可删</span><span class="dlt">可读</span></div>
+          <div class="metric"><span class="k">拉取与连接</span><span class="v1">合并为“测试连接”一步</span><span class="v2">两个独立按钮</span><span class="dlt">解耦</span></div>
+          <div class="metric"><span class="k">推断失败时</span><span class="v1">歧义/未知要弹人工确认</span><span class="v2">不存在此路径</span><span class="dlt">少一个分支</span></div>
+          <div class="metric"><span class="k">必填字段</span><span class="v2">3 个（地址 / 协议 / Key）</span></div>
+          <div class="metric"><span class="k">需先知道“适配器类型”</span><span class="v2">不需要</span></div>
+          <div class="hint" style="margin-top:8px">切到上方 v2 标签可以直接打开旧表单，对比推断式协议选型的体验差异。</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="hd"><h2>验证清单（自动勾选）</h2><span class="tag blue" id="chkCount">0 / 8</span></div>
+        <div class="bd" style="padding:8px 16px 12px" id="chkList"></div>
+      </div>
+
+      <div class="card">
+        <div class="hd"><h2>落库形态</h2></div>
+        <div class="bd">
+          <div class="tabs">
+            <button id="tabJ1" class="on" onclick="showJson('inst')">实例（v3）</button>
+            <button id="tabJ2" onclick="showJson('models')">模型字段：标签 → 数组</button>
+            <button id="tabJ3" onclick="showJson('guest')">游客模型：guest_models</button>
+          </div>
+          <pre class="json" id="jsonBox"></pre>
+          <div class="hint" id="jsonHint"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="hd"><h2>已删除：协议自动推断</h2><span class="tag red">代码已移除</span></div>
+        <div class="bd" style="padding:12px 16px 14px">
+          <div class="del">
+            <div><span class="rm">已删</span><s>路径含 /responses → OpenAI Responses（高）</s></div>
+            <div><span class="rm">已删</span><s>路径含 chat/completions → Chat Completions（高）</s></div>
+            <div><span class="rm">已删</span><s>host 含 anthropic → Anthropic Messages（高）</s></div>
+            <div><span class="rm">已删</span><s>host 含 generativelanguage / aiplatform → Gemini（高）</s></div>
+            <div><span class="rm">已删</span><s>api.openai.com → 两协议均可，弹人工确认（歧义分支）</s></div>
+            <div><span class="rm">已删</span><s>host 含 volces / x.ai → Responses 家族（中）</s></div>
+            <div><span class="rm">已删</span><s>host 命中内置兼容清单 → Chat Completions（中高）</s></div>
+            <div><span class="rm">已删</span><s>无规则命中 → 不静默回退，要求手动选协议（未知分支）</s></div>
+          </div>
+          <div class="note bad" style="margin-top:11px">
+            <span class="ico">×</span>
+            <div>v3 不再维护任何 host / path 清单：Base URL 只做“是否合法 URL”的格式校验，<b>改 URL 永远不改变协议下拉的值</b>。协议由用户在普通下拉里选定，默认 OpenAI Chat Completions。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="hd"><h2>模型标签流 · 交互规则</h2></div>
+        <div class="bd" style="padding:12px 16px 14px">
+          <div style="font-size:12.4px;color:#606266;line-height:2">
+            <div>1. 输入模型名后按 <span class="kbd">空格</span> / <span class="kbd">Enter</span> / <span class="kbd">,</span> 即落成一个标签</div>
+            <div>2. 手打任意自定义模型名（不在任何内置清单里也能落地，标紫色）</div>
+            <div>3. 批量粘贴（逗号 / 换行 / 空格 / 分号分隔）一次落成多个标签</div>
+            <div>4. 点「获取模型列表」拉取结果<b>自动落地</b>成标签（标绿色，自动去重）</div>
+            <div>5. 标签 ⨯ 或输入框内 <span class="kbd">退格</span> 可删除，支持全量清空</div>
+          </div>
+          <div class="hint" style="margin-top:8px">标签流只是“多值文本输入”的展示层，落库仍是干净的 <span class="mono">models: string[]</span>。</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="hint" style="text-align:center;margin-top:22px">单文件原型 · 无外部依赖 · 所有交互均可点击（预设下拉 / 协议下拉 / 标签流 / 拉取 / 测试连接 / 保存写入）</div>
+</div>
+</div><!-- /.page -->
+
+<!-- =========================================================== -->
+<!-- v3 唯一一跳：添加服务商（协议普通下拉 + 模型标签流 + 双按钮解耦） -->
+<!-- =========================================================== -->
+<div class="overlay" id="dlgV3Form">
+  <div class="drail" id="dlgRail"><i id="dlgThumb"></i></div>
+  <div class="dlg">
+    <div class="dh">
+      <div class="ava" id="v3Ava" style="background:#e7eaef;color:#a8abb2">?</div>
+      <div>
+        <h3>添加服务商 <span class="tag green">一跳完成</span> <span class="tag blue">v3</span></h3>
+        <p>固定槽位：显示名 ｜ Base URL ｜ 连接方式 ▾（4 项：API Key / Vertex Express / Vertex ADC / OAuth 授权）｜ 凭据区 ｜ [高级]；协议与连接方式并列、互不混淆；模型列表标签流录入；游客只落库 default_model 与 guest_models</p>
+      </div>
+      <button class="xbtn" onclick="closeDlg('dlgV3Form')">×</button>
+    </div>
+    <div class="db">
+
+      <div class="note" style="margin-bottom:14px">
+        <span class="ico">i</span>
+        <div><b>v3 变更：</b>协议不再是“自动识别 + 待定”，而是一个<b>普通下拉框</b>（默认 OpenAI Chat Completions）；模型列表改为<b>标签流</b>（空格落地 / 手打自定义 / 批量粘贴 / 拉取自动落地）；<b>「获取模型列表」与「测试连接」是两个独立按钮</b>；游客模型只落库 <b>guest_models</b>（模型全称数组），关键词只做前端筛选。</div>
+      </div>
+
+      <div class="note" style="margin-bottom:14px">
+        <span class="ico">i</span>
+        <div><b>v4.4 修正（连接轴）：</b>连接方式由 3 项改为 <b>4 项</b>，删掉<b>现有实现里并不存在</b>的「服务账号 JWT」，换成真实的两种 Vertex 接法 —— <b>Vertex Express（API Key）</b> 与 <b>Vertex ADC（应用默认凭据）</b>。Vertex 的端点是<b>固定官方端点</b> <span class="mono">https://aiplatform.googleapis.com</span>（<b>没有 region 模板</b>），两种接法在后端对应现有 <span class="mono">agentPlatform</span> 适配器（别名 <span class="mono">vertexExpress</span>）的 <span class="mono">block_express</span> 开关：Express = <span class="mono">false</span>（用 api_key），ADC = <span class="mono">true</span>（不需要 api_key）。</div>
+      </div>
+
+      <div class="field" id="fldPreset">
+        <label>常用服务预设 <span class="tag gray">可选</span></label>
+        <div class="pd">
+          <button class="pd-trigger" id="pdTrigger" onclick="togglePd()">
+            <span class="ava" id="pdAva" style="background:#e7eaef;color:#a8abb2">+</span>
+            <span class="txt ph" id="pdText">从内置服务快速预填（不选也能直接填 URL）</span>
+            <span class="caret">▾</span>
+          </button>
+          <div class="pd-panel" id="pdPanel">
+            <div class="srch"><input id="pdSearch" placeholder="搜索服务名 / 中文别名 / 域名..." oninput="renderPdList()"></div>
+            <div class="pd-list" id="pdList"></div>
+          </div>
+        </div>
+        <div class="hint">预设职责只有“填值”：显示名 / Base URL / 连接方式 / 协议四个取值，<b>不改表单结构</b>；填完任意一项都能被你手动改掉（例如把 Vertex 预设的连接方式改回 API Key）。</div>
+      </div>
+
+      <div class="field" id="fldName">
+        <label>显示名 <span class="tag gray">可选</span></label>
+        <div class="inp"><input id="f_name" placeholder="留空则自动生成，例如 deepseek-1"></div>
+      </div>
+
+      <div class="field" id="fldUrl">
+        <label>Base URL <span class="req">*</span> <span class="tag gray" id="urlModeTag">可手填</span></label>
+        <div class="inp" id="urlBox"><input id="f_url" class="mono" placeholder="https://api.deepseek.com/v1" oninput="onUrlInput()" autocomplete="off"></div>
+        <div class="hint" id="urlHint">粘贴或手写端点均可 —— 地址不参与协议判断</div>
+      </div>
+
+      <div class="row2">
+        <div class="field" id="fldConn">
+          <label>连接方式 <span class="req">*</span> <span class="tag orange">暂定</span></label>
+          <select class="native" id="f_conn" onchange="onConnChange()">
+            <option value="api-key" selected>API Key（默认）</option>
+            <option value="vertex-express">Vertex Express（API Key）</option>
+            <option value="vertex-adc">Vertex ADC（应用默认凭据）</option>
+            <option value="oauth">OAuth 授权</option>
+          </select>
+        </div>
+        <div class="field" id="fldProto">
+          <label>协议 <span class="req">*</span> <span class="tag blue" id="protoDefaultTag">默认值</span></label>
+          <select class="native" id="f_proto" onchange="onProtoChange()">
+            <option value="openai-chat" selected>OpenAI Chat Completions（默认）</option>
+            <option value="openai-responses">OpenAI Responses</option>
+            <option value="anthropic-messages">Anthropic Messages</option>
+            <option value="gemini">Gemini generateContent</option>
+          </select>
+        </div>
+      </div>
+      <div class="hint" id="protoHint" style="margin:-4px 0 5px">适用范围最广的协议，绝大多数第三方服务商兼容此接口</div>
+      <div class="row" style="margin:0 0 15px;gap:5px" id="protoCaps"></div>
+
+      <div class="field" id="fldCred" style="margin-bottom:15px">
+        <label>凭据 <span class="req">*</span> <span class="tag gray" id="credKindTag">API Key</span> <span class="matrix-note" id="matrixNote">组合矩阵暂定：置灰项不可选</span></label>
+
+        <div class="cred cred-api" id="credApi">
+          <div class="inp" id="keyBox"><input id="f_key" type="password" placeholder="sk-..." oninput="validate()"><span class="addon" id="keyEye" onclick="toggleEye()">显示</span></div>
+          <div class="hint" id="keyHint">仅用于本实例鉴权，不写入原型之外的任何地方</div>
+        </div>
+
+        <div class="cred cred-vx" id="credVx" style="display:none">
+          <div class="row2">
+            <div>
+              <div class="lbl2">project_id <span class="req">*</span></div>
+              <div class="inp"><input id="vx_project" placeholder="my-gcp-project" oninput="onVxInput()" autocomplete="off"></div>
+            </div>
+            <div>
+              <div class="lbl2">API Key（Vertex AI） <span class="req">*</span></div>
+              <div class="inp" id="vxKeyBox"><input id="vx_key" type="password" placeholder="AIza..." oninput="onVxInput()" autocomplete="off"></div>
+            </div>
+          </div>
+          <div class="hint">Express 模式 = 用 API Key 直连 Vertex，端点固定 <b>https://aiplatform.googleapis.com</b>（无 region 前缀）；后端对应 <span class="mono">block_express: false</span>。</div>
+        </div>
+
+        <div class="cred cred-adc" id="credAdc" style="display:none">
+          <div class="row2">
+            <div>
+              <div class="lbl2">project_id <span class="req">*</span></div>
+              <div class="inp"><input id="adc_project" placeholder="my-gcp-project" oninput="onAdcProjectInput()" autocomplete="off"></div>
+            </div>
+            <div>
+              <div class="lbl2">凭据来源</div>
+              <select class="native" id="adc_src" onchange="onAdcSrcChange()">
+                <option value="adc" selected>应用默认凭据 ADC（无需填 Key）</option>
+                <option value="json">粘贴 service account JSON</option>
+              </select>
+            </div>
+          </div>
+          <div id="adcAdcBox" style="margin-top:12px">
+            <div class="hint" style="margin-top:0">ADC 由<b>运行环境</b>提供，表单里不需要粘贴任何密钥：<br>· 环境变量 <span class="mono">GOOGLE_APPLICATION_CREDENTIALS=/path/sa.json</span><br>· 或本机执行 <span class="mono">gcloud auth application-default login</span></div>
+          </div>
+          <div id="adcJsonBox" style="display:none">
+            <div class="lbl2" style="margin-top:12px">凭据（service account JSON） <span class="req">*</span></div>
+            <textarea class="ta" id="adc_json" placeholder='粘贴 service account JSON，例如 {"type":"service_account","project_id":"...","client_email":"...","private_key":"-----BEGIN PRIVATE KEY-----"}' oninput="onAdcInput()"></textarea>
+            <div class="sa-sum" id="adcSummary">粘贴后即时解析并回显：项目 ID / 服务账号邮箱 / 是否含 private_key</div>
+          </div>
+          <div class="hint">ADC 模式下后端走 <span class="mono">block_express: true</span>，只需要 project_id；端点同样固定 <b>https://aiplatform.googleapis.com</b>（不按 region 拼端点）。</div>
+        </div>
+
+        <div class="cred cred-oauth" id="credOauth" style="display:none">
+          <div class="oauth-card" id="oauthCard">
+            <div class="oa-state" id="oaIdle">
+              <button class="btn primary oauth-btn" id="oaStartBtn" onclick="oauthStart()">连接 Google 账号</button>
+              <div class="hint">将打开 Google 授权页，授权后可随时撤销</div>
+            </div>
+            <div class="oa-state" id="oaPending" style="display:none">
+              <div class="row" style="gap:10px;align-items:center">
+                <span class="usercode" id="oaUserCode">--------</span>
+                <button class="btn sm" onclick="copyUserCode()">复制</button>
+                <button class="btn sm" onclick="openAuthPage()">打开授权页</button>
+                <span class="spacer"></span>
+                <span class="spin"></span><span class="hint" style="margin:0">等待授权中…</span>
+              </div>
+            </div>
+            <div class="oa-state" id="oaDone" style="display:none">
+              <div class="row" style="gap:9px;align-items:center">
+                <i class="dot g"></i>
+                <b id="oaEmail"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="f58d8d8db59298949c99db969a98">[email&#160;protected]</a></b>
+                <span class="tag gray" id="oaExpiry">刷新令牌剩余 45 天</span>
+                <span class="spacer"></span>
+                <button class="btn sm" onclick="oauthStart()">重新授权</button>
+                <button class="btn sm" id="oaExpireBtn" onclick="oauthExpire()">模拟令牌过期</button>
+                <button class="btn sm" onclick="oauthDisconnect()">断开</button>
+              </div>
+            </div>
+            <div class="oa-state" id="oaExpired" style="display:none">
+              <div class="row" style="gap:9px;align-items:center">
+                <i class="dot y"></i>
+                <b id="oaExpiredMsg" class="oa-warn">授权已过期，请重新授权</b>
+                <span class="oa-warn">（过期只影响运行时可用，不影响你继续编辑表单）</span>
+                <span class="spacer"></span>
+                <button class="btn sm" onclick="oauthStart()">重新授权</button>
+                <button class="btn sm" onclick="oauthDisconnect()">断开</button>
+              </div>
+            </div>
+          </div>
+          <div class="lbl2" style="margin-top:12px">Authorization Code / Redirect URL</div>
+          <div class="inp" id="oauthCodeBox"><input id="oauth_code" placeholder="请输入以 4/0Ad 开头的 Authorization Code 或完整 Redirect URL" oninput="onOauthCodeInput()" autocomplete="off"></div>
+          <div class="hint" id="oauthHint">粘贴 Authorization Code 或完整 Redirect URL，授权全程在表单内完成</div>
+        </div>
+      </div>
+
+      <div class="field" id="fldModels" style="margin-bottom:15px">
+        <div class="lbl" style="justify-content:space-between">
+          <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            模型列表
+            <span class="tag gray" id="modelCount">0 个</span>
+            <span class="tag purple" id="srcManualTag" style="display:none">手打 0</span>
+            <span class="tag green" id="srcFetchTag" style="display:none">拉取 0</span>
+          </span>
+          <span style="display:flex;align-items:center;gap:7px;flex:0 0 auto">
+            <button class="btn sm" id="clearModelsBtn" onclick="clearModels()">清空标签</button>
+            <button class="btn sm" id="fetchBtn" title="拉回的模型自动追加到下方标签（不覆盖手打项）" onclick="fetchModels()"><span class="i" id="fetchIco">⬇</span>获取模型列表</button>
+          </span>
+        </div>
+        <div class="chipswrap" id="chipWrap">
+          <div class="chips" id="chipBox" onclick="focusChipInput()">
+            <input id="chipInput" placeholder="输入模型名，空格落地" onkeydown="onChipKey(event)" oninput="onChipInput()" onpaste="onChipPaste(event)" onblur="onChipBlur()" autocomplete="off">
+          </div>
+          <div class="rail" id="chipRail"><i id="chipThumb"></i></div>
+        </div>
+        <div class="hint" id="fetchGuide" style="display:none">你可以直接手打模型名</div>
+        <div class="chipbar">
+          <span class="hint" style="margin:0" id="chipHint">固定 5 行高（168px），标签超出时在区内滚动，不撑高表单</span>
+          <span class="spacer"></span>
+          <span class="legend">
+            <span><i style="background:#f2f7ff;border:1px solid #d9ecff"></i>手打自定义</span>
+            <span><i style="background:#f0f9eb;border:1px solid #d7efc4"></i>拉取自动落地</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="field" id="fldGuest" style="margin-bottom:15px">
+        <div class="lbl"><span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">游客模型 <span class="tag purple">Guest</span> <span class="tag gray">落库字段 guest_models（仅模型全称）</span></span></div>
+        <div class="note" style="margin-bottom:12px">
+          <span class="ico">i</span>
+          <div>游客能用哪些模型，最终只看 <b>guest_models</b>（模型全称数组）；数组为空 = 游客不可用任何模型。关键词只做<b>前端筛选</b>，不落库。</div>
+        </div>
+
+        <div class="field" id="fldGuestDefault" style="margin-bottom:12px">
+          <label>默认模型 <span class="req">*</span> <span class="tag gray">提交位 default_model</span></label>
+          <div class="combo" id="dmCombo">
+            <div class="combo-top"><span class="ci">搜</span><input id="dmSearch" placeholder="输入关键字过滤下方选项（选项来自上方模型标签）" oninput="renderDefaultModel()" autocomplete="off"></div>
+            <select class="native" id="f_defaultModel" onchange="validate()"></select>
+          </div>
+          <div class="hint" id="defaultModelHint">必填：下拉选项来自上方「模型列表」的标签集合</div>
+        </div>
+
+        <div class="field" id="fldGuestKw" style="margin-bottom:12px">
+          <label>关键词筛选器 <span class="tag gray">不落库 · 仅前端筛选</span> <span class="tag blue" id="kwHit">命中 0 个</span></label>
+          <div class="inp"><input id="kwFilter" placeholder="输入关键词，如 gpt / claude / deepseek" oninput="renderGuestHits()" autocomplete="off"><span class="addon" id="kwAddAll" onclick="guestAddAllHits()">全部加入</span></div>
+          <div class="row" style="margin-top:7px;gap:6px" id="kwHits"></div>
+          <div class="hint">命中 = 上方模型标签中名称包含该关键词的模型；点「全部加入」立即把它们解析成模型全称加入下方列表</div>
+        </div>
+
+        <div class="field" id="fldGuestModels" style="margin-bottom:0">
+          <label>游客可用模型 <span class="tag gray">提交位 guest_models</span> <span class="tag gray" id="guestCount">0 个</span></label>
+          <div class="chips small" id="guestBox" onclick="focusTagInput('guestInput')">
+            <input id="guestInput" placeholder="模型全称 + 空格 / 回车落地" onkeydown="onGuestKey(event)" oninput="onGuestInput()" onpaste="onGuestPaste(event)" onblur="onGuestBlur()" autocomplete="off">
+          </div>
+          <div class="hint">候选来自上方已添加的模型标签，点一下即可加入：</div>
+          <div class="row" style="margin-top:6px;gap:6px" id="guestCandidates"></div>
+        </div>
+
+        <div class="preview" id="guestPreview">游客可用模型：<b>0</b> 个</div>
+      </div>
+
+      <details class="adv" ontoggle="setTimeout(checkDialogScroll,60)">
+        <summary>高级设置（默认折叠，不影响一跳完成）</summary>
+        <div class="advbd">
+          <div class="field"><label>搜索关键词 / 中文别名</label><div class="inp"><input id="f_alias" placeholder="例如 深度求索、ds"></div><div class="hint">从旧版 avatarAliases 继承而来，仅作为搜索关键词保留</div></div>
+          <div class="field"><label>启用</label><div class="switch on" id="f_enable" onclick="this.classList.toggle('on')"><i></i></div></div>
+          <div class="field" id="advForceReauth" style="margin-bottom:0"><label>强制重新授权 <span class="tag gray">疑难排查</span></label>
+            <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+              <button class="btn sm" id="forceReauthBtn" onclick="oauthForceReauth()">重新走一次 OAuth 授权流程</button>
+              <span class="hint" style="margin:0">仅在「连接方式 = OAuth 授权」时有意义；其余连接方式下点它只会给提示，不改任何字段</span>
+            </div>
+          </div>
+        </div>
+      </details>
+
+    </div>
+    <div class="df">
+      <div class="statuses">
+        <span class="st" id="stConn"><i class="b"></i><span id="stConnTxt">连接方式：Bearer 令牌 · 未测试</span></span>
+        <span class="st" id="stFetch"><i class="b"></i><span id="stFetchTxt">模型列表：未获取</span></span>
+        <span class="st" id="stTest"><i class="b"></i><span id="stTestTxt">连接：未测试</span></span>
+      </div>
+      <span class="spacer"></span>
+      <button class="btn ghost" onclick="clearForm()">清空重填</button>
+      <span class="mockfail" id="failMockWrap" onclick="toggleFailMock()" title="演示开关：打开后点「获取模型列表」会返回模拟 401，用于验证失败态是否影响保存">
+        <span class="switch sm" id="failMockSwitch"><i></i></span>
+        <span class="mftxt">模拟拉取失败</span>
+      </span>
+      <button class="btn" id="testBtn" onclick="testConn()"><span class="i" id="testIco">⚡</span>测试连接</button>
+      <button class="btn primary" id="saveBtn" onclick="saveV3()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================== -->
+<!-- v2 对照：协议由 URL 自动推断（已删除的旧方案） -->
+<!-- =========================================================== -->
+<div class="overlay" id="dlgV2Form">
+  <div class="dlg">
+    <div class="dh">
+      <div class="ava" style="background:#e7eaef;color:#a8abb2">v2</div>
+      <div>
+        <h3>添加服务商 <span class="tag red">旧方案 · 已删除</span></h3>
+        <p>v2 行为：协议由 Base URL 自动推断，可能得到“待定 / 歧义 / 未知”</p>
+      </div>
+      <button class="xbtn" onclick="closeDlg('dlgV2Form')">×</button>
+    </div>
+    <div class="db">
+      <div class="note bad" style="margin-bottom:14px"><span class="ico">×</span><div>此表单仅作对照：它包含 v3 已删除的 <b>detectProto()</b>（8 条 host / path 规则）与合并式按钮。请勿照做。</div></div>
+
+      <div class="field">
+        <label>服务地址 Base URL <span class="req">*</span></label>
+        <div class="inp"><input id="v2_url" class="mono" placeholder="https://api.deepseek.com/v1" oninput="onV2UrlInput()" autocomplete="off"></div>
+        <div class="det" id="v2DetBox" style="margin-top:10px"></div>
+      </div>
+
+      <div class="field">
+        <label>协议 <span class="tag orange">自动推断结果</span></label>
+        <div class="row" id="v2ProtoBtns"></div>
+        <div class="hint">用户往往看不懂“歧义端点 / 未知端点”要自己选什么</div>
+      </div>
+
+      <div class="field"><label>API Key <span class="req">*</span></label><div class="inp"><input id="v2_key" type="password" placeholder="sk-..."></div></div>
+      <div class="field"><label>模型列表 <span class="tag gray">旧：单行逗号文本</span></label><div class="inp"><input id="v2_models" placeholder="deepseek-chat,deepseek-reasoner"></div><div class="hint">拉取结果会直接覆盖这行文本，看不出哪些是手打的</div></div>
+    </div>
+    <div class="df">
+      <span class="hint" id="v2TestMsg"></span>
+      <span class="spacer"></span>
+      <button class="btn" onclick="closeDlg('dlgV2Form')">取消</button>
+      <button class="btn primary" onclick="v2MergedAction()">测试连接并拉取模型（合并式）</button>
+    </div>
+  </div>
+</div>
+
+<div class="todock" id="toast"><span class="dot b" id="toastDot"></span><span id="toastMsg"></span></div>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+/* ============================================================
+   MioChat 适配器 v3 交互原型 · 单文件脚本
+   三个待验证点：协议普通下拉 / 模型标签流 / 获取模型与测试连接解耦
+   ============================================================ */
+
+var DEFAULT_PROTO = 'openai-chat';
+
+var PROTO = {
+  'openai-chat': { label: 'OpenAI Chat Completions', short: 'openai-chat', color: '#409eff',
+    desc: '适用范围最广的协议，绝大多数第三方服务商兼容此接口', caps: ['chat', 'streaming', 'vision', 'tools', 'reasoning'],
+    mock: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'o3-mini', 'deepseek-chat', 'deepseek-reasoner', 'glm-4-plus', 'qwen-max'] },
+  'openai-responses': { label: 'OpenAI Responses', short: 'openai-responses', color: '#7c5cff',
+    desc: '最新的适配器，自带服务商内置工具（如联网搜索），适配 Codex 类接口的模型服务', caps: ['chat', 'streaming', 'vision', 'tools', 'reasoning'],
+    mock: ['gpt-5', 'gpt-5-mini', 'o4-mini', 'grok-4', 'doubao-seed-1.6'] },
+  'anthropic-messages': { label: 'Anthropic Messages', short: 'anthropic-messages', color: '#c1613e',
+    desc: 'Anthropic 官方协议，适配 Claude Code 一类接口的模型服务', caps: ['chat', 'streaming', 'vision', 'tools', 'thinking'],
+    mock: ['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-haiku-4-5'] },
+  gemini: { label: 'Gemini generateContent', short: 'gemini', color: '#2f9e6f',
+    desc: 'Google 官方协议，支持多模态与安全设置', caps: ['chat', 'streaming', 'vision', 'tools', 'safetySettings'],
+    mock: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'] }
+};
+var PROTO_ORDER = ['openai-chat', 'openai-responses', 'anthropic-messages', 'gemini'];
+/* v4.4：连接轴 = 4 项（与协议正交，但受暂定矩阵约束）
+   Vertex 的两种接法来自现有实现 agentPlatform（别名 vertexExpress）：
+   Express = api_key 直连（block_express: false） / ADC = 应用默认凭据（block_express: true）
+   两种接法的端点都是**固定官方端点**，没有 region 模板 */
+var VERTEX_URL = 'https://aiplatform.googleapis.com';
+var OAUTH_URL = 'https://cloudcode-pa.googleapis.com';
+var CONN = {
+  'api-key': { label: 'API Key', statusHead: 'Bearer 令牌', locked: false, endpoint: null, allowedProtos: ['openai-chat', 'openai-responses', 'anthropic-messages', 'gemini'] },
+  'vertex-express': { label: 'Vertex Express', statusHead: 'Vertex Express', locked: true, endpoint: VERTEX_URL, allowedProtos: ['gemini'] },
+  'vertex-adc': { label: 'Vertex ADC', statusHead: 'Vertex ADC', locked: true, endpoint: VERTEX_URL, allowedProtos: ['gemini'] },
+  oauth: { label: 'OAuth 授权', statusHead: 'OAuth 授权', locked: true, endpoint: OAUTH_URL, allowedProtos: ['gemini'] }
+};
+var CONN_ORDER = ['api-key', 'vertex-express', 'vertex-adc', 'oauth'];
+var KNOWN_MODELS = [];
+PROTO_ORDER.forEach(function (k) { PROTO[k].mock.forEach(function (m) { if (KNOWN_MODELS.indexOf(m) < 0) KNOWN_MODELS.push(m); }); });
+
+var PRESETS = [
+  /* v4.3：每个预设除了取值外，只多一个 conn（连接方式）默认值；预设永不改变表单结构 */
+  { id: 'deepseek', name: 'DeepSeek', url: 'https://api.deepseek.com/v1', proto: 'openai-chat', group: '常用', letter: 'D', color: '#4d6bfe', kw: 'deepseek 深度求索 ds' },
+  { id: 'zhipu', name: '智谱 GLM', url: 'https://open.bigmodel.cn/api/paas/v4/', proto: 'openai-chat', group: '常用', letter: '智', color: '#3b6ef6', kw: 'zhipu 智谱 清言 bigmodel glm' },
+  { id: 'volcengine', name: '火山方舟（豆包）', url: 'https://ark.cn-beijing.volces.com/api/v3', proto: 'openai-responses', group: '常用', letter: '火', color: '#2b6cf6', kw: 'volcengine 火山 方舟 豆包 ark 字节' },
+  { id: 'xiaomimimo', name: '小米 MiMo', url: 'https://api.xiaomimimo.com/v1', proto: 'openai-chat', group: '常用', letter: 'M', color: '#ff6900', kw: 'xiaomimimo 小米 mimo' },
+  { id: 'moonshot', name: '月之暗面 Kimi', url: 'https://api.moonshot.cn/v1', proto: 'openai-chat', group: '常用', letter: 'K', color: '#1f1f1f', kw: 'moonshot 月之暗面 kimi' },
+  { id: 'minimax', name: 'MiniMax 海螺', url: 'https://api.minimax.chat/v1', proto: 'openai-chat', group: '常用', letter: 'M', color: '#e8443a', kw: 'minimax 海螺 abab' },
+  { id: 'baichuan', name: 'Baichuan 百川智能', url: 'https://api.baichuan-ai.com/v1', proto: 'openai-chat', group: '常用', letter: '百', color: '#2f6fed', kw: 'baichuan 百川 百川智能' },
+  { id: 'stepfun', name: 'Stepfun 阶跃星辰', url: 'https://api.stepfun.com/v1', proto: 'openai-chat', group: '常用', letter: '阶', color: '#5b5bd6', kw: 'stepfun 阶跃 跃问' },
+  { id: 'zeroone', name: '01.AI 零一万物', url: 'https://api.lingyiwanwu.com/v1', proto: 'openai-chat', group: '常用', letter: '01', color: '#0f9d8f', kw: '01.ai 零一万物 yi zeroone' },
+  { id: 'openai', name: 'OpenAI 官方', url: 'https://api.openai.com/v1', proto: 'openai-chat', group: '国际主流', letter: 'O', color: '#10a37f', kw: 'openai gpt chatgpt 官方' },
+  { id: 'anthropic', name: 'Anthropic Claude', url: 'https://api.anthropic.com', proto: 'anthropic-messages', group: '国际主流', letter: 'A', color: '#c1613e', kw: 'anthropic claude 克劳德' },
+  { id: 'gemini', name: 'Google Gemini', url: 'https://generativelanguage.googleapis.com', proto: 'gemini', group: '国际主流', letter: 'G', color: '#2f9e6f', kw: 'gemini google 谷歌 双子星' },
+  { id: 'xai', name: 'xAI Grok', url: 'https://api.x.ai/v1', proto: 'openai-responses', group: '国际主流', letter: 'X', color: '#1c1c1c', kw: 'xai grok 马斯克' },
+  { id: 'openrouter', name: 'OpenRouter', url: 'https://openrouter.ai/api/v1', proto: 'openai-chat', group: '国际主流', letter: 'R', color: '#6b4ee6', kw: 'openrouter or 聚合' },
+  { id: 'groq', name: 'Groq', url: 'https://api.groq.com/openai/v1', proto: 'openai-chat', group: '国际主流', letter: 'Q', color: '#f55036', kw: 'groq 高速推理' },
+  { id: 'perplexity', name: 'Perplexity', url: 'https://api.perplexity.ai', proto: 'openai-chat', group: '国际主流', letter: 'P', color: '#20808d', kw: 'perplexity pplx 搜索' },
+  { id: 'github', name: 'GitHub Models', url: 'https://models.inference.ai.azure.com', proto: 'openai-chat', group: '云端 / 企业', letter: 'GH', color: '#24292f', kw: 'github models copilot gh 微软' },
+  { id: 'agentplatform', name: 'Vertex AI / Agent Platform', url: 'https://aiplatform.googleapis.com', proto: 'gemini', conn: 'vertex-express', group: '云端 / 企业', letter: 'V', color: '#4285f4', kw: 'vertex aiplatform google cloud express adc 应用默认凭据 agent platform' },
+  { id: 'cloudcode', name: 'Gemini Code Assist（OAuth）', url: 'https://cloudcode-pa.googleapis.com', proto: 'gemini', conn: 'oauth', group: '云端 / 企业', letter: 'GC', color: '#1a73e8', kw: 'cloudcode code assist gemini oauth 谷歌 授权' }
+];
+
+PRESETS.forEach(function (p) { if (!p.conn) p.conn = 'api-key'; });   /* 缺省就是 API Key */
+
+var CHECKS = [
+  { id: 'protoDefault', text: '打开表单：协议就是一个普通下拉，且默认 OpenAI Chat Completions（无需任何输入）' },
+  { id: 'noInfer', text: '手填一个 v2 会命中的地址（如 api.anthropic.com）后，协议下拉的值保持不变 —— 推断逻辑真的删干净了' },
+  { id: 'protoManual', text: '手动切换协议下拉，鉴权方式 / 能力标记同步更新' },
+  { id: 'chipSpace', text: '输入模型名后按空格（或回车 / 逗号），落成一个标签' },
+  { id: 'chipCustom', text: '手打一个不在任何内置清单里的自定义模型名，同样能落成标签' },
+  { id: 'chipPaste', text: '批量粘贴（逗号 / 换行 / 空格分隔）一次落成多个标签' },
+  { id: 'fetchLand', text: '点「获取模型列表」后，拉取结果自动落地为标签（去重，不覆盖手打项）' },
+  { id: 'decoupled', text: '「获取模型列表」与「测试连接」各自独立状态：互不阻塞、互不覆盖' },
+  { id: 'failSaveOk', text: '模拟拉取失败（401）时：黄色提示 + 灰字引导 + 保存按钮仍可用，手打模型名照常落地' },
+  { id: 'guestRestored', text: '游客模型区块：默认模型（选项来自模型标签）+ 关键词筛选器（不落库）+ guest_models 全称标签流' },
+  { id: 'fiveRows', text: '模型标签区固定 5 行高（168px），超出时区内滚动、不撑高表单' },
+  { id: 'dialogScroll', text: '弹窗固定 max-height 且内部滚动，背景页面不滚（body 不出现滚动条）' },
+  { id: 'fetchTopRight', text: '「获取模型列表」按钮位于模型区块右上角，点击后标签数量确实增加' },
+  { id: 'connSlot', text: '连接方式是一等字段：与 Base URL / 协议并列，恰有 4 个选项（API Key / Vertex Express / Vertex ADC / OAuth 授权）' },
+  { id: 'connCred', text: '凭据区随连接方式切换 DOM（API Key 密码框 / Vertex Express project_id+API Key / Vertex ADC project_id+凭据来源 / OAuth 授权按钮）' },
+  { id: 'connUrlLocked', text: 'Vertex Express / Vertex ADC / OAuth 下 Base URL 只读并自动生成，且是官方**固定**端点（无 region 模板）' },
+  { id: 'matrixGuard', text: '非法「协议 × 连接方式」组合被置灰并带 tooltip：Vertex 两种接法与 OAuth 仅支持 Gemini（暂定矩阵）' },
+  { id: 'oauthExpire', text: 'OAuth 授权过期只是运行时不可用：状态卡变黄并提示重新授权，但保存按钮不禁用（与 Vertex ADC 下粘贴的 service account JSON 解析失败必须阻断保存形成对照）' }
+];
+
+var S = {
+  mode: 'v3',
+  checks: {},
+  jsonTab: 'inst',
+  lastSaved: null,
+  used: { fetch: false, test: false },
+  instances: [
+    { id: 'inst_a1f2', name: 'openai-1', proto: 'openai-chat', url: 'https://api.openai.com/v1', enable: true, preset: 'openai', flow: '初始数据', letter: 'O', color: '#10a37f', models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'] },
+    { id: 'inst_b7c4', name: 'gemini-2', proto: 'gemini', url: 'https://generativelanguage.googleapis.com', enable: true, preset: 'gemini', flow: '初始数据', letter: 'G', color: '#2f9e6f', models: ['gemini-2.5-pro', 'gemini-2.5-flash'] }
+  ],
+  form: { presetRef: null, models: [], guestModels: [], kwFilter: '', conn: 'api-key', adc: { src: 'adc', jsonOk: false, proj: '', email: '', hasKey: false }, oauth: { state: 'idle', userCode: '', email: '' }, mockFail: false, fetch: { state: 'idle' }, test: { state: 'idle' } },
+  seenConn: {},
+  v2: { det: null, proto: null }
+};
+
+function el(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function pickOne(a) { return a[Math.floor(Math.random() * a.length)]; }
+function shortId() { return 'inst_' + Math.random().toString(36).slice(2, 6); }
+function isArr(a, v) { return a.indexOf(v) >= 0; }
+
+var toastTimer = null;
+function toast(msg, kind) {
+  var t = el('toast');
+  el('toastMsg').textContent = msg;
+  el('toastDot').className = 'dot ' + (kind === 'ok' ? 'g' : kind === 'bad' ? 'r' : kind === 'warn' ? 'y' : 'b');
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.classList.remove('show'); }, 3400);
+}
+
+function setCheck(id) { if (S.checks[id]) return; S.checks[id] = true; renderChecks(); }
+function renderChecks() {
+  var done = 0;
+  el('chkList').innerHTML = CHECKS.map(function (c) {
+    var hit = !!S.checks[c.id];
+    if (hit) done++;
+    return '<div class="chk ' + (hit ? 'done' : '') + '"><span class="box"></span><span>' + esc(c.text) + '</span></div>';
+  }).join('');
+  el('chkCount').textContent = done + ' / ' + CHECKS.length;
+}
+
+/* ---------- 弹窗基础 ---------- */
+function lockPage(on) { el('pageScroll').classList.toggle('lock', !!on); }
+function anyDlgOpen() { return !!document.querySelector('.overlay.show'); }
+function openDlg(id) { el(id).classList.add('show'); lockPage(true); }
+function closeDlg(id) { el(id).classList.remove('show'); if (!anyDlgOpen()) lockPage(false); }
+function closeAll() {
+  ['dlgV3Form', 'dlgV2Form'].forEach(closeDlg);
+  el('pdPanel').classList.remove('show');
+  el('pdTrigger').classList.remove('open');
+}
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAll(); });
+document.addEventListener('click', function (e) {
+  var pd = e.target.closest ? e.target.closest('.pd') : null;
+  if (!pd) { el('pdPanel').classList.remove('show'); el('pdTrigger').classList.remove('open'); }
+});
+
+/* ============================================================
+   模式切换
+   ============================================================ */
+function setMode(m) {
+  S.mode = m;
+  el('segV3').className = m === 'v3' ? 'on' : '';
+  el('segV2').className = m === 'v2' ? 'on' : '';
+  el('modeBadge').textContent = '当前展示：' + m;
+  el('metricMode').textContent = m === 'v3' ? 'v3 视角' : 'v2 视角（旧）';
+  el('mainTitle').textContent = m === 'v3' ? '服务商实例' : '服务商实例（v2 旧路径）';
+  el('addBtn').textContent = m === 'v3' ? '＋ 添加服务商' : '＋ 添加服务商（v2）';
+  renderNote();
+  renderJson();
+  closeAll();
+}
+
+function renderNote() {
+  el('modeNote').innerHTML = S.mode === 'v3'
+    ? '<div class="note"><span class="ico">✓</span><div><b>v3 一跳表单：</b>点「添加服务商」直接出表单。地址 → <b>协议普通下拉（默认 Chat Completions）</b> → Key，三个必填项；模型列表用<b>标签流</b>录入，<b>获取模型 / 测试连接</b>是两个独立按钮。</div></div>'
+    : '<div class="note bad"><span class="ico">×</span><div><b>v2 旧路径（对照）：</b>协议由 URL 向后推断（8 条 host / path 规则），会出现“歧义端点 / 未知端点”要用户自己确认；模型列表是单行逗号文本，拉取会覆盖手输内容。v3 已全部删除。</div></div>';
+}
+
+function onAdd() {
+  if (S.mode === 'v3') openV3();
+  else openV2();
+  setTimeout(function () { pulse(S.mode === 'v3' ? 'fldProto' : 'v2DetBox'); }, 180);
+}
+
+/* ============================================================
+   列表 / 统计 / 落库预览
+   ============================================================ */
+function renderInstances() {
+  if (!S.instances.length) { el('instWrap').innerHTML = '<div class="empty">暂无服务商实例，点右上角开始新增</div>'; renderStats(); return; }
+  var rows = S.instances.map(function (it) {
+    var p = PROTO[it.proto] || {};
+    var ms = it.models || [];
+    var preview = ms.slice(0, 1).map(function (m) { return '<span class="mnm">' + esc(m) + '</span>'; }).join('');
+    return '<tr>' +
+      '<td><div class="cellname"><span class="ava" style="background:' + it.color + '">' + esc(it.letter) + '</span><span>' + esc(it.name) + '</span></div></td>' +
+      '<td><span class="tag" style="background:' + p.color + '1a;color:' + p.color + ';border-color:' + p.color + '33">' + esc(p.short || it.proto) + '</span></td>' +
+      '<td class="mono urlcell" title="' + esc(it.url) + '" style="font-size:12.3px;color:#606266">' + esc(it.url) + '</td>' +
+      '<td><div class="mchip"><span class="tag gray">' + ms.length + ' 个</span>' + preview + (ms.length > 1 ? '<span class="mnm">+' + (ms.length - 1) + '</span>' : '') + '</div></td>' +
+      '<td>' + (it.enable ? '<span class="tag green">启用</span>' : '<span class="tag gray">禁用</span>') + '</td>' +
+      '<td><span class="tag ' + (it.flow === 'v3 一跳' ? 'blue' : it.flow === 'v2 推断' ? 'red' : 'plain') + '">' + esc(it.flow) + '</span></td>' +
+      '</tr>';
+  }).join('');
+  el('instWrap').innerHTML = '<table><thead><tr><th>实例</th><th>协议</th><th>端点</th><th>模型</th><th>状态</th><th>新增路径</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  renderStats();
+}
+
+function renderStats() {
+  el('statTotal').textContent = S.instances.length;
+  var on = 0, mm = 0;
+  S.instances.forEach(function (i) { if (i.enable) on++; mm += (i.models || []).length; });
+  el('statOn').textContent = on;
+  el('statModels').textContent = mm;
+}
+</script>
+
+<style>
+/* v2 对照弹窗专用（已废弃方案的表现） */
+.det{margin-top:10px;border-radius:12px;border:1px dashed #dcdfe6;padding:12px 13px;background:#fbfcfe}
+.det.ok{border-style:solid;border-color:#d9ecff;background:linear-gradient(180deg,#f7fbff,#f2f8ff)}
+.det.amb{border-style:solid;border-color:#faecd8;background:#fffdf7}
+.det.unk,.det.inv{border-style:solid;border-color:#fde2e2;background:#fff8f8}
+.det .line{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.det .why{font-size:12.2px;color:#7a8290;margin-top:7px;line-height:1.6}
+.skel{height:12px;border-radius:6px;background:linear-gradient(90deg,#eef1f5 25%,#e2e8f0 37%,#eef1f5 63%);background-size:400% 100%;animation:shim 1.2s ease infinite}
+@keyframes shim{0%{background-position:100% 0}100%{background-position:0 0}}
+.st.warn{color:#e6a23c}.st.warn .b{background:#e6a23c}
+</style>
+
+<script>
+/* ============================================================
+   v3 表单：普通下拉 + 标签流
+   ============================================================ */
+function objById(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return null; }
+function urlOkCheck(u) {
+  if (!u) return false;
+  if (u.indexOf('http://') !== 0 && u.indexOf('https://') !== 0) return false;
+  try { new URL(u); return true; } catch (e) { return false; }
+}
+function btnLoading(btn, glyph, label, running) {
+  btn.innerHTML = running ? '<span class="spin"></span>' + label : '<span class="i">' + glyph + '</span>' + label;
+}
+function setFetchSt(state, txt) {
+  el('stFetch').className = 'st ' + (state === 'run' ? 'run' : state === 'ok' ? 'ok' : state === 'bad' ? 'bad' : (state === 'stale' || state === 'warn') ? 'warn' : '');
+  el('stFetchTxt').textContent = txt;
+  btnLoading(el('fetchBtn'), '⬇', '获取模型列表', state === 'run');
+  S.form.fetch.state = state;
+}
+function setTestSt(state, txt) {
+  el('stTest').className = 'st ' + (state === 'run' ? 'run' : state === 'ok' ? 'ok' : state === 'bad' ? 'bad' : '');
+  el('stTestTxt').textContent = txt;
+  btnLoading(el('testBtn'), '⚡', '测试连接', state === 'run');
+  S.form.test.state = state;
+}
+
+function renderFailMock() {
+  el('failMockWrap').classList.toggle('on', !!S.form.mockFail);
+  el('failMockSwitch').classList.toggle('on', !!S.form.mockFail);
+}
+function toggleFailMock() {
+  S.form.mockFail = !S.form.mockFail;
+  renderFailMock();
+  toast(S.form.mockFail ? '已打开「模拟拉取失败」：点「获取模型列表」将返回 401'
+    : '已关闭「模拟拉取失败」：获取模型列表恢复为正常拉取', S.form.mockFail ? 'warn' : 'b');
+}
+
+function resetPdTrigger() {
+  el('pdText').textContent = '从内置服务快速预填（不选也能直接填 URL）';
+  el('pdText').className = 'txt ph';
+  el('pdAva').textContent = '+';
+  el('pdAva').style.background = '#e7eaef';
+  el('pdAva').style.color = '#a8abb2';
+}
+
+function resetFormState() {
+  S.form = { presetRef: null, models: [], guestModels: [], kwFilter: '', conn: 'api-key', adc: { src: 'adc', jsonOk: false, proj: '', email: '', hasKey: false }, oauth: { state: 'idle', userCode: '', email: '' }, mockFail: false, fetch: { state: 'idle' }, test: { state: 'idle' } };
+  el('f_url').value = '';
+  el('f_key').value = '';
+  el('f_name').value = '';
+  el('f_alias').value = '';
+  el('f_proto').value = DEFAULT_PROTO;
+  el('f_enable').className = 'switch on';
+  el('f_key').type = 'password';
+  el('keyEye').textContent = '显示';
+  el('pdSearch').value = '';
+  el('chipInput').value = '';
+  el('dmSearch').value = '';
+  el('kwFilter').value = '';
+  el('guestInput').value = '';
+  el('f_conn').value = 'api-key';
+  el('vx_project').value = '';
+  el('vx_key').value = '';
+  el('adc_project').value = '';
+  el('adc_src').value = 'adc';
+  el('adcAdcBox').style.display = '';
+  el('adcJsonBox').style.display = 'none';
+  el('adc_json').value = '';
+  el('adcSummary').className = 'sa-sum';
+  el('adcSummary').innerHTML = '粘贴后即时解析并回显：项目 ID / 服务账号邮箱 / 是否含 private_key';
+  el('oauth_code').value = '';
+  el('oauthHint').innerHTML = '粘贴 Authorization Code 或完整 Redirect URL，授权全程在表单内完成';
+  el('urlHint').innerHTML = '粘贴或手写端点均可 —— 地址不参与协议判断';
+  el('chipHint').innerHTML = '固定 5 行高（168px），标签超出时在区内滚动，不撑高表单';
+  el('fetchGuide').style.display = 'none';
+  renderFailMock();
+  resetPdTrigger();
+  setFetchSt('idle', '模型列表：未获取');
+  setTestSt('idle', '连接：未测试');
+  S.used = { fetch: false, test: false };
+  renderPdList();
+  renderProtoInfo();
+  renderChips();
+  renderGuestChips();
+  renderGuestHits();
+  enforceMatrix();
+  renderCred();
+  updateAvatar();
+  validate();
+}
+
+function openV3() {
+  resetFormState();
+  openDlg('dlgV3Form');
+  setCheck('protoDefault');
+  var dlg = document.querySelector('#dlgV3Form .dlg');
+  dlg.onscroll = function () { updateDlgRail(); };
+  setTimeout(function () { checkDialogScroll(); updateDlgRail(); updateChipRail(); }, 350);
+}
+function clearForm() { resetFormState(); toast('表单已清空（标签、状态全部重置）', 'b'); }
+
+/* ---------- 协议：普通下拉 ---------- */
+/* ============================================================
+   v4.4 连接方式（一等字段，4 项） / 凭据区 / OAuth 内嵌流程
+   ============================================================ */
+/* v4.4：Vertex 两种接法的端点都是固定官方端点（不是 region 模板） */
+function vertexUrl() { return VERTEX_URL; }
+/* 连接方式不同，密钥所在字段也不同；拉取模型 / 测试连接统一读这里 */
+function activeKey() {
+  var c = el('f_conn').value;
+  if (c === 'api-key') return el('f_key').value.trim();
+  if (c === 'vertex-express') return el('vx_key').value.trim();
+  return '';
+}
+function connCredOk() {
+  var c = el('f_conn').value;
+  if (c === 'api-key') return el('f_key').value.trim().length > 0;
+  if (c === 'vertex-express') return !!el('vx_project').value.trim() && el('vx_key').value.trim().length > 0;
+  if (c === 'vertex-adc') return !!el('adc_project').value.trim() && (S.form.adc.src === 'adc' ? true : !!S.form.adc.jsonOk);
+  /* 授权过期 = 运行时不可用，不是“表单没填完” → 保存照样放行（与 ADC 下粘贴 JSON 解析失败必须阻断形成对照） */
+  return S.form.oauth.state === 'done' || S.form.oauth.state === 'expired';
+}
+function connCredHint() {
+  var c = el('f_conn').value;
+  if (c === 'api-key') return '请先填 API Key';
+  if (c === 'vertex-express') return '请先填 project_id 与 Vertex AI API Key';
+  if (c === 'vertex-adc') return S.form.adc.src === 'adc' ? '请先填 project_id（ADC 凭据由运行环境提供）' : '请先填 project_id 并粘贴可解析的 service account JSON';
+  return '请先完成 Google 账号授权';
+}
+function connKeyShort(key) { return key.length > 0 && key.length < 8; }
+
+function renderOAuth() {
+  var st = S.form.oauth.state;
+  el('oaIdle').style.display = st === 'idle' ? '' : 'none';
+  el('oaPending').style.display = st === 'pending' ? '' : 'none';
+  el('oaDone').style.display = st === 'done' ? '' : 'none';
+  el('oaExpired').style.display = st === 'expired' ? '' : 'none';
+  /* 已授权 = 蓝边；已过期 = 黄边（不改结构，只换状态呈现） */
+  el('oauthCard').className = 'oauth-card' + (st === 'idle' ? '' : st === 'expired' ? ' warn' : ' on');
+  el('oaUserCode').textContent = S.form.oauth.userCode || '--------';
+  el('oaEmail').textContent = S.form.oauth.email || 'xxx@gmail.com';
+}
+/* 原型演示用：把当前已授权凭证标记为过期，用于验证“过期不阻断编辑表单” */
+function oauthExpire() {
+  if (S.form.oauth.state !== 'done') { toast('当前没有已授权的凭证可供演示过期', 'warn'); return; }
+  S.form.oauth.state = 'expired';
+  renderOAuth(); renderConnStatus(); validate();
+  setCheck('oauthExpire');
+  toast('已把授权标记为过期：状态卡变黄，但保存按钮仍可用（对照：service account JSON 填错会禁用保存）', 'warn');
+}
+function randomUserCode() {
+  var cs = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', out = '';
+  for (var i = 0; i < 8; i++) out += cs.charAt(Math.floor(Math.random() * cs.length));
+  return out;
+}
+function oauthStart() {
+  S.form.oauth.state = 'pending';
+  S.form.oauth.userCode = randomUserCode();
+  renderOAuth(); renderConnStatus(); validate();
+  toast('已发起授权：将打开 Google 授权页（原型内嵌演示，不真实跳转）', 'b');
+}
+function oauthDisconnect() {
+  S.form.oauth = { state: 'idle', userCode: '', email: '' };
+  el('oauth_code').value = '';
+  el('oauthHint').innerHTML = '粘贴 Authorization Code 或完整 Redirect URL，授权全程在表单内完成';
+  renderOAuth(); renderConnStatus(); validate();
+  toast('已断开 Google 账号授权', 'b');
+}
+function copyUserCode() {
+  var code = S.form.oauth.userCode || '';
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code);
+    else { var t = document.createElement('textarea'); t.value = code; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); }
+    toast('已复制 user code：' + code, 'ok');
+  } catch (e) { toast('复制失败，请手动选择：' + code, 'warn'); }
+}
+function openAuthPage() { toast('原型不真实跳转：真实实现会在此打开 Google 授权页（全程不离开表单）', 'b'); }
+/* 高级里的疑难排查入口：只在 OAuth 连接方式下才有意义，其他连接方式下不改任何字段 */
+function oauthForceReauth() {
+  if (el('f_conn').value !== 'oauth') { toast('当前连接方式是「' + CONN[el('f_conn').value].label + '」，强制重新授权只在 OAuth 授权下有意义', 'warn'); return; }
+  oauthStart();
+}
+function onOauthCodeInput() {
+  var v = el('oauth_code').value.trim();
+  if (!v) { el('oauthHint').innerHTML = '粘贴 Authorization Code 或完整 Redirect URL，授权全程在表单内完成'; validate(); return; }
+  var okCode = /4\/0Ad/.test(v) || /[?&]code=/.test(v);
+  if (!okCode) {
+    el('oauthHint').innerHTML = '<span class="hint bad">请输入以 4/0Ad 开头的 Authorization Code 或完整 Redirect URL</span>';
+    validate(); return;
+  }
+  S.form.oauth.state = 'done';
+  S.form.oauth.email = 'xxx@gmail.com';
+  el('oauthHint').innerHTML = '<span class="hint ok">已回填授权码，令牌已就绪（原型模拟，刷新令牌剩 45 天）</span>';
+  renderOAuth(); renderConnStatus(); validate();
+  toast('Google 账号授权成功（原型模拟）', 'ok');
+}
+
+function onVxInput() { renderConnStatus(); validate(); }
+function onAdcProjectInput() { renderConnStatus(); validate(); }
+/* Vertex ADC：凭据来源 = 应用默认凭据（ADC，运行环境提供）或粘贴 service account JSON */
+function onAdcSrcChange() {
+  S.form.adc.src = el('adc_src').value;
+  var useJson = S.form.adc.src === 'json';
+  el('adcAdcBox').style.display = useJson ? 'none' : '';
+  el('adcJsonBox').style.display = useJson ? '' : 'none';
+  renderConnStatus(); validate();
+  toast('Vertex ADC 凭据来源：' + (useJson ? '粘贴 service account JSON' : '应用默认凭据（环境变量 / gcloud ADC）'), 'b');
+}
+/* service account JSON：粘贴即解析并回显摘要 */
+function onAdcInput() {
+  var raw = el('adc_json').value.trim();
+  var sum = el('adcSummary');
+  if (!raw) {
+    S.form.adc.jsonOk = false;
+    sum.className = 'sa-sum';
+    sum.innerHTML = '粘贴后即时解析并回显：项目 ID / 服务账号邮箱 / 是否含 private_key';
+    renderConnStatus(); validate(); return;
+  }
+  var obj = null;
+  try { obj = JSON.parse(raw); } catch (e) { obj = null; }
+  var okJson = !!obj && typeof obj === 'object' && !!(obj.project_id || obj.client_email || obj.private_key);
+  S.form.adc.jsonOk = okJson;
+  if (!okJson) {
+    sum.className = 'sa-sum bad';
+    sum.innerHTML = '<b>粘贴完整的 service account JSON</b>（至少包含 project_id / client_email / private_key 之一）';
+  } else {
+    S.form.adc.proj = obj.project_id || '';
+    S.form.adc.email = obj.client_email || '';
+    S.form.adc.hasKey = !!obj.private_key;
+    if (!el('adc_project').value.trim() && obj.project_id) el('adc_project').value = obj.project_id;
+    sum.className = 'sa-sum ok';
+    sum.innerHTML = '<span class="k">项目 ID：</span>' + esc(obj.project_id || '（JSON 中未提供）')
+      + '<br><span class="k">服务账号邮箱：</span>' + esc(obj.client_email || '（JSON 中未提供）')
+      + '<br><span class="k">是否含 private_key：</span>' + (obj.private_key ? '<b>是</b>' : '<b>否</b>');
+  }
+  renderConnStatus(); validate();
+}
+
+function renderConnStatus() {
+  var c = el('f_conn').value, txt = '连接方式：Bearer 令牌 · 未测试', cls = 'st';
+  if (el('credKindTag').textContent !== CONN[c].label) el('credKindTag').textContent = CONN[c].label;
+  if (c === 'vertex-express' || c === 'vertex-adc') {
+    var n = (el(c === 'vertex-express' ? 'vx_project' : 'adc_project').value.trim() ? 1 : 0)
+      + (c === 'vertex-express'
+        ? (el('vx_key').value.trim() ? 1 : 0)
+        : (S.form.adc.src === 'adc' || S.form.adc.jsonOk ? 1 : 0));
+    txt = '连接方式：' + CONN[c].label + ' · 凭据完整度 ' + n + '/2';
+    cls = 'st ' + (n === 2 ? 'ok' : 'warn');
+  } else if (c === 'oauth') {
+    var st = S.form.oauth.state;
+    txt = '连接方式：OAuth 授权 · ' + (st === 'done' ? '已授权' : st === 'pending' ? '授权中' : st === 'expired' ? '授权已过期' : '未授权');
+    cls = 'st ' + (st === 'done' ? 'ok' : st === 'expired' ? 'warn' : '');
+  }
+  el('stConn').className = cls;
+  el('stConnTxt').textContent = txt;
+}
+
+/* 暂定矩阵：Vertex Express / Vertex ADC / OAuth 仅支持 Gemini generateContent */
+function enforceMatrix() {
+  var conn = el('f_conn').value, proto = el('f_proto').value;
+  if (CONN[conn].allowedProtos.indexOf(proto) < 0) {
+    var bad = CONN[conn].label + ' × ' + PROTO[proto].label;
+    el('f_conn').value = 'api-key';
+    conn = 'api-key';
+    toast('“' + bad + '”是非法组合，已切回 API Key（暂定规则）', 'warn');
+  }
+  var disabled = 0;
+  Array.prototype.slice.call(el('f_proto').options).forEach(function (o) {
+    var ok = CONN[conn].allowedProtos.indexOf(o.value) >= 0;
+    o.disabled = !ok;
+    o.title = ok ? '' : '暂定矩阵：' + CONN[conn].label + ' 仅支持 Gemini generateContent';
+    if (!ok) disabled++;
+  });
+  Array.prototype.slice.call(el('f_conn').options).forEach(function (o) {
+    var ok = CONN[o.value].allowedProtos.indexOf(el('f_proto').value) >= 0;
+    o.disabled = !ok;
+    o.title = ok ? '' : '暂定矩阵：仅 Gemini generateContent 支持' + CONN[o.value].label;
+    if (!ok) disabled++;
+  });
+  el('matrixNote').textContent = '组合矩阵（暂定）：Vertex Express / Vertex ADC / OAuth 授权 仅支持 Gemini generateContent，置灰项不可选';
+  if (disabled) setCheck('matrixGuard');
+}
+
+/* 凭据区按连接方式渲染；Base URL 锁定与自动生成也在这里 */
+function renderCred() {
+  var c = el('f_conn').value, cfg = CONN[c];
+  el('credApi').style.display = c === 'api-key' ? '' : 'none';
+  el('credVx').style.display = c === 'vertex-express' ? '' : 'none';
+  el('credAdc').style.display = c === 'vertex-adc' ? '' : 'none';
+  el('credOauth').style.display = c === 'oauth' ? '' : 'none';
+  el('credKindTag').textContent = cfg.label;
+  el('f_url').readOnly = cfg.locked;
+  el('urlModeTag').textContent = cfg.locked ? '自动生成 · 只读' : '可手填';
+  if (cfg.locked) el('f_url').value = cfg.endpoint;
+  el('urlBox').className = 'inp' + (cfg.locked ? ' locked' : '');
+  if (el('f_conn').options.length === 4) setCheck('connSlot');
+  S.seenConn[c] = true;
+  if (S.seenConn['api-key'] && S.seenConn['vertex-express'] && S.seenConn['vertex-adc'] && S.seenConn.oauth) setCheck('connCred');
+  /* 只读端点必须等于该连接方式的官方固定端点（Vertex 两种接法都无 region 模板） */
+  var lockedOk = cfg.locked === true && el('f_url').readOnly === true && el('f_url').value === cfg.endpoint;
+  if (lockedOk) setCheck('connUrlLocked');
+  renderOAuth();
+  renderConnStatus();
+  validate();
+}
+function onConnChange() {
+  var before = el('f_conn').value;
+  enforceMatrix();
+  renderCred();
+  renderProtoInfo();
+  updateAvatar();
+  if (el('f_conn').value === before) toast('连接方式已切换为：' + CONN[before].label, 'b');
+}
+
+function renderProtoInfo() {
+  var id = el('f_proto').value, p = PROTO[id];
+  el('protoHint').textContent = p.desc;   /* 一行适配器介绍，随协议切换而变化 */
+  el('protoCaps').innerHTML = p.caps.map(function (c) { return '<span class="tag gray">' + esc(c) + '</span>'; }).join('');
+  el('protoDefaultTag').style.display = (id === DEFAULT_PROTO) ? '' : 'none';
+}
+
+function onProtoChange() {
+  var id = el('f_proto').value;
+  enforceMatrix();   /* 协议变了可能让当前连接方式非法 → 回退 API Key */
+  renderCred();      /* Base URL 锁定状态 / 凭据区可能跟着变 */
+  renderProtoInfo();
+  updateAvatar();
+  validate();
+  setCheck('protoManual');
+  if (S.form.fetch.state === 'ok') setFetchSt('stale', '模型列表：协议已变更，建议重新获取（已落地标签不受影响）');
+  toast('协议已改为：' + PROTO[id].label, 'b');
+}
+
+/* ---------- 预设下拉 ---------- */
+function togglePd() {
+  var open = el('pdPanel').classList.toggle('show');
+  el('pdTrigger').classList.toggle('open', open);
+  if (open) { renderPdList(); setTimeout(function () { el('pdSearch').focus({ preventScroll: true }); }, 60); }
+}
+function togglePdClose() { el('pdPanel').classList.remove('show'); el('pdTrigger').classList.remove('open'); }
+
+function renderPdList() {
+  var q = (el('pdSearch').value || '').trim().toLowerCase();
+  var groups = {}, order = [];
+  PRESETS.forEach(function (p) {
+    if (!groups[p.group]) { groups[p.group] = []; order.push(p.group); }
+    groups[p.group].push(p);
+  });
+  var html = '', total = 0;
+  order.forEach(function (g) {
+    var items = groups[g].filter(function (p) {
+      if (!q) return true;
+      return (p.name + ' ' + p.id + ' ' + p.kw + ' ' + p.url + ' ' + p.proto).toLowerCase().indexOf(q) >= 0;
+    });
+    if (!items.length) return;
+    total += items.length;
+    html += '<div class="pd-group">' + esc(g) + '</div>';
+    html += items.map(function (p) {
+      var pr = PROTO[p.proto] || {};
+      return '<div class="pd-item" onclick="applyPreset(\'' + p.id + '\')">' +
+        '<span class="ava" style="background:' + p.color + '">' + esc(p.letter) + '</span>' +
+        '<div class="mid"><div class="nm">' + esc(p.name) +
+        ' <span class="tag" style="background:' + pr.color + '14;color:' + pr.color + '">' + esc(pr.short) + '</span></div>' +
+        '<div class="url mono">' + esc(p.url) + '</div></div></div>';
+    }).join('');
+  });
+  el('pdList').innerHTML = total ? html : '<div class="empty">没有匹配的预设，直接在上方填 URL 即可</div>';
+}
+
+function applyPreset(id) {
+  var p = objById(PRESETS, id);
+  if (!p) return;
+  S.form.presetRef = id;
+  el('pdText').textContent = p.name;
+  el('pdText').className = 'txt';
+  el('pdAva').textContent = p.letter;
+  el('pdAva').style.background = p.color;
+  el('pdAva').style.color = '#fff';
+  /* 预设只填值：显示名 / Base URL / 连接方式 / 协议；绝不改表单结构 */
+  el('f_name').value = p.name;
+  el('f_conn').value = 'api-key';
+  el('f_proto').value = p.proto;
+  el('f_url').value = p.url;
+  el('f_alias').value = p.kw.split(' ').slice(1, 3).join('、');
+  if (p.conn && CONN[p.conn]) el('f_conn').value = p.conn;
+  togglePdClose();
+  enforceMatrix();
+  renderCred();
+  renderProtoInfo();
+  onUrlInput();
+  updateAvatar();
+  validate();
+  toast('预设只填值：显示名 / Base URL / 连接方式（' + CONN[el('f_conn').value].label + '）/ 协议（' + PROTO[el('f_proto').value].short + '），结构不变、随时可手改', 'ok');
+}
+
+/* ---------- URL：只做格式校验，不碰协议 ---------- */
+function onUrlInput() {
+  var url = el('f_url').value.trim();
+  if (S.form.presetRef) {
+    var p = objById(PRESETS, S.form.presetRef);
+    if (p && url.replace(/\/$/, '') !== p.url.replace(/\/$/, '')) { S.form.presetRef = null; resetPdTrigger(); }
+  }
+  el('urlBox').className = 'inp' + (url && !urlOkCheck(url) ? ' err' : '');
+  var legacy = legacyDetect(url);
+  var cur = el('f_proto').value;
+  var would = legacy ? (legacy.proto || (legacy.candidates && legacy.candidates[0])) : null;
+  if (would && url.length > 8 && would !== cur) {
+    el('urlHint').innerHTML = '提示：这个地址在 v2 会被推断为 <b>' + esc(PROTO[would].label) + '</b>，v2 会因此改写协议选择；v3 <b>不改动下拉框</b>（当前仍是 ' + esc(PROTO[cur].short) + '）。';
+    if (cur === DEFAULT_PROTO) setCheck('noInfer');
+  } else {
+    el('urlHint').innerHTML = '粘贴或手写端点均可 —— 地址不参与协议判断';
+  }
+  updateAvatar();
+  validate();
+}
+
+function toggleEye() {
+  var inp = el('f_key');
+  var show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password';
+  el('keyEye').textContent = show ? '隐藏' : '显示';
+}
+
+function validate() {
+  var conn = el('f_conn').value;
+  var url = el('f_url').value.trim();
+  var urlOk = conn === 'api-key' ? urlOkCheck(url) : (url === CONN[conn].endpoint);
+  var dm = el('f_defaultModel') ? el('f_defaultModel').value : '';
+  var ok = urlOk && !!el('f_proto').value && connCredOk() && !!dm;
+  el('saveBtn').disabled = !ok;
+  el('urlBox').className = 'inp' + (conn !== 'api-key' ? ' locked' : '') + (url && !urlOk ? ' err' : '');
+  var key = activeKey();
+  el('keyBox').className = 'inp' + (conn === 'api-key' && key && key.length < 8 ? ' err' : '');
+  el('vxKeyBox').className = 'inp' + (conn === 'vertex-express' && key && key.length < 8 ? ' err' : '');
+  var adcBox = el('adc_json');
+  if (adcBox) adcBox.className = 'ta' + (adcBox.value.trim() && !S.form.adc.jsonOk ? ' err' : '');
+  return ok;
+}
+
+function updateAvatar() {
+  var ava = el('v3Ava');
+  if (S.form.presetRef) {
+    var p = objById(PRESETS, S.form.presetRef);
+    ava.textContent = p.letter; ava.style.background = p.color; ava.style.color = '#fff'; return;
+  }
+  var pr = PROTO[el('f_proto').value];
+  ava.textContent = pr.short.charAt(0).toUpperCase();
+  ava.style.background = pr.color; ava.style.color = '#fff';
+}
+
+/* ---------- 模型标签流 ---------- */
+function parseModels(text) {
+  return String(text || '').split(/[\s,，;；\n\r\t|]+/).map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
+}
+function focusChipInput() { el('chipInput').focus(); }
+
+function addModels(list, src) {
+  var added = [], dup = 0;
+  list.forEach(function (n) {
+    n = String(n).trim();
+    if (!n) return;
+    var exists = false;
+    S.form.models.forEach(function (x) { if (x.name === n) exists = true; });
+    if (exists) { dup++; return; }
+    S.form.models.push({ name: n, src: src });
+    added.push(n);
+  });
+  if (added.length) {
+    if (src === 'manual') {
+      setCheck('chipSpace');
+      var custom = added.some(function (n) { return !isArr(KNOWN_MODELS, n); });
+      if (custom) setCheck('chipCustom');
+      if (added.length > 1) setCheck('chipPaste');
+      if (S.form.fetch.state === 'warn') setCheck('failSaveOk');
+    }
+  }
+  renderChips();
+  return { added: added, dup: dup };
+}
+
+function commitInputText() {
+  var inp = el('chipInput');
+  var raw = inp.value;
+  if (!raw.trim()) return;
+  inp.value = '';
+  addModels(parseModels(raw), 'manual');
+}
+
+function onChipInput() {
+  var v = el('chipInput').value;
+  if (!/[\s,，;；]/.test(v)) return;
+  var parts = v.split(/[\s,，;；]+/);
+  var tail = parts.pop();
+  if (parts.length) addModels(parts, 'manual');
+  el('chipInput').value = tail;
+}
+
+function onChipKey(e) {
+  var isSep = (e.key === ' ' || e.key === 'Enter' || e.key === ',' || e.key === '，' || e.key === ';');
+  if (isSep) {
+    if (el('chipInput').value.trim()) { e.preventDefault(); commitInputText(); }
+    else if (e.key === 'Enter' || e.key === ' ') e.preventDefault();
+    return;
+  }
+  if (e.key === 'Backspace' && el('chipInput').value === '' && S.form.models.length) {
+    S.form.models.pop();
+    renderChips();
+  }
+}
+
+function onChipBlur() { if (el('chipInput').value.trim()) commitInputText(); }
+
+function onChipPaste(e) {
+  var txt = (e.clipboardData || window.clipboardData).getData('text') || '';
+  if (!txt.trim()) return;
+  e.preventDefault();
+  var list = parseModels(txt);
+  if (!list.length) return;
+  var batch = list.length > 1 || /[\s,，;；\n\r\t]/.test(txt.trim());
+  var r = addModels(list, 'manual');
+  if (batch) setCheck('chipPaste');
+  el('chipInput').value = '';
+  toast('粘贴解析为 ' + list.length + ' 个模型名，已全部落地' + (r.dup ? '（去重 ' + r.dup + '）' : ''), 'ok');
+}
+
+function removeModel(name) {
+  S.form.models = S.form.models.filter(function (m) { return m.name !== name; });
+  renderChips();
+}
+function clearModels() {
+  if (!S.form.models.length) return;
+  S.form.models = [];
+  renderChips();
+  toast('模型标签已清空', 'b');
+}
+
+function renderChips() {
+  var box = el('chipBox'), inp = el('chipInput');
+  Array.prototype.slice.call(box.querySelectorAll('.chip')).forEach(function (n) { n.parentNode.removeChild(n); });
+  S.form.models.forEach(function (m) {
+    var d = document.createElement('span');
+    d.className = 'chip ' + (m.src === 'fetched' ? 'fetched' : 'manual');
+    d.innerHTML = '<span class="nm">' + esc(m.name) + '</span><span class="src">' + (m.src === 'fetched' ? '拉取' : '手打') + '</span><span class="x" title="移除">×</span>';
+    d.querySelector('.x').onclick = function (ev) { ev.stopPropagation(); removeModel(m.name); };
+    box.insertBefore(d, inp);
+  });
+  updateChipState();
+}
+
+function updateChipState() {
+  ensureGuest();
+  var ms = S.form.models;
+  var f = 0, m = 0;
+  ms.forEach(function (x) { if (x.src === 'fetched') f++; else m++; });
+  el('modelCount').textContent = ms.length + ' 个';
+  el('srcManualTag').style.display = m ? '' : 'none';
+  el('srcManualTag').textContent = '手打 ' + m;
+  el('srcFetchTag').style.display = f ? '' : 'none';
+  el('srcFetchTag').textContent = '拉取 ' + f;
+  el('clearModelsBtn').style.display = ms.length ? '' : 'none';
+  if (el('chipBox').scrollHeight > el('chipBox').clientHeight + 1) setCheck('fiveRows');
+  renderDefaultModel();
+  renderGuestCandidates();
+  renderGuestHits();
+  renderGuestPreview();
+  updateChipRail();
+  updateDlgRail();
+  validate();
+}
+
+/* ============================================================
+   游客模型：default_model + 关键词筛选器（不落库） + guest_models（模型全称数组）
+   ============================================================ */
+function ensureGuest() {
+  if (!S.form) return;
+  if (!S.form.guestModels) S.form.guestModels = [];
+  if (S.form.kwFilter == null) S.form.kwFilter = '';
+}
+function guestModels() { ensureGuest(); return S.form.guestModels; }
+function focusTagInput(id) { el(id).focus(); }
+
+function addGuestModels(list) {
+  var arr = guestModels().slice(), added = [];
+  list.forEach(function (n) {
+    n = String(n).trim();
+    if (!n || arr.indexOf(n) >= 0) return;
+    arr.push(n); added.push(n);
+  });
+  S.form.guestModels = arr;
+  renderGuestChips();
+  return added;
+}
+
+function renderGuestChips() {
+  ensureGuest();
+  var box = el('guestBox'), inp = el('guestInput');
+  Array.prototype.slice.call(box.querySelectorAll('.chip')).forEach(function (n) { n.parentNode.removeChild(n); });
+  guestModels().forEach(function (n) {
+    var d = document.createElement('span');
+    d.className = 'chip fetched';
+    d.innerHTML = '<span class="nm">' + esc(n) + '</span><span class="src">全称</span><span class="x" title="移除">×</span>';
+    d.querySelector('.x').onclick = function (ev) {
+      ev.stopPropagation();
+      S.form.guestModels = guestModels().filter(function (x) { return x !== n; });
+      renderGuestChips();
+    };
+    box.insertBefore(d, inp);
+  });
+  el('guestCount').textContent = guestModels().length + ' 个';
+  renderGuestCandidates();
+  renderGuestPreview();
+}
+
+function commitGuestInput() {
+  var inp = el('guestInput'), v = inp.value;
+  if (!v.trim()) return;
+  inp.value = '';
+  addGuestModels(parseModels(v));
+}
+function onGuestInput() {
+  var inp = el('guestInput'), v = inp.value;
+  if (!/[\s,，;；]/.test(v)) return;
+  var parts = v.split(/[\s,，;；]+/), tail = parts.pop();
+  if (parts.length) addGuestModels(parts);
+  inp.value = tail;
+}
+function onGuestKey(e) {
+  var isSep = (e.key === ' ' || e.key === 'Enter' || e.key === ',' || e.key === '，' || e.key === ';');
+  if (isSep) {
+    if (el('guestInput').value.trim()) { e.preventDefault(); commitGuestInput(); }
+    else if (e.key === 'Enter' || e.key === ' ') e.preventDefault();
+    return;
+  }
+  if (e.key === 'Backspace' && el('guestInput').value === '' && guestModels().length) {
+    S.form.guestModels = guestModels().slice(0, -1);
+    renderGuestChips();
+  }
+}
+function onGuestBlur() { if (el('guestInput').value.trim()) commitGuestInput(); }
+function onGuestPaste(e) {
+  var txt = (e.clipboardData || window.clipboardData).getData('text') || '';
+  if (!txt.trim()) return;
+  e.preventDefault();
+  var added = addGuestModels(parseModels(txt));
+  el('guestInput').value = '';
+  if (added.length) toast('已落地 ' + added.length + ' 个模型全称到 guest_models', 'ok');
+}
+
+function toggleGuestModel(n) {
+  if (guestModels().indexOf(n) >= 0) S.form.guestModels = guestModels().filter(function (x) { return x !== n; });
+  else addGuestModels([n]);
+  renderGuestChips();
+}
+
+function renderGuestCandidates() {
+  ensureGuest();
+  var box = el('guestCandidates');
+  var names = S.form.models.map(function (m) { return m.name; });
+  if (!names.length) { box.innerHTML = '<span class="hint" style="margin:0">先在上方「模型列表」添加标签，这里就会出现候选</span>'; return; }
+  box.innerHTML = names.map(function (n) {
+    var on = guestModels().indexOf(n) >= 0;
+    return '<span class="cand' + (on ? ' on' : '') + '" data-n="' + esc(n) + '">' + esc(n) + (on ? ' ✓' : '') + '</span>';
+  }).join('');
+  Array.prototype.slice.call(box.querySelectorAll('.cand')).forEach(function (c) {
+    c.onclick = function () { toggleGuestModel(c.getAttribute('data-n')); };
+  });
+}
+
+/* 关键词筛选器：只在内存里筛，不进入 guest_models，也不落库 */
+function guestHits() {
+  ensureGuest();
+  var q = (el('kwFilter').value || '').trim().toLowerCase();
+  if (!q) return [];
+  return S.form.models.map(function (m) { return m.name; }).filter(function (n) { return n.toLowerCase().indexOf(q) >= 0; });
+}
+function renderGuestHits() {
+  ensureGuest();
+  var hits = guestHits();
+  el('kwHit').textContent = '命中 ' + hits.length + ' 个';
+  el('kwHit').className = 'tag ' + (hits.length ? 'blue' : 'gray');
+  el('kwAddAll').style.opacity = hits.length ? '1' : '.45';
+  el('kwAddAll').style.cursor = hits.length ? 'pointer' : 'not-allowed';
+  el('kwHits').innerHTML = hits.length
+    ? hits.map(function (n) { return '<span class="cand' + (guestModels().indexOf(n) >= 0 ? ' on' : '') + '">' + esc(n) + '</span>'; }).join('')
+    : '<span class="hint" style="margin:0">输入关键词后，这里实时列出命中的模型全称</span>';
+}
+function guestAddAllHits() {
+  var hits = guestHits();
+  if (!hits.length) { toast('先输入关键词筛出命中的模型', 'warn'); return; }
+  var added = addGuestModels(hits);
+  renderGuestHits();
+  toast('已把 ' + hits.length + ' 个命中模型解析成全称加入 guest_models（新增 ' + added.length + '，去重 ' + (hits.length - added.length) + '）', 'ok');
+}
+
+function renderGuestPreview() {
+  ensureGuest();
+  var list = guestModels();
+  var tail = list.length
+    ? '<span class="names">（' + esc(list.slice(0, 8).join('、')) + (list.length > 8 ? ' 等' : '') + '）</span>'
+    : '<span class="names">（guest_models 为空 = 游客不可用任何模型）</span>';
+  el('guestPreview').innerHTML = '游客可用模型：<b>' + list.length + '</b> 个' + tail;
+}
+
+// 仅原型演示用：本机 headless Chrome 原生滚动条为 overlay 且宽度为 0，故自绘；生产实现必须用原生滚动或 el-scrollbar，禁止照抄此实现。
+function updateChipRail() {
+  var box = el('chipBox'), rail = el('chipRail'), th = el('chipThumb');
+  if (!box || !rail || !th) return;
+  var sh = box.scrollHeight, ch = box.clientHeight;
+  if (sh <= ch + 1) { rail.classList.remove('on'); return; }
+  rail.classList.add('on');
+  var h = Math.max(22, Math.round(ch * ch / sh));
+  th.style.height = h + 'px';
+  th.style.top = Math.round((ch - h) * (box.scrollTop / (sh - ch))) + 'px';
+}
+
+// 仅原型演示用：本机 headless Chrome 原生滚动条为 overlay 且宽度为 0，故自绘；生产实现必须用原生滚动或 el-scrollbar，禁止照抄此实现。
+function updateDlgRail() {
+  var wrap = el('dlgV3Form'), rail = el('dlgRail'), th = el('dlgThumb');
+  if (!wrap || !rail || !th || !wrap.classList.contains('show')) return;
+  var dlg = wrap.querySelector('.dlg');
+  var dr = dlg.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+  var sh = dlg.scrollHeight, ch = dlg.clientHeight;
+  if (sh <= ch + 1) { rail.classList.remove('on'); return; }
+  rail.classList.add('on');
+  rail.style.left = Math.round(dr.right - wr.left - 11) + 'px';
+  rail.style.top = Math.round(dr.top - wr.top + 8) + 'px';
+  rail.style.height = Math.round(dr.height - 16) + 'px';
+  var h = Math.max(26, Math.round((dr.height - 16) * ch / sh));
+  th.style.height = h + 'px';
+  th.style.top = Math.round(((dr.height - 16) - h) * (dlg.scrollTop / (sh - ch))) + 'px';
+}
+
+function checkDialogScroll() {
+  updateDlgRail();
+  var wrap = document.getElementById('dlgV3Form');
+  var dlg = wrap ? wrap.querySelector('.dlg') : null;
+  if (dlg && wrap.classList.contains('show') && dlg.scrollHeight > dlg.clientHeight + 1) setCheck('dialogScroll');
+}
+function renderDefaultModel() {
+  ensureGuest();
+  var sel = el('f_defaultModel');
+  var q = (el('dmSearch').value || '').trim().toLowerCase();
+  var names = S.form.models.map(function (m) { return m.name; });
+  var cur = sel.value;
+  var list = names.filter(function (n) { return !q || n.toLowerCase().indexOf(q) >= 0; });
+  sel.innerHTML = '<option value="">（请选择 · 必填）</option>' + list.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
+  if (names.indexOf(cur) >= 0) sel.value = cur;
+  else sel.value = names.length ? names[0] : '';
+  if (names.length) setCheck('guestRestored');
+  checkDialogScroll();
+  el('defaultModelHint').innerHTML = !names.length
+    ? '<span class="hint bad">必填：请先在上方「模型列表」里添加模型标签（或点「获取模型列表」）</span>'
+    : '必填 · 下拉选项来自上方模型标签（共 ' + names.length + ' 个' + (q ? '，当前过滤出 ' + list.length + ' 个' : '') + '）';
+  validate();
+}
+
+</script>
+
+<script>
+/* ============================================================
+   两个独立按钮：获取模型列表 / 测试连接（互不影响）
+   ============================================================ */
+var fetchTimer = null, testTimer = null;
+function maybeDecoupled() { if (S.used.fetch && S.used.test) setCheck('decoupled'); }
+
+function fetchModels() {
+  var url = el('f_url').value.trim(), key = activeKey();
+  S.used.fetch = true;
+  if (!url) { setFetchSt('bad', '模型列表：获取失败 · 请先填 Base URL'); toast('获取模型列表：请先填 Base URL', 'bad'); return; }
+  if (!urlOkCheck(url)) { setFetchSt('bad', '模型列表：获取失败 · Base URL 格式不合法'); toast('Base URL 格式不合法', 'bad'); return; }
+  if (!connCredOk()) { setFetchSt('bad', '模型列表：获取失败 · ' + connCredHint()); toast('获取模型列表：' + connCredHint(), 'bad'); return; }
+  var id = el('f_proto').value, p = PROTO[id];
+  if (S.form.mockFail) {
+    setFetchSt('run', '模型列表：正在拉取（' + p.short + '）...');
+    clearTimeout(fetchTimer);
+    fetchTimer = setTimeout(function () {
+      setFetchSt('warn', '获取失败：401 Unauthorized');
+      el('fetchGuide').style.display = '';
+      if (el('saveBtn').disabled === false) setCheck('failSaveOk');
+      toast('获取失败：401 Unauthorized（模拟）—— 你仍然可以直接手打模型名并保存', 'warn');
+      maybeDecoupled();
+    }, 900);
+    return;
+  }
+  setFetchSt('run', '模型列表：正在拉取（' + p.short + '）...');
+  clearTimeout(fetchTimer);
+  fetchTimer = setTimeout(function () {
+    if (connKeyShort(key)) {
+      setFetchSt('bad', '模型列表：401 鉴权失败（Key 过短）· 请检查后重试');
+      toast('获取模型列表失败：401', 'bad');
+      maybeDecoupled(); return;
+    }
+    var list = p.mock.slice();
+    var r = addModels(list, 'fetched');
+    setFetchSt('ok', '模型列表：已拉取 ' + list.length + ' 个 → 自动落地（新增 ' + r.added.length + '，去重 ' + r.dup + '）');
+    setCheck('fetchLand');
+    if (r.added.length) setCheck('fetchTopRight');
+    toast('已拉取 ' + list.length + ' 个模型，自动落地为标签（只标记绿色项，不覆盖手打项）', 'ok');
+    maybeDecoupled();
+  }, 1000);
+}
+
+function testConn() {
+  var url = el('f_url').value.trim(), key = activeKey();
+  S.used.test = true;
+  if (!url) { setTestSt('bad', '连接：未测试 · 请先填 Base URL'); toast('测试连接：请先填 Base URL', 'bad'); return; }
+  if (!urlOkCheck(url)) { setTestSt('bad', '连接：未测试 · Base URL 格式不合法'); toast('Base URL 格式不合法', 'bad'); return; }
+  if (!connCredOk()) { setTestSt('bad', '连接：未测试 · ' + connCredHint()); toast('测试连接：' + connCredHint(), 'bad'); return; }
+  var id = el('f_proto').value, p = PROTO[id];
+  setTestSt('run', '连接：正在握手（' + p.short + '）...');
+  clearTimeout(testTimer);
+  testTimer = setTimeout(function () {
+    if (connKeyShort(key)) {
+      setTestSt('bad', '连接：失败 · 鉴权 401（Key 过短）');
+      toast('测试连接失败：401', 'bad');
+    } else {
+      setTestSt('ok', '连接：成功 · 128ms · PONG · 协议 ' + p.short + '（未改动任何模型标签）');
+      toast('连接成功（' + p.label + '）', 'ok');
+    }
+    maybeDecoupled();
+  }, 820);
+}
+
+/* ============================================================
+   保存
+   ============================================================ */
+function autoName() {
+  var base = 'service';
+  var u = null;
+  try { u = new URL(el('f_url').value.trim()); } catch (e) { u = null; }
+  var host = u ? (u.hostname || '').toLowerCase() : '';
+  if (host.indexOf('googleapis') >= 0) base = 'gemini';
+  else if (host) {
+    var parts = host.split('.'), first = parts[0];
+    if ((first === 'api' || first === 'www' || first === 'ark') && parts.length > 1) first = parts[1];
+    base = first;
+  } else if (S.form.presetRef) base = S.form.presetRef;
+  var n = 1;
+  S.instances.forEach(function (i) { if (i.name.indexOf(base + '-') === 0) n++; });
+  return base + '-' + n;
+}
+
+function saveV3() {
+  ensureGuest();
+  if (!validate()) { toast('还有必填项没完成：地址 / 协议 / API Key / 默认模型（游客）', 'bad'); return; }
+  var id = el('f_proto').value, p = PROTO[id];
+  var preset = S.form.presetRef, pp = preset ? objById(PRESETS, preset) : null;
+  var f = 0, m = 0;
+  S.form.models.forEach(function (x) { if (x.src === 'fetched') f++; else m++; });
+  var inst = {
+    id: shortId(),
+    name: el('f_name').value.trim() || autoName(),
+    proto: id,
+    url: el('f_url').value.trim(),
+    enable: el('f_enable').className.indexOf('on') >= 0,
+    preset: preset,
+    flow: 'v3 一跳',
+    letter: pp ? pp.letter : p.short.charAt(0).toUpperCase(),
+    color: pp ? pp.color : p.color,
+    models: S.form.models.map(function (x) { return x.name; }),
+    modelSrc: { fetched: f, manual: m },
+    default_model: el('f_defaultModel').value,
+    guest_models: guestModels().slice(),
+    connection: el('f_conn').value,
+    credential: (function () {
+      var c = el('f_conn').value;
+      if (c === 'api-key') return { kind: 'api-key' };
+      if (c === 'vertex-express') return { kind: 'vertex-express', project_id: el('vx_project').value.trim(), endpoint: VERTEX_URL, block_express: false, has_api_key: el('vx_key').value.trim().length > 0 };
+      if (c === 'vertex-adc') return { kind: 'vertex-adc', project_id: el('adc_project').value.trim(), endpoint: VERTEX_URL, block_express: true, credential_source: S.form.adc.src === 'adc' ? 'application-default-credentials' : 'service-account-json', has_private_key: S.form.adc.src === 'json' ? !!S.form.adc.hasKey : false };
+      return { kind: 'oauth', account: S.form.oauth.email };
+    })()
+  };
+  S.instances.push(inst);
+  S.lastSaved = inst;
+  renderInstances();
+  var rows = el('instWrap').getElementsByTagName('tr');
+  if (rows.length > 1) rows[rows.length - 1].className = 'newrow';
+  setCheck('protoDefault');
+  closeDlg('dlgV3Form');
+  showJson('inst');
+  toast('已保存：' + inst.name + ' · ' + inst.models.length + ' 个模型标签（协议 ' + p.short + '）', 'ok');
+}
+
+/* ============================================================
+   落库预览
+   ============================================================ */
+function jsonHTML(obj) {
+  var txt = JSON.stringify(obj, null, 2);
+  return txt.split('\n').map(function (ln) {
+    var i = ln.indexOf(': ');
+    if (i > 0) {
+      var k = ln.slice(0, i), v = ln.slice(i + 2), tail = '';
+      if (v.slice(-1) === ',') { tail = ','; v = v.slice(0, -1); }
+      var cls = v.trim().charAt(0) === '"' ? 's' : 'c';
+      return '<span class="k2">' + esc(k) + '</span>: <span class="' + cls + '">' + esc(v) + '</span>' + esc(tail);
+    }
+    return '<span class="c">' + esc(ln) + '</span>';
+  }).join('\n');
+}
+
+function showJson(tab) {
+  S.jsonTab = tab;
+  el('tabJ1').className = tab === 'inst' ? 'on' : '';
+  el('tabJ2').className = tab === 'models' ? 'on' : '';
+  el('tabJ3').className = tab === 'guest' ? 'on' : '';
+  renderJson();
+}
+
+function renderJson() {
+  var inst = S.lastSaved;
+  if (S.jsonTab === 'inst') {
+    var o = {
+      schemaVersion: 3,
+      instances: [{
+        instanceId: inst ? inst.id : 'inst_a1f2',
+        name: inst ? inst.name : 'openai-1',
+        protocol: inst ? inst.proto : 'openai-chat',
+        baseUrl: inst ? inst.url : 'https://api.openai.com/v1',
+        presetRef: inst ? (inst.preset || null) : 'openai',
+        apiKey: 'sk-****',
+        enable: inst ? inst.enable : true,
+        models: inst ? inst.models : ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
+        default_model: inst ? inst.default_model : 'gpt-4o',
+        connection: inst ? (inst.connection || 'api-key') : 'api-key',
+        credential: inst ? (inst.credential || { kind: 'api-key' }) : { kind: 'api-key' },
+        guest_models: inst ? inst.guest_models : ['gpt-4o', 'gpt-4o-mini'],
+        modelSource: inst ? inst.modelSrc : { fetched: 0, manual: 3 }
+      }]
+    };
+    el('jsonBox').innerHTML = jsonHTML(o);
+    el('jsonHint').innerHTML = 'connection 是连接方式（一等字段，4 项：api-key / vertex-express / vertex-adc / oauth），credential 随连接方式不同而不同；Base URL 在 Vertex 两种接法与 OAuth 下由官方**固定**端点自动生成（Vertex 无 region 模板）。';
+  } else if (S.jsonTab === 'guest') {
+    var o3 = {
+      default_model: inst ? inst.default_model : (el('f_defaultModel').value || 'gpt-4o'),
+      guest_models: inst ? inst.guest_models : guestModels().slice()
+    };
+    el('jsonBox').innerHTML = jsonHTML(o3);
+    el('jsonHint').innerHTML = 'guest_models 是字符串数组（模型全称，已去重），不再有“关键词 / 完整名称”两个子字段；关键词筛选器只在内存里筛，不落库。';
+  } else {
+    var ms = inst ? inst.models : ['gpt-4o', 'gpt-4o-mini', 'o3-mini'];
+    var o2 = {
+      models: ms,
+      modelSource: inst ? inst.modelSrc : { fetched: 0, manual: 3 },
+      defaultModel: inst ? inst.default_model : 'gpt-4o'
+    };
+    el('jsonBox').innerHTML = jsonHTML(o2);
+    el('jsonHint').innerHTML = '标签只是展示层：空格落地、手打自定义、批量粘贴、拉取自动落地，最终都是同一个 <span class="mono">models: string[]</span>。';
+  }
+}
+
+/* ============================================================
+   v2 对照：已被删除的协议自动推断
+   ============================================================ */
+function legacyDetect(raw) {
+  var url = (raw || '').trim();
+  if (!url) return null;
+  if (url.indexOf('http://') !== 0 && url.indexOf('https://') !== 0) return { state: 'invalid', why: '地址需要以 http:// 或 https:// 开头' };
+  var u = null;
+  try { u = new URL(url); } catch (e) { return { state: 'invalid', why: 'URL 无法解析，请检查是否包含空格或非法字符' }; }
+  var host = (u.hostname || '').toLowerCase();
+  var path = ((u.pathname || '') + (u.search || '')).toLowerCase();
+  if (path.indexOf('/responses') >= 0) return { state: 'ok', proto: 'openai-responses', conf: '高', why: '路径显式包含 /responses' };
+  if (path.indexOf('chat/completions') >= 0) return { state: 'ok', proto: 'openai-chat', conf: '高', why: '路径显式指向 chat/completions' };
+  if (host.indexOf('anthropic') >= 0) return { state: 'ok', proto: 'anthropic-messages', conf: '高', why: 'host 命中 ' + host };
+  if (host.indexOf('generativelanguage') >= 0 || host.indexOf('aiplatform') >= 0 || host.indexOf('cloudcode-pa') >= 0) return { state: 'ok', proto: 'gemini', conf: '高', why: 'host 命中 Google ' + host };
+  if (host === 'api.openai.com' || host.slice(-11) === '.openai.com') return { state: 'ambiguous', candidates: ['openai-chat', 'openai-responses'], why: '官方端点同时暴露 Chat Completions 与 Responses，无法从 URL 唯一判定' };
+  if (host.indexOf('volces.com') >= 0) return { state: 'ok', proto: 'openai-responses', conf: '中', why: '火山方舟端点（现网实现继承 Responses 家族）' };
+  if (host.indexOf('x.ai') >= 0) return { state: 'ok', proto: 'openai-responses', conf: '中', why: 'xAI 端点（现网实现继承 Responses 家族）' };
+  var compat = ['deepseek', 'moonshot', 'dashscope', 'bigmodel', 'minimax', 'baichuan', 'stepfun', 'lingyiwanwu', 'groq', 'openrouter', 'perplexity', 'longcat', 'xiaomimimo', 'models.inference', 'together', 'fireworks', 'cerebras', 'ollama', 'siliconflow', 'localhost', '127.0.0.1'];
+  for (var i = 0; i < compat.length; i++) if (host.indexOf(compat[i]) >= 0) return { state: 'ok', proto: 'openai-chat', conf: '中高', why: 'host 命中内置兼容清单（' + compat[i] + '）' };
+  if (path.indexOf('/v1') >= 0 || path.indexOf('/openai') >= 0 || path.indexOf('/paas') >= 0) return { state: 'ok', proto: 'openai-chat', conf: '中高', why: '路径符合 OpenAI 兼容约定' };
+  return { state: 'unknown', why: '没有规则命中这个端点，无法从 URL 推断协议，请你手动指定' };
+}
+
+function openV2() {
+  el('v2_url').value = '';
+  el('v2_key').value = '';
+  el('v2_models').value = '';
+  el('v2TestMsg').textContent = '';
+  S.v2 = { det: null, proto: null };
+  renderV2Det();
+  renderV2ProtoBtns();
+  openDlg('dlgV2Form');
+}
+
+function onV2UrlInput() {
+  var url = el('v2_url').value.trim();
+  var r = legacyDetect(url);
+  S.v2.det = r;
+  if (r && r.state === 'ok') S.v2.proto = r.proto;
+  else S.v2.proto = null;
+  renderV2Det();
+  renderV2ProtoBtns();
+}
+
+function renderV2Det() {
+  var box = el('v2DetBox'), r = S.v2.det;
+  if (!r) { box.className = 'det'; box.innerHTML = '<div class="line"><span class="tag gray">等待输入</span></div><div class="why">v2：填入地址后自动推断协议（8 条规则）</div>'; return; }
+  if (r.state === 'invalid') { box.className = 'det inv'; box.innerHTML = '<div class="line"><span class="tag red">地址无效</span></div><div class="why">' + esc(r.why) + '</div>'; return; }
+  if (r.state === 'ok') { var p = PROTO[r.proto]; box.className = 'det ok'; box.innerHTML = '<div class="line"><span class="tag" style="background:' + p.color + '1a;color:' + p.color + '">识别为 ' + esc(p.label) + '</span><span class="tag green">置信度 ' + r.conf + '</span><span class="tag plain">已自动选好</span></div><div class="why">依据：' + esc(r.why) + '</div>'; return; }
+  if (r.state === 'ambiguous') { box.className = 'det amb'; box.innerHTML = '<div class="line"><span class="tag orange">需要人工确认</span><span class="tag gray">歧义分支</span></div><div class="why">' + esc(r.why) + '</div>'; return; }
+  box.className = 'det unk';
+  box.innerHTML = '<div class="line"><span class="tag red">未识别</span><span class="tag gray">不静默回退</span></div><div class="why">' + esc(r.why) + '</div>';
+}
+
+function renderV2ProtoBtns() {
+  var cur = S.v2.proto;
+  el('v2ProtoBtns').innerHTML = PROTO_ORDER.map(function (k) {
+    var p = PROTO[k];
+    return '<button class="btn sm ' + (cur === k ? 'sel' : '') + '">' + esc(p.short) + '</button>';
+  }).join('');
+}
+
+function v2MergedAction() {
+  var msg = el('v2TestMsg');
+  var url = el('v2_url').value.trim(), key = el('v2_key').value.trim();
+  if (!url) { msg.innerHTML = '<span class="hint bad">请先填 Base URL</span>'; return; }
+  if (!S.v2.proto) { msg.innerHTML = '<span class="hint bad">协议未确定（歧义 / 未知），无法继续</span>'; return; }
+  if (!key) { msg.innerHTML = '<span class="hint bad">请先填 API Key</span>'; return; }
+  msg.innerHTML = '<span class="hint">正在握手并拉取模型（合并式）...</span>';
+  setTimeout(function () {
+    if (key.length < 8) { msg.innerHTML = '<span class="hint bad">鉴权失败：Key 过短</span>'; return; }
+    var list = PROTO[S.v2.proto].mock;
+    el('v2_models').value = list.slice(0, 4).join(',');
+    msg.innerHTML = '<span class="hint warn">已连接，但拉取结果直接覆盖了模型文本行</span>';
+    toast('v2 合并式：测试连接 + 拉取模型一步完成，结果覆盖了手输内容', 'warn');
+  }, 900);
+}
+
+/* ============================================================
+   验证目标 / 重置 / 初始化
+   ============================================================ */
+function pulse(id) {
+  var e = el(id);
+  if (!e) return;
+  e.classList.remove('pulse');
+  void e.offsetWidth;
+  e.classList.add('pulse');
+  e.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function focusGoal(n) {
+  if (S.mode !== 'v3') setMode('v3');
+  openV3();
+  if (n === 1) {
+    setTimeout(function () { pulse('fldProto'); }, 200);
+    toast('协议就是普通下拉，默认 OpenAI Chat Completions；手改 URL 也不会变', 'b');
+  } else if (n === 2) {
+    setTimeout(function () { pulse('fldModels'); el('chipInput').focus(); }, 200);
+    toast('试试打 deepseek-chat 再按空格；也可以直接粘贴 “a, b, c”', 'b');
+  } else {
+    setTimeout(function () { pulse('fetchBtn'); }, 200);
+    toast('两个按钮各自状态：只点获取模型、不点测试连接，也一样能保存', 'b');
+  }
+}
+
+function resetDemo() {
+  S.checks = {};
+  S.jsonTab = 'inst';
+  S.lastSaved = null;
+  S.used = { fetch: false, test: false };
+  S.instances = [
+    { id: 'inst_a1f2', name: 'openai-1', proto: 'openai-chat', url: 'https://api.openai.com/v1', enable: true, preset: 'openai', flow: '初始数据', letter: 'O', color: '#10a37f', models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'] },
+    { id: 'inst_b7c4', name: 'gemini-2', proto: 'gemini', url: 'https://generativelanguage.googleapis.com', enable: true, preset: 'gemini', flow: '初始数据', letter: 'G', color: '#2f9e6f', models: ['gemini-2.5-pro', 'gemini-2.5-flash'] }
+  ];
+  closeAll();
+  renderInstances();
+  renderChecks();
+  showJson('inst');
+  toast('演示已重置', 'b');
+}
+
+function init() {
+  if (el('chipBox')) el('chipBox').onscroll = function () { updateChipRail(); };
+  window.addEventListener('resize', function () { updateDlgRail(); updateChipRail(); });
+  renderNote();
+  renderInstances();
+  renderChecks();
+  renderJson();
+  renderPdList();
+  renderProtoInfo();
+  renderChips();
+  enforceMatrix();
+  renderCred();
+  updateAvatar();
+  validate();
+  el('stConn').className = 'st';
+  el('stFetch').className = 'st';
+  el('stTest').className = 'st';
+}
+
+init();
+</script>
+</body>
+</html>

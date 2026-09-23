@@ -19,9 +19,11 @@ import {
 } from '../../lib/chat/sessionExecutionState.js'
 import { ensureMessageTime } from '../../lib/chat/messageTimestamp.js'
 import {
+  appendFileReferences,
   appendRecursiveContextMessages,
   prepareChannelUserInput,
 } from '../llm.js'
+import { channelEnvelopeMetadata } from '../bindings/ChannelEnvelope.js'
 import sessions from '../../lib/server/socket.io/services/sessions.js'
 import {
   formatChannelErrorMessage,
@@ -39,6 +41,7 @@ export class BaseChannel {
    * @param {string} [opts.channelType='base'] 渠道标识（如 'wechat', 'feishu', 'dingtalk'）
    * @param {string} [opts.provider] 大模型提供商
    * @param {string} [opts.model]    大模型名称
+   * @param {boolean} [opts.outboundEnabled=true] 是否允许向绑定渠道发送消息
    * @param {boolean} [opts.typing=true] 是否启用打字中状态反馈
    * @param {object} [opts.keepAlive] 保活配置
    * @param {object} [opts.logger=console] 日志输出
@@ -53,6 +56,7 @@ export class BaseChannel {
     channelType = 'base',
     provider = null,
     model = null,
+    outboundEnabled = true,
     typing = true,
     keepAlive = {},
     logger = console,
@@ -62,6 +66,7 @@ export class BaseChannel {
     channelId = null,
     debounceConfig = {},
     debounceEnabled = null,
+    routeTargetResolver = null,
   }) {
     if (!client || !memory || !masterId) {
       throw new Error(
@@ -77,12 +82,14 @@ export class BaseChannel {
     this.channelType = channelType
     this.provider = provider
     this.model = model
+    this.outboundEnabled = outboundEnabled !== false
     this.defaultProvider = provider
     this.defaultModel = model
     this.typing = typing
     this.log = logger
     this.onActivity = onActivity
     this.onConfigUpdate = onConfigUpdate
+    this.routeTargetResolver = routeTargetResolver
     this.activeJobs = new Map() // sessionId -> { startTime, text, currentTool, toolCount, lastProgressText }
     this._sessionQueues = new Map() // sessionId -> Promise chain (FIFO 互斥队列兼容)
     this._sessionLocks = new Set() // sessionId -> 互斥单飞锁
@@ -122,20 +129,23 @@ export class BaseChannel {
   }
 
   /**
-   * 更新当前渠道的模型配置。ChannelStore 是唯一事实来源，运行时字段只作镜像。
+   * 更新 Agent 的模型配置。provider/model 是兼容实时 Channel 入站与
+   * Slash /model 的运行时镜像；持久化 Agent 才是唯一事实来源。
    */
   async updateModelConfig(patch = {}) {
     const next = {}
     if (Object.hasOwn(patch, 'provider')) next.provider = patch.provider ?? ''
     if (Object.hasOwn(patch, 'model')) next.model = patch.model ?? ''
-    if (Object.keys(next).length === 0) return {
-      model: this.model,
-      provider: this.provider,
-    }
+    if (Object.keys(next).length === 0)
+      return {
+        model: this.model,
+        provider: this.provider,
+      }
 
-    const persisted = typeof this.onConfigUpdate === 'function'
-      ? await this.onConfigUpdate(next)
-      : next
+    const persisted =
+      typeof this.onConfigUpdate === 'function'
+        ? await this.onConfigUpdate(next)
+        : next
     if (Object.hasOwn(next, 'provider')) {
       this.provider = persisted?.provider ?? next.provider
     }
@@ -295,6 +305,14 @@ export class BaseChannel {
    */
   startTyping(ctx = {}, { sessionId = null } = {}) {
     if (!ctx || ctx.isWeb) return
+    const outputPort = this._resolveOutputPort(ctx)
+    if (!outputPort) return
+    if (outputPort !== this) {
+      const delegatedCtx = { ...ctx }
+      delete delegatedCtx.outputPort
+      outputPort.startTyping?.(delegatedCtx, { sessionId })
+      return
+    }
     const sid = sessionId || ctx.sid || null
     const from = ctx.from || null
     const key = sid || from || 'default'
@@ -363,6 +381,14 @@ export class BaseChannel {
    */
   async stopTyping(ctx = {}, { sessionId = null, force = false } = {}) {
     if (!ctx || ctx.isWeb) return
+    const outputPort = this._resolveOutputPort(ctx)
+    if (!outputPort) return
+    if (outputPort !== this) {
+      const delegatedCtx = { ...ctx }
+      delete delegatedCtx.outputPort
+      await outputPort.stopTyping?.(delegatedCtx, { force, sessionId })
+      return
+    }
     const sid = sessionId || ctx.sid || null
     const from = ctx.from || null
 
@@ -398,6 +424,19 @@ export class BaseChannel {
   /** 发送打字中状态反馈 */
   async doSendTyping(_ctx, _status) {
     // 默认空操作，子类按需覆写
+  }
+
+  /**
+   * Resolve the protocol output for one execution turn. SessionTurnService
+   * supplies an explicit outputPort for background execution; realtime
+   * Channel ingress keeps using the Channel itself. A disabled port resolves
+   * to null so execution and persistence continue without external output.
+   */
+  _resolveOutputPort(ctx = {}) {
+    const outputPort = Object.hasOwn(ctx || {}, 'outputPort')
+      ? ctx.outputPort
+      : this
+    return outputPort?.outboundEnabled === false ? null : outputPort
   }
 
   /** 渠道专属回复风格与格式系统提示词（子类可按需覆写） */
@@ -454,6 +493,7 @@ export class BaseChannel {
 
   async stop() {
     this.running = false
+    for (const job of this.activeJobs.values()) job?.abort?.()
     this.keepAlive.stop()
     this.confirmations.clear()
     this.clearAllTyping()
@@ -470,43 +510,68 @@ export class BaseChannel {
    */
   async isSessionYoloEnabled(sessionId) {
     if (!sessionId) return false
-    if (this._sessionYolo.has(sessionId))
-      return this._sessionYolo.get(sessionId)
-    const enabled = await getSessionYolo(this.memory, sessionId)
-    this._sessionYolo.set(sessionId, enabled)
-    return enabled
+    return await getSessionYolo(this.memory, sessionId)
   }
 
   async setSessionYolo(sessionId, enabled) {
     const value = await setSessionYolo(this.memory, sessionId, enabled)
-    this._sessionYolo.set(sessionId, value)
+    this._sessionYolo.clear()
     return value
   }
 
   // ===============================================================
   // 消息路由、确认拦截与临时插话处理
   // ===============================================================
-  async _safeSend(from, contextToken, text) {
-    const targetToken = contextToken || this.latestContextToken || null
+  async _safeSend(from, contextToken, text, explicitOutputPort = undefined) {
+    const outputPort =
+      explicitOutputPort === undefined
+        ? this._resolveOutputPort()
+        : explicitOutputPort?.outboundEnabled === false
+          ? null
+          : explicitOutputPort
+    if (!outputPort) return null
+    const targetToken = contextToken || outputPort.latestContextToken || null
     try {
-      const segments = this.splitTextToSegments(text, {
+      const segments = outputPort.splitTextToSegments(text, {
         contextToken: targetToken,
         from,
       })
       for (let i = 0; i < segments.length; i++) {
         const seg = segments[i]
-        const payload = this.buildSendMsg({
+        const payload = outputPort.buildSendMsg({
           contextToken: targetToken,
-          fromBot: this.client?.botId,
+          fromBot: outputPort.client?.botId,
           text: seg,
           to: from,
         })
-        await this.doSendMessage(payload)
+        await outputPort.doSendMessage(payload)
         if (i < segments.length - 1) {
           await new Promise((r) => setTimeout(r, 300))
         }
       }
     } catch {}
+  }
+
+  /** Resolve an inbound transport envelope without turning routing failures into transport failures. */
+  async resolveInboundTarget(envelope, { from, contextToken = null } = {}) {
+    if (!this.routeTargetResolver) return this
+    try {
+      return await this.routeTargetResolver(envelope)
+    } catch (error) {
+      const notices = {
+        binding_not_found:
+          '此通信渠道当前没有关联可用的 Agent，请先在管理页面完成绑定。',
+        route_required:
+          '此通信渠道关联了多个 Agent，请发送 /agents 查看并使用 /agent use <名称或id> 选择。',
+        session_not_found:
+          '此通信渠道关联的 Agent 暂无可用 Session，请先在管理页面创建会话。',
+      }
+      const notice = notices[error?.code]
+      if (!notice) throw error
+      this.log?.warn?.(`[${this.channelType}] 入站消息未路由: ${error.code}`)
+      await this._safeSend(from, contextToken, notice)
+      return null
+    }
   }
 
   /** 高危动作挂起确认代理 */
@@ -1077,6 +1142,12 @@ export class BaseChannel {
     this.log?.info?.(
       `[${this.channelType}] 📥 接收外部/唤醒消息并加入会话队列 | 会话: ${targetSid} | 来源: ${options.source || options.from || 'trigger'} | 目标接收者: ${ctx.from}`,
     )
+    // Exact-session Web turns enter through this API instead of the adapter
+    // ingress path. Route slash commands through the same control plane, while
+    // keeping cron/trigger payloads literal even if they begin with a slash.
+    if (options.allowSlashCommands === true && text.trim().startsWith('/')) {
+      return this._route(text.trim(), ctx)
+    }
     return this._enqueueSession(targetSid, text.trim(), ctx)
   }
 
@@ -1109,10 +1180,22 @@ export class BaseChannel {
       this.doSendTyping(ctx, 1).catch(() => {})
       const reply = await this.llm.process({
         agentId: this.memory.agentId,
+        bindingId: ctx.bindingId || ctx.channelBindingId || null,
         channel: this,
+        channelId: ctx.channelId || this.id,
+        channelConversationId: ctx.channelConversationId || null,
+        externalConversationId:
+          ctx.externalConversationId ||
+          ctx.envelope?.conversation?.externalConversationId ||
+          null,
+        externalThreadId:
+          ctx.externalThreadId ||
+          ctx.envelope?.conversation?.externalThreadId ||
+          null,
         chat: [],
         contextToken: ctx.contextToken || this.latestContextToken || null,
         crystal: '',
+        envelope: ctx.envelope,
         from: ctx.from,
         globalMem: '',
         guidance: false,
@@ -1157,6 +1240,8 @@ export class BaseChannel {
     // 消息时间由公共管线统一生成，与具体渠道协议解耦。后续的 Web 镜像、
     // session 持久化和 LLM 请求必须复用同一个值，保证跨轮次输入稳定。
     ctx.messageTime = ensureMessageTime(ctx.messageTime)
+    text = appendFileReferences(text, ctx.files)
+    const outputPort = this._resolveOutputPort(ctx)
 
     if (this.onActivity) {
       this.onActivity()
@@ -1179,7 +1264,6 @@ export class BaseChannel {
         : []
     const session = await this.memory.getSession(sid)
     const chat = session?.chat || []
-
     ctx.channelId =
       ctx.channelId || this.channelId || this.id || this.memory?.agentId
     // Resolve the same image source that is forwarded to createBackendLlm.
@@ -1190,6 +1274,7 @@ export class BaseChannel {
       text,
       channelImages,
       ctx.messageTime,
+      ctx.envelope,
     )
     const persistedUserText =
       Array.isArray(preparedUserInput.imageList) &&
@@ -1202,16 +1287,32 @@ export class BaseChannel {
             .map((image) => `![图片](${image})`)
             .join('\n')}`.trim()
         : preparedUserInput.sourceText
+    const persistedUserContent = [...preparedUserInput.persistedContent]
+    if (Array.isArray(ctx.files)) {
+      for (const file of ctx.files) {
+        const url = file?.url || file?.file
+        if (!url) continue
+        persistedUserContent.push({
+          data: { file: url, name: file?.name || 'file' },
+          type: 'file',
+        })
+      }
+    }
+
+    // Message identity is allocated once and shared by live transport,
+    // persistence, stream-cache replay, and history. Reallocating an id at any
+    // boundary makes the UI render the same logical message twice after reload.
+    ctx.userMessageId =
+      ctx.userMessageId ||
+      `msg_u_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+    ctx.messageId =
+      ctx.messageId ||
+      `msg_a_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
 
     // 当消息来自第三方渠道（!ctx.isWeb）时，若 Web 客户端在线，向其广播用户消息并建立 Blank 占位
-    if (!ctx.isWeb) {
-      const userMsgId =
-        ctx.userMessageId ||
-        `msg_u_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
-      const assistantMsgId =
-        ctx.messageId ||
-        `msg_a_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
-      ctx.messageId = assistantMsgId
+    if (!ctx.isWeb && ctx.persistUserMessage !== false) {
+      const userMsgId = ctx.userMessageId
+      const assistantMsgId = ctx.messageId
 
       const onlineWebClients = sessions.getAllAdminClients()
       if (onlineWebClients && onlineWebClients.length > 0) {
@@ -1227,8 +1328,14 @@ export class BaseChannel {
         for (const client of onlineWebClients) {
           client.send({
             data: {
+              agentId: this.memory.agentId,
               assistantMessageId: assistantMsgId,
-              contactorId: ctx.channelId,
+              channelId: ctx.channelId,
+              contactorId: ctx.streamContactorId || this.memory.agentId,
+              sessionId: sid,
+              ...(ctx.subagentContact
+                ? { subagentContact: ctx.subagentContact }
+                : {}),
               userMessage: {
                 content: userMsgContent,
                 id: userMsgId,
@@ -1246,29 +1353,52 @@ export class BaseChannel {
 
     const emittedBlocks = []
     let didEmitTextBlock = false
+    const executionMetadata = {
+      ...(ctx.envelope ? channelEnvelopeMetadata(ctx.envelope) : {}),
+      ...(ctx.isTask ? { triggerType: 'task' } : {}),
+      ...(ctx.isWake
+        ? {
+            wakeType: ctx.source === 'subagent' ? 'subagent' : 'trigger',
+          }
+        : {}),
+    }
+    const persistedExecutionMetadata = Object.keys(executionMetadata).length
+      ? executionMetadata
+      : null
     const supportsPersistenceLifecycle =
       typeof this.memory.beginAssistantMessage === 'function' &&
       typeof this.memory.finalizeAssistantMessage === 'function'
     let assistantPersistenceId = null
     let persistenceQueue = Promise.resolve()
     let userPersistedBeforeLlm = false
+    const persistUserMessage = ctx.persistUserMessage !== false
 
     if (supportsPersistenceLifecycle) {
       const persistUser =
         typeof this.memory.appendUserMessage === 'function'
           ? this.memory.appendUserMessage.bind(this.memory)
           : this.memory.appendToChat.bind(this.memory)
-      await persistUser(sid, {
-        content: preparedUserInput.persistedContent,
-        from_user_id: ctx.from,
-        role: 'user',
-        text: persistedUserText,
-        time: ctx.messageTime,
-      })
-      userPersistedBeforeLlm = true
+      if (persistUserMessage) {
+        await persistUser(sid, {
+          channel_id: ctx.envelope?.source?.channelId,
+          content: persistedUserContent,
+          external_conversation_id:
+            ctx.envelope?.conversation?.externalConversationId,
+          external_message_id: ctx.envelope?.message?.externalMessageId,
+          from_user_id: ctx.envelope?.actor?.externalUserId || ctx.from,
+          id: ctx.userMessageId,
+          metadata: persistedExecutionMetadata,
+          role: 'user',
+          source_type: ctx.envelope?.source?.adapterId,
+          text: persistedUserText,
+          time: ctx.envelope?.message?.sentAt || ctx.messageTime,
+        })
+        userPersistedBeforeLlm = true
+      }
       assistantPersistenceId = await this.memory.beginAssistantMessage(sid, {
         content: [],
         id: ctx.messageId,
+        metadata: persistedExecutionMetadata,
         role: 'assistant',
         text: '',
         time: Date.now(),
@@ -1341,6 +1471,20 @@ export class BaseChannel {
           // Web 客户端已通过 Socket 实时流推送，无需向第三方 IM 网关重复发送
           return Promise.resolve()
         }
+        if (!outputPort) {
+          // Offline/disabled delivery must not suppress execution or
+          // persistence. Keep text blocks for the assistant message while
+          // intentionally skipping every protocol send.
+          if (textBlock?.trim()) {
+            emittedBlocks.push(
+              ...this.splitTextToSegments(textBlock.trim(), ctx),
+            )
+          }
+          if (meta.soulDraft) {
+            return this.memory.writeSoul(meta.soulDraft)
+          }
+          return Promise.resolve()
+        }
         sendQueue = sendQueue
           .then(async () => {
             const rawRender = meta.extraRender
@@ -1365,7 +1509,7 @@ export class BaseChannel {
                 `[${this.channelType}] 🖼️ 正在发送原生图片: ${imgUrl || localPath || 'buffer'}`,
               )
               try {
-                await this.doSendImage({
+                await outputPort.doSendImage({
                   buffer: imgBuffer,
                   contextToken: ctx.contextToken,
                   localPath,
@@ -1379,13 +1523,13 @@ export class BaseChannel {
                 if (imgUrl) {
                   const noticeText = `🖼️ [图片已生成]\n查看原图: ${imgUrl}`
                   emittedBlocks.push(noticeText)
-                  const payload = this.buildSendMsg({
+                  const payload = outputPort.buildSendMsg({
                     contextToken: ctx.contextToken,
-                    fromBot: this.client.botId,
+                    fromBot: outputPort.client?.botId,
                     text: noticeText,
                     to: ctx.from,
                   })
-                  await this.doSendMessage(payload).catch(() => {})
+                  await outputPort.doSendMessage(payload).catch(() => {})
                 }
               }
               await new Promise((r) => setTimeout(r, 100))
@@ -1410,7 +1554,7 @@ export class BaseChannel {
                 `[${this.channelType}] 🎙️ 正在发送原生语音: ${audioUrl || localPath || 'buffer'}`,
               )
               try {
-                await this.doSendVoice({
+                await outputPort.doSendVoice({
                   buffer: audioBuffer,
                   contextToken: ctx.contextToken,
                   durationMs,
@@ -1428,13 +1572,13 @@ export class BaseChannel {
                 if (audioUrl) {
                   const noticeText = `🎙️ [语音消息]\n音频链接: ${audioUrl}`
                   emittedBlocks.push(noticeText)
-                  const payload = this.buildSendMsg({
+                  const payload = outputPort.buildSendMsg({
                     contextToken: ctx.contextToken,
-                    fromBot: this.client.botId,
+                    fromBot: outputPort.client?.botId,
                     text: noticeText,
                     to: ctx.from,
                   })
-                  await this.doSendMessage(payload).catch(() => {})
+                  await outputPort.doSendMessage(payload).catch(() => {})
                 }
               }
               await new Promise((r) => setTimeout(r, 100))
@@ -1459,7 +1603,7 @@ export class BaseChannel {
                 `[${this.channelType}] 📁 正在发送原生文件: ${fileName}`,
               )
               try {
-                await this.doSendFile({
+                await outputPort.doSendFile({
                   buffer: fileBuffer,
                   contextToken: ctx.contextToken,
                   fileName,
@@ -1474,13 +1618,13 @@ export class BaseChannel {
                 if (fileUrl) {
                   const noticeText = `📁 [文件分享: ${fileName}]\n下载链接: ${fileUrl}`
                   emittedBlocks.push(noticeText)
-                  const payload = this.buildSendMsg({
+                  const payload = outputPort.buildSendMsg({
                     contextToken: ctx.contextToken,
-                    fromBot: this.client.botId,
+                    fromBot: outputPort.client?.botId,
                     text: noticeText,
                     to: ctx.from,
                   })
-                  await this.doSendMessage(payload).catch(() => {})
+                  await outputPort.doSendMessage(payload).catch(() => {})
                 }
               }
               await new Promise((r) => setTimeout(r, 100))
@@ -1502,7 +1646,7 @@ export class BaseChannel {
                 `[${this.channelType}] 🎬 正在发送原生视频: ${videoUrl || localPath || 'buffer'}`,
               )
               try {
-                await this.doSendVideo({
+                await outputPort.doSendVideo({
                   buffer: videoBuffer,
                   contextToken: ctx.contextToken,
                   durationMs,
@@ -1517,13 +1661,13 @@ export class BaseChannel {
                 if (videoUrl) {
                   const noticeText = `🎬 [视频消息]\n视频链接: ${videoUrl}`
                   emittedBlocks.push(noticeText)
-                  const payload = this.buildSendMsg({
+                  const payload = outputPort.buildSendMsg({
                     contextToken: ctx.contextToken,
-                    fromBot: this.client.botId,
+                    fromBot: outputPort.client?.botId,
                     text: noticeText,
                     to: ctx.from,
                   })
-                  await this.doSendMessage(payload).catch(() => {})
+                  await outputPort.doSendMessage(payload).catch(() => {})
                 }
               }
               await new Promise((r) => setTimeout(r, 100))
@@ -1557,7 +1701,7 @@ export class BaseChannel {
                     `[${this.channelType}] 🔗 正在下发结构化链接: ${linkUrl}`,
                   )
                   try {
-                    const sendRes = await this.doSendLink({
+                    const sendRes = await outputPort.doSendLink({
                       contextToken: ctx.contextToken,
                       description: item.description || null,
                       extraRender: item,
@@ -1592,7 +1736,7 @@ export class BaseChannel {
                   `[${this.channelType}] 🃏 正在下发结构化卡片: ${item.title || item.type}`,
                 )
                 try {
-                  const sendRes = await this.doSendCard({
+                  const sendRes = await outputPort.doSendCard({
                     card: item,
                     contextToken: ctx.contextToken,
                     extraRender: item,
@@ -1613,7 +1757,10 @@ export class BaseChannel {
 
             // 7. 普通文本分条下发
             if (textBlock?.trim()) {
-              const segments = this.splitTextToSegments(textBlock.trim(), ctx)
+              const segments = outputPort.splitTextToSegments(
+                textBlock.trim(),
+                ctx,
+              )
               for (const seg of segments) {
                 emittedBlocks.push(seg)
                 this.log?.info?.(
@@ -1621,14 +1768,14 @@ export class BaseChannel {
                 )
                 const now = Date.now()
                 lastSendTimeMs = Math.max(now, lastSendTimeMs + 10)
-                const payload = this.buildSendMsg({
+                const payload = outputPort.buildSendMsg({
                   contextToken: ctx.contextToken,
-                  fromBot: this.client.botId,
+                  fromBot: outputPort.client?.botId,
                   text: seg,
                   to: ctx.from,
                 })
                 payload.create_time_ms = lastSendTimeMs
-                const sendRes = await this.doSendMessage(payload)
+                const sendRes = await outputPort.doSendMessage(payload)
                 this.log?.info?.(
                   `[${this.channelType}] 📤 实时文本块发送结果: ${JSON.stringify(sendRes)}`,
                 )
@@ -1649,11 +1796,22 @@ export class BaseChannel {
       // 调用底层 LLM
       const reply = await this.llm.process({
         agentId: this.memory.agentId,
-        channel: this,
+        bindingId: ctx.bindingId || ctx.channelBindingId || null,
+        channel: outputPort || this,
         channelId: ctx.channelId,
+        channelConversationId: ctx.channelConversationId || null,
+        externalConversationId:
+          ctx.externalConversationId ||
+          ctx.envelope?.conversation?.externalConversationId ||
+          null,
+        externalThreadId:
+          ctx.externalThreadId ||
+          ctx.envelope?.conversation?.externalThreadId ||
+          null,
         chat,
         contextToken: ctx.contextToken,
         crystal: crystal || '',
+        envelope: ctx.envelope,
         from: ctx.from,
         globalMem: globalMem || '',
         guidance: !soul,
@@ -1668,10 +1826,21 @@ export class BaseChannel {
           activeJobObj._abortLlm = abortFn
         },
         pendingMemories,
+        approvalTarget: ctx.approvalTarget,
+        principal: ctx.principal,
         provider: this.provider,
         sessionId: sid,
+        sessionScope: ctx.sessionScope,
         soul: soul || '',
+        source: ctx.source,
+        streamContactorId: ctx.streamContactorId,
+        subagentContact: ctx.subagentContact,
+        subagentRunId: ctx.subagentRunId,
         text,
+        toolNames: ctx.toolNames,
+        triggerId: ctx.triggerId,
+        isTask: ctx.isTask,
+        isWake: ctx.isWake,
         webClient: ctx.webClient,
       })
 
@@ -1703,13 +1872,13 @@ export class BaseChannel {
 
         const now = Date.now()
         const userMsg = {
-          content: preparedUserInput.persistedContent,
+          content: persistedUserContent,
           from_user_id: ctx.from,
           role: 'user',
           text: persistedUserText,
           time: ctx.messageTime || now,
         }
-        if (!userPersistedBeforeLlm)
+        if (!userPersistedBeforeLlm && persistUserMessage)
           await this.memory.appendToChat(sid, userMsg)
 
         const assembledAssistantContent = Array.isArray(reply?.content)
@@ -1810,6 +1979,7 @@ export class BaseChannel {
           ctx.from,
           ctx.contextToken || this.latestContextToken,
           channelErrorText,
+          outputPort,
         ).catch(() => {})
       }
 

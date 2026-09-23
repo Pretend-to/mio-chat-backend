@@ -8,9 +8,12 @@
 export const ONEBOTS_HOST = '127.0.0.1'
 
 const configuredPort = Number.parseInt(process.env.ONEBOTS_PORT ?? '5727', 10)
-export const ONEBOTS_PORT = Number.isInteger(configuredPort) && configuredPort >= 0 && configuredPort <= 65535
-  ? configuredPort
-  : 5727
+export const ONEBOTS_PORT =
+  Number.isInteger(configuredPort) &&
+  configuredPort >= 0 &&
+  configuredPort <= 65535
+    ? configuredPort
+    : 5727
 
 export const ONEBOTS_PROTOCOL = 'onebot.v12'
 export const ONEBOTS_RECEIVE_MODE = 'manual'

@@ -11,16 +11,16 @@ let isShuttingDown = false
 async function checkAndPerformAutoMigration(AutoMigrationDetector) {
   try {
     const detector = new AutoMigrationDetector()
-    
+
     // 执行完整的迁移检查和处理
     const result = await detector.checkAndMigrate()
-    
+
     if (!result.success && !result.noMigrationNeeded) {
       logger.error('自动迁移失败，请手动执行迁移')
       logger.error('错误信息:', result.error)
       process.exit(1)
     }
-    
+
     if (result.noMigrationNeeded) {
       logger.debug('无需执行配置迁移，继续正常启动')
     }
@@ -37,13 +37,23 @@ async function importDependencies() {
   const { statusCheck } = await import('./lib/check.js')
   const { startServer } = await import('./lib/server/http/index.js')
   const prismaManager = (await import('./lib/database/prisma.js')).default
-  const PresetService = (await import('./lib/database/services/PresetService.js')).default
-  const SystemSettingsService = (await import('./lib/database/services/SystemSettingsService.js')).default
-  const PluginConfigService = (await import('./lib/database/services/PluginConfigService.js')).default
-  const initializeDefaults = (await import('./scripts/initialize-defaults.js')).default
-  const AutoMigrationDetector = (await import('./lib/migration/autoMigrationDetector.js')).default
-  const TaskService = (await import('./lib/database/services/TaskService.js')).default
-  
+  const PresetService = (
+    await import('./lib/database/services/PresetService.js')
+  ).default
+  const SystemSettingsService = (
+    await import('./lib/database/services/SystemSettingsService.js')
+  ).default
+  const PluginConfigService = (
+    await import('./lib/database/services/PluginConfigService.js')
+  ).default
+  const initializeDefaults = (await import('./scripts/initialize-defaults.js'))
+    .default
+  const AutoMigrationDetector = (
+    await import('./lib/migration/autoMigrationDetector.js')
+  ).default
+  const TaskService = (await import('./lib/database/services/TaskService.js'))
+    .default
+
   return {
     AutoMigrationDetector,
     PluginConfigService,
@@ -53,7 +63,7 @@ async function importDependencies() {
     initializeDefaults,
     prismaManager,
     startServer,
-    statusCheck
+    statusCheck,
   }
 }
 
@@ -61,27 +71,28 @@ async function importDependencies() {
  * 初始化数据库和服务
  */
 async function initializeDatabase(dependencies) {
-  const { 
-    prismaManager, 
-    PresetService, 
-    SystemSettingsService, 
-    PluginConfigService, 
+  const {
+    prismaManager,
+    PresetService,
+    SystemSettingsService,
+    PluginConfigService,
     initializeDefaults,
     AutoMigrationDetector,
-    TaskService
+    TaskService,
   } = dependencies
-  
+
   try {
     // 1. 执行完整初始化流程（包含环境检查和数据库自愈）
     // 必须最先执行，以确保 .env 存在、数据库目录存在且 Schema 已同步
-    const { performFullInitialization } = await import('./lib/initialization/index.js')
+    const { performFullInitialization } =
+      await import('./lib/initialization/index.js')
     await performFullInitialization()
 
     logger.debug('初始化数据库连接...')
-    
+
     // 2. 初始化 Prisma 管理器
     await prismaManager.initialize()
-    
+
     // 3. 初始化所有服务
     await PresetService.initialize()
     await SystemSettingsService.initialize()
@@ -91,8 +102,10 @@ async function initializeDatabase(dependencies) {
     // 初始化生图、搜索、识图调度服务
     try {
       const { imageService } = await import('./lib/chat/image/ImageService.js')
-      const { searchService } = await import('./lib/chat/search/SearchService.js')
-      const { visionService } = await import('./lib/chat/vision/VisionService.js')
+      const { searchService } =
+        await import('./lib/chat/search/SearchService.js')
+      const { visionService } =
+        await import('./lib/chat/vision/VisionService.js')
       await imageService.initialize()
       await searchService.initialize()
       await visionService.initialize()
@@ -100,14 +113,14 @@ async function initializeDatabase(dependencies) {
     } catch (err) {
       logger.warn('调度服务初始化失败:', err.message)
     }
-    
+
     // 4. 初始化默认配置（如果数据库中没有）
     logger.debug('初始化默认配置...')
     await initializeDefaults()
-    
+
     // 检查并执行自动迁移
     await checkAndPerformAutoMigration(AutoMigrationDetector)
-    
+
     // 重新加载内存中的配置以同步刚刚写入数据库的默认值，
     // 避免后续的状态检查重复生成访问码
     try {
@@ -117,14 +130,13 @@ async function initializeDatabase(dependencies) {
     } catch (error) {
       logger.warn('重新加载配置时发生问题，可能导致配置不同步:', error.message)
     }
-    
+
     logger.debug('数据库和服务初始化完成')
   } catch (error) {
     logger.error('数据库初始化失败:', error)
     process.exit(1)
   }
 }
-
 
 /**
  * 优雅关闭时：把 streamCache 中仍在执行中的工具调用以 failed 终态广播给对应客户端。
@@ -134,7 +146,9 @@ async function notifyInFlightInterrupted(sessions, streamCache) {
   // UserId -> 在线 client 列表（多端复用同一 userId 的池）
   const clientsByUser = new Map()
   for (const client of sessions.getAllClients()) {
-    if (!clientsByUser.has(client.id)) {clientsByUser.set(client.id, [])}
+    if (!clientsByUser.has(client.id)) {
+      clientsByUser.set(client.id, [])
+    }
     clientsByUser.get(client.id).push(client)
   }
   if (clientsByUser.size === 0) {
@@ -145,14 +159,20 @@ async function notifyInFlightInterrupted(sessions, streamCache) {
   let broadcastCount = 0
   for (const [key, messages] of streamCache.cache.entries()) {
     const separator = key.indexOf(':')
-    if (separator === -1) {continue}
+    if (separator === -1) {
+      continue
+    }
     const userId = key.slice(0, separator)
     const contactorId = key.slice(separator + 1)
     const clients = clientsByUser.get(userId)
-    if (!clients || clients.length === 0) {continue}
+    if (!clients || clients.length === 0) {
+      continue
+    }
 
     for (const item of messages) {
-      if (!item || !item.messageId) {continue}
+      if (!item || !item.messageId) {
+        continue
+      }
 
       // 找出仍处于"执行中"且没有结果的 toolCall
       const runningTools = (item.chunks || []).filter(
@@ -160,11 +180,13 @@ async function notifyInFlightInterrupted(sessions, streamCache) {
           c.type === 'toolCall' &&
           c.content &&
           ['running', 'pending', 'started'].includes(c.content.action) &&
-          !c.content.result
+          !c.content.result,
       )
-      if (runningTools.length === 0) {continue}
+      if (runningTools.length === 0) {
+        continue
+      }
 
-      const {messageId} = item
+      const { messageId } = item
       for (const client of clients) {
         // 1) 每个还在执行中的 toolCall 置为 failed 终态
         for (const toolChunk of runningTools) {
@@ -180,7 +202,7 @@ async function notifyInFlightInterrupted(sessions, streamCache) {
               metaData: { contactorId, messageId },
               type: 'toolCall',
             },
-            messageId
+            messageId,
           )
         }
         // 2) 消息整体标记为 failed（附带 metaData 供前端路由到对应联系人）
@@ -191,7 +213,7 @@ async function notifyInFlightInterrupted(sessions, streamCache) {
             message: '服务器正在关闭，请求已中断',
             metaData: { contactorId, messageId },
           },
-          messageId
+          messageId,
         )
         broadcastCount++
       }
@@ -211,21 +233,23 @@ async function gracefulShutdown(signal) {
     logger.warn('已在关闭过程中，忽略重复信号')
     return
   }
-  
+
   isShuttingDown = true
   logger.info(`收到 ${signal} 信号，开始优雅关闭...`)
-  
+
   // 设置强制关闭超时（10秒）
   const forceExitTimer = setTimeout(() => {
     logger.warn('优雅关闭超时，强制退出应用程序')
     process.exit(1)
   }, 10_000)
-  
+
   try {
     // 0. 广播中断：把仍处于执行中的 tool_call 标记为 failed 终态，避免前端 UI 永远显示"执行中"
     try {
-      const { default: shutdownSessions } = await import('./lib/server/socket.io/services/sessions.js')
-      const { default: shutdownStreamCache } = await import('./lib/server/socket.io/services/streamCache.js')
+      const { default: shutdownSessions } =
+        await import('./lib/server/socket.io/services/sessions.js')
+      const { default: shutdownStreamCache } =
+        await import('./lib/server/socket.io/services/streamCache.js')
       await notifyInFlightInterrupted(shutdownSessions, shutdownStreamCache)
     } catch (error) {
       logger.warn('广播进行中请求中断状态时出现警告:', error.message)
@@ -253,7 +277,8 @@ async function gracefulShutdown(signal) {
 
     // 1.5. 停止渠道轮询、OneBots 账号与进程内协议资源
     try {
-      const { getChannelRuntime } = await import('./lib/server/http/controllers/channelController.js')
+      const { getChannelRuntime } =
+        await import('./lib/server/http/controllers/channelController.js')
       const channelRuntime = getChannelRuntime()
       if (typeof channelRuntime?.dispose === 'function') {
         logger.info('正在关闭渠道运行时...')
@@ -263,22 +288,22 @@ async function gracefulShutdown(signal) {
     } catch (error) {
       logger.warn('渠道运行时关闭时出现警告:', error.message)
     }
-    
+
     // 2. 停止接受新连接并强制关闭现有连接
     try {
       if (httpServer && httpServer.listening) {
         logger.info('正在关闭 HTTP 服务器...')
-        
+
         // 强制关闭所有连接
         const connections = new Set()
-        
+
         httpServer.on('connection', (connection) => {
           connections.add(connection)
           connection.on('close', () => {
             connections.delete(connection)
           })
         })
-        
+
         // 先尝试优雅关闭
         const closePromise = new Promise((resolve) => {
           const timeout = setTimeout(() => {
@@ -293,7 +318,7 @@ async function gracefulShutdown(signal) {
             }
             resolve()
           }, 3000) // 3秒超时
-          
+
           httpServer.close((err) => {
             clearTimeout(timeout)
             if (err) {
@@ -309,7 +334,7 @@ async function gracefulShutdown(signal) {
             resolve()
           })
         })
-        
+
         await closePromise
       } else if (httpServer) {
         logger.info('HTTP 服务器已经关闭')
@@ -317,7 +342,7 @@ async function gracefulShutdown(signal) {
     } catch (error) {
       logger.warn('HTTP 服务器关闭时出现警告:', error.message)
     }
-    
+
     // 3. 关闭数据库连接
     try {
       logger.info('正在关闭数据库连接...')
@@ -326,10 +351,10 @@ async function gracefulShutdown(signal) {
     } catch (error) {
       logger.warn('数据库关闭时出现警告:', error.message)
     }
-    
+
     // 清除强制退出定时器
     clearTimeout(forceExitTimer)
-    
+
     logger.info('应用程序已优雅关闭')
     process.exit(0)
   } catch (error) {
@@ -343,35 +368,55 @@ async function gracefulShutdown(signal) {
 async function startApp() {
   try {
     // 自动初始化：从 lib/initialization 导入并执行
-    const { performFullInitialization } = await import('./lib/initialization/index.js')
+    const { performFullInitialization } =
+      await import('./lib/initialization/index.js')
     await performFullInitialization()
-    
+
     // 动态导入所有依赖
     const dependencies = await importDependencies()
-    
+
     // 初始化数据库
     await initializeDatabase(dependencies)
-    
+
     // 等待配置初始化完成
     const config = (await import('./lib/config.js')).default
     await config._waitForInit()
-    
+
     // 系统状态检查
     await dependencies.statusCheck()
-    
+
     // 初始化定时任务调度器
     const taskScheduler = (await import('./lib/cron.js')).default
-    const { initChannelController, getChannelRuntime } = await import('./lib/server/http/controllers/channelController.js')
+    const { initChannelController, getChannelRuntime } =
+      await import('./lib/server/http/controllers/channelController.js')
     initChannelController({ startTriggers: false }) // 确保 deps 已初始化（幂等）
 
     const isolatedTest = process.env.MIOCHAT_TEST_ISOLATED === '1'
 
     // 自动恢复上次 running 状态的渠道（持久化开关）
     const channelRuntime = getChannelRuntime()
+    const { initAgentController } =
+      await import('./lib/server/http/controllers/agentController.js')
+    initAgentController({ runtime: channelRuntime })
+
+    // 自动清理/标记上次未完成的 SubAgent 运行状态（避免进程重启后残留僵尸任务）
+    try {
+      const { getSubAgentRuntime } = await import('./lib/subagents/index.js')
+      const recovered = await getSubAgentRuntime().runService.recoverStaleRuns()
+      if (recovered.length > 0) {
+        logger.info(
+          `[SubAgent] 已将 ${recovered.length} 个进行中的僵尸子任务标记为中断 (interrupted)`,
+        )
+      }
+    } catch (e) {
+      logger.warn('[SubAgent] 恢复中断的子任务状态失败:', e.message)
+    }
+
     if (!isolatedTest) {
       try {
         // 先迁移并恢复原生 iLink 渠道；显式 OneBots 渠道仍可按需恢复。
-        if (typeof channelRuntime.init === 'function') await channelRuntime.init()
+        if (typeof channelRuntime.init === 'function')
+          await channelRuntime.init()
       } catch (e) {
         logger.warn('[ChannelRuntime] 自动恢复渠道时出错:', e.message)
       }
@@ -384,11 +429,10 @@ async function startApp() {
     } else {
       logger.info('[Test] 隔离测试模式：跳过渠道恢复、哨兵与定时任务')
     }
-    
+
     // 启动服务器并保存实例
     httpServer = await dependencies.startServer()
 
-    
     logger.info('应用启动完成')
   } catch (error) {
     logger.error('应用启动失败:', error)

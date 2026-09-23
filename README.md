@@ -1,8 +1,12 @@
 <div align="center">
 
+<h1>MioChat</h1>
+
 <img src="https://s3.krumio.com/file/web/eadf69/miochat-logo.gif" width="600" alt="MioChat Logo" />
 
-**不仅仅是对话转发，更是下一代 Agent 操作系统**
+**MioChat —— 不仅仅是对话转发，更是下一代 Agent 操作系统**
+
+开源的、模型无关的 Agent 运行时：**Agent / Session / SubAgent 三级上下文模型**、V3 Hook 切面、MCP 与 Skills 双标准工具生态、多渠道接入，以及可无人值守长跑的定时自治。
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.19.0-brightgreen.svg)](https://nodejs.org/)
@@ -25,7 +29,7 @@ Mio-Chat 是一个由多个模块构成的完整 Agent 生态系统：
 | :--- | :--- | :--- |
 | **Backend** | [Pretend-to/mio-chat-backend](https://github.com/Pretend-to/mio-chat-backend) | **(当前仓库)** 核心运行环境、Hook 架构、插件系统 |
 | **Frontend** | [Pretend-to/mio-chat-frontend](https://github.com/Pretend-to/mio-chat-frontend) | 基于 Vue 3 + Element Plus 的沉浸式 Agent 交互界面 |
-| **Renderer** | [Pretend-to/mio-markdown](https://github.com/Pretend-to/mio-markdown) | 专为 AI 深度定制的 Markdown 渲染引擎，支持 Artifacts |
+| **Renderer** | [Pretend-to/mio-previewer](https://github.com/Pretend-to/mio-previewer) | 专为 AI 深度定制的 Markdown 渲染引擎，支持 Artifacts |
 | **Plugins** | [Pretend-to/awesome-miochat-plugins](https://github.com/Pretend-to/awesome-miochat-plugins) | 官方及社区维护的插件、Skill、Hook 集合仓库 |
 
 ## 为什么做它
@@ -35,7 +39,7 @@ Mio-Chat 是一个由多个模块构成的完整 Agent 生态系统：
 
 传统的 AI 对话平台仅仅是简单的"API 搬运工"。**MioChat** 是专为复杂生产环境设计的 **Agent 操作系统**。它通过精密的上下文管理、双向安全授权、Multi-Agent 多智能体协同和面向切面的 Hook 拦截机制，让 AI 能够真正地、自主地、安全可控地操作物理世界。
 
-大家都在用的核心 agent 循环只有五行 ReAct。可感知的差异全部发生在循环**之外**：上下文管理、权限、工具契约、流式可靠性、记忆。MioChat 想做的，是把这些层全部握在自己手里——模型无关、自托管、中间没有任何黑盒。前后端两个仓库约 10 万行代码，正是"能演示"与"能无人值守跑任务而不丢上下文、不丢消息、不丢信任"之间的全部差距。
+大家都在用的核心 agent 循环只有五行 ReAct。可感知的差异全部发生在循环**之外**：上下文管理、权限、工具契约、流式可靠性、记忆。MioChat 想做的，是把这些层全部握在自己手里——模型无关、自托管、中间没有任何黑盒。前后端两个仓库合计约 17 万行代码（含测试，不含构建产物），正是"能演示"与"能无人值守跑任务而不丢上下文、不丢消息、不丢信任"之间的全部差距。
 
 </details>
 
@@ -73,6 +77,14 @@ Mio-Chat 是一个由多个模块构成的完整 Agent 生态系统：
 - **零停机动态热插拔 (Zero-Downtime Hot-Reload)**：无需重启后端服务即可动态加载、卸载或更新插件代码；前端支持 **Tools Manager**，允许在特定会话中按需启用或禁用具体工具。
 - **三层生态深度融合**：全面兼容开放标准 **Agent Skills** 专家经验（自动扫描 `.claude/` / `.cursor/` / `.gemini/`）+ **MCP (Model Context Protocol)** 协议接入 + 原生高响应 Native Tools。
 
+### 🤖 OneBot (QQ) 接入
+
+把 QQ 生态接进同一套 Agent 运行时。
+
+- **主动长连接与状态可视化**：后端按配置直接连接 OneBot 应用端（go-cqhttp / NapCat / Lagrange 等），管理面板实时展示连接阶段（已连接 / 连接中 / 未连接 / 配置不完整）、上次发起连接的时间与结果、尝试次数与失败原因。
+- **保存即生效**：修改配置保存后立即按新配置重建连接（旧连接优雅关闭），也可在面板上手动重连。
+- **消息贯通**：群聊 / 私聊消息、图片、合并转发、撤回等事件与 Web 端共用同一套联系人、消息链与工具体系。
+
 ### 📱 全平台多渠道接入 (Channels - Beta 测试阶段)
 让 Agent 无缝融入微信等日常即时通讯工具，赋予专属灵魂与全模态感知。*当前处于 Beta 测试阶段，首发完整对接微信 (WeChat iLink Bot)，后续将陆续扩展更多渠道平台。*
 
@@ -85,6 +97,37 @@ Mio-Chat 是一个由多个模块构成的完整 Agent 生态系统：
 - **独立灵魂与记忆持久化**：每个渠道独立绑定 AgentId，拥有专属灵魂设定（Soul）、长期记忆（GlobalMem）、会话结晶（Crystal），并支持 `/soul`、`/model`、`/sessions` 等全套 Slash 交互命令。
 
 <img src="./docs/assets/screenshots/channels.png" width="800" alt="MioChat 微信渠道管理与多渠道接入界面" />
+
+### 🧬 Agent · Session · SubAgent：三级上下文模型
+把"一个机器人绑一个窗口"升级为可编排、可隔离、可长跑的智能体运行时。
+
+**① Agent 是主体，Channel 只是入口**
+
+- Agent 拥有名称、头像、人格（Soul）、模型、工具、技能与长期记忆；Message、Chunk、ToolCall、Crystal、PendingMemory 全部通过 Session 归属到 Agent。
+- Channel 只保存平台、账号凭据、连接状态与协议能力，**不拥有 Agent、不拥有模型、不拥有人格、也不拥有聊天记录**。
+- 二者是**多对多**：同一个 Agent 可以同时出现在 Web、微信等多个入口；同一个入口也可以挂载多个 Agent —— 这正是下面「多 Agent 混合群组」的地基。
+
+**② Session 是上下文单位，子 Session 构成一棵树**
+
+一个 Agent 可以有多个 Session，Session 通过 `parentSessionId` 派生出有向树。子 Session 承载 SubAgent 与任意隔离执行上下文，与父 Session 共享同一个 Agent 与 Channel，但**各自独立持有** MessageChain、运行 FIFO 与锁、LLM 调用历史、工具调用记录、超时与取消信号。
+
+```text
+Agent
+└── Session（主）              ← 用户可见的主消息链
+    ├── Session（子）：行情调研   ← 自有上下文，不占主窗口
+    │   └── Run: 09-05 / 09-06 / 09-07
+    └── Session（子）：日报编辑
+        └── Run: 09-05 / 09-06 / 09-07
+```
+
+**③ SubAgent 是两级编排：RunGroup / Run**
+
+- **RunGroup** 是一次编排事务，**Run** 是其中单个执行单元；多个 Run 默认并行，用 `dependsOn` 声明 DAG 依赖即可串行。
+- 每个 Run 使用独立 child Session，**不会创建永久 Agent**；工具权限是当前 Agent 有效工具集的**子集，并在创建 Run 时冻结**。
+- `sessionPolicy` 控制上下文延续：`fresh` 每次全新隔离；`persistent` 复用同一个 child Session，后续用 `continue` 把新一轮追加在尾部 —— 长周期任务因此能"越跑越懂"。
+- **完成后只唤醒主 Agent 并汇报 groupId / runId，不注入结果正文**；主 Agent 主动 `read_result` 拉取。父 Session 默认只看到最终摘要或产物引用，看不到子任务的搜索与工具调用全过程。
+
+**为什么这样切**：主 Session 的消息链保持稳定，才能持续命中 Prompt Cache；重活与脏活留在子上下文中，主窗口不被噪声挤占 —— 这是"能演示"与"能无人值守跑一周而不丢上下文"之间的差别。
 
 ### 🧠 多 Agent 混合群组
 打破单 Agent 孤岛，实现异构 LLM 与多元人格的集群智慧。
@@ -123,6 +166,24 @@ Mio-Chat 是一个由多个模块构成的完整 Agent 生态系统：
 - **Artifacts 画板交互**：结合 `mio-previewer`，实现代码、HTML 网页、SVG 矢量图、Mermaid 流程图及动态 UI 组件的独立画板预览与分屏交互。
 - **Tools Manager 动态调配**：前端支持在会话中实时感知与开关指定的工具或插件组，随心所欲调配 Agent 技能库。
 
+## 类型与规模
+
+> 数字取自当前仓库，改代码时顺手同步这一节。开发约定与红线见 [`AGENTS.md`](./AGENTS.md)。
+
+| 维度 | 数量 | 说明 |
+| :--- | :--- | :--- |
+| 内置插件 | 9 | `lib/plugins/`：ai / agent-manager / anyui / config / edge-tts / file-editor / mcp / terminal-pty / web |
+| 独立包插件 | 3 | `plugins/`（pnpm workspace）：custom / email-plugin / note-plugin |
+| 声明式工具 | 43 | `lib/plugins/*/tools/`；MCP 动态工具与 Skill 不计在内 |
+| Hook 挂载点 | 16 | 其中内置 hook 9 个（`lib/hooks/builtins/`） |
+| LLM 适配器实现 | 7 | openai / openai-responses / anthropic / gemini / gemini-oauth / xai / agent-platform（内含多家 OpenAI 兼容厂商） |
+| 搜索适配器 | 5 | baidu / bing / duckduckgo / tavily / volcengine，另有浏览器桥（`browserBridge`） |
+| 图片生成适配器 | 6 | openai / google / sd-webui / siliconflow / tukuai / volcengine |
+| 渠道适配器 | 1 | 微信 iLink（native + onebots 双运行时），注册表按定义扩展 |
+| Prisma 模型 | 40 | `prisma/schema.prisma` |
+| HTTP 路由 | 126 | `lib/server/http/index.js` |
+| Socket 协议 | 4 | `llm` / `onebot` / `system` / `logs` |
+
 ## Hooks 机制
 
 Mio-Chat V3 采用面向切面编程的设计理念。通过一系列生命周期钩子，你可以精准控制 Agent 的每一步操作。**7 个核心挂载点**（全系统共 16 个）：
@@ -137,7 +198,7 @@ Mio-Chat V3 采用面向切面编程的设计理念。通过一系列生命周�
 | `LLM_TOOL_RESULTS` | 工具调用审计 | 批量工具执行完成后记录工具参数与出参详情 |
 | `TOOL_NOT_FOUND` | 智能纠错 | 剥离 MD5 后缀自动寻址、用户引导提示 |
 
-另有 10 个内置 hook（审计、限流、响应长度上限、权限校验、模型权限、参数校验…）。所有工具都走 `MioFunction.run()`——带守卫、内容哈希命名、超时兜底，且该方法是 final，**无法通过子类覆写绕过校验**。详情参考：[📖 Hooks 开发指南](./docs/core/hooks.md)。
+另有 9 个内置 hook（审计、限流、响应长度上限、权限校验、模型权限、参数校验…）。所有工具都走 `MioFunction.run()`——带守卫、内容哈希命名、超时兜底，且该方法是 final，**无法通过子类覆写绕过校验**。详情参考：[📖 Hooks 开发指南](./docs/core/hooks.md)。
 
 ## 前端与插件
 
@@ -165,15 +226,13 @@ cd mio-chat-frontend && pnpm install && pnpm dev
 
 ## 测试
 
-日常开发请运行不依赖外部服务的单元测试：
-
 ```bash
-pnpm test:unit
+pnpm test:unit         # 日常开发：单元测试（隔离运行，不动你的真库）
+pnpm test:integration  # 集成 / OneBot 用例，需后端跑在 http://localhost:3080
+pnpm test              # 完整套件
 ```
 
-`pnpm test` 运行 OneBot API 集成测试。执行前需要先启动 MioChat 后端（默认地址为
-`http://localhost:3080`），并确保 OneBot 相关配置可用。测试其他实例时，可通过
-`BASE_URL` 和 `ADMIN_CODE` 环境变量指定服务地址和管理员访问码。
+`pnpm test:unit` 会把单测跑在一个隔离工作区里，并把当前数据库的副本交给测试进程 —— **不会污染你的 `data/app.db`**。集成用例默认访问 `http://localhost:3080`，可用 `BASE_URL` 与 `ADMIN_CODE` 覆盖目标地址与管理码。
 
 ## 文档
 

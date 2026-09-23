@@ -240,8 +240,9 @@ constructor(runtime) {
       throw new Error('添加 LLM 实例响应失败')
     }
 
-    const {instanceIndex} = data.data
-    logger.info(`✓ LLM 实例添加成功，索引: ${instanceIndex}`)
+    const {instanceId} = data.data
+    if (!instanceId) throw new Error('添加响应缺少稳定实例 ID')
+    logger.info(`✓ LLM 实例添加成功，ID: ${instanceId}`)
 
     // 测试更新 LLM 实例
     const updateConfig = {
@@ -249,7 +250,7 @@ constructor(runtime) {
       name: `更新测试实例_${Date.now()}`
     }
 
-    response = await axios.put(`${this.baseURL}/api/config/llm/${adapterType}/${instanceIndex}`, updateConfig, {
+    response = await axios.put(`${this.baseURL}/api/config/llm/${adapterType}/${instanceId}`, updateConfig, {
       headers: this.getAuthHeaders()
     })
 
@@ -265,7 +266,7 @@ constructor(runtime) {
     logger.info('✓ LLM 实例更新成功')
 
     // 测试删除 LLM 实例
-    response = await axios.delete(`${this.baseURL}/api/config/llm/${adapterType}/${instanceIndex}`, {
+    response = await axios.delete(`${this.baseURL}/api/config/llm/${adapterType}/${instanceId}`, {
       headers: this.getAuthHeaders()
     })
 

@@ -11,9 +11,17 @@ import {
 
 function mediaSegments(msg) {
   return contentSegments(msg)
-    .map((segment, index) => ({ segment, index, type: segmentType(segment), data: segmentData(segment) }))
-    .filter(({ type, data }) =>
-      (type === 'image' || type === 'file') && sourceFromData(data) != null && sourceFromData(data) !== '',
+    .map((segment, index) => ({
+      segment,
+      index,
+      type: segmentType(segment),
+      data: segmentData(segment),
+    }))
+    .filter(
+      ({ type, data }) =>
+        (type === 'image' || type === 'file') &&
+        sourceFromData(data) != null &&
+        sourceFromData(data) !== '',
     )
 }
 
@@ -27,15 +35,19 @@ function rawMediaItem(item, type) {
 function sameMediaHandle(data, rawMedia) {
   if (!rawMedia) return false
   const fileId = data.file_id ?? data.fileId
-  return (fileId != null && fileId === rawMedia.encrypt_query_param) ||
+  return (
+    (fileId != null && fileId === rawMedia.encrypt_query_param) ||
     (data.url != null && data.url === rawMedia.full_url)
+  )
 }
 
 function reliableItemIndexes(msg, segments) {
   const explicit = segments.map(({ data }) => data.item_index ?? data.itemIndex)
   const rawItems = msg?.raw_event?.item_list
   if (!Array.isArray(rawItems)) {
-    return explicit.every(index => Number.isSafeInteger(index) && index >= 0) ? explicit : null
+    return explicit.every((index) => Number.isSafeInteger(index) && index >= 0)
+      ? explicit
+      : null
   }
   const used = new Set()
   const indexes = []
@@ -43,14 +55,18 @@ function reliableItemIndexes(msg, segments) {
     const { type, data } = segments[i]
     const candidate = explicit[i]
     if (Number.isSafeInteger(candidate) && candidate >= 0) {
-      if (!rawMediaItem(rawItems[candidate], type) || used.has(candidate)) return null
+      if (!rawMediaItem(rawItems[candidate], type) || used.has(candidate))
+        return null
       used.add(candidate)
       indexes.push(candidate)
       continue
     }
     const matches = rawItems
       .map((item, index) => ({ item, index }))
-      .filter(({ item, index }) => !used.has(index) && sameMediaHandle(data, rawMediaItem(item, type)))
+      .filter(
+        ({ item, index }) =>
+          !used.has(index) && sameMediaHandle(data, rawMediaItem(item, type)),
+      )
     if (matches.length !== 1) return null
     used.add(matches[0].index)
     indexes.push(matches[0].index)
@@ -60,7 +76,12 @@ function reliableItemIndexes(msg, segments) {
 
 function rawMessageId(msg) {
   const raw = msg?.raw_event
-  const value = raw?.message_id ?? raw?.seq ?? raw?.client_id ?? msg?.message_id ?? msg?.messageId
+  const value =
+    raw?.message_id ??
+    raw?.seq ??
+    raw?.client_id ??
+    msg?.message_id ??
+    msg?.messageId
   return value == null || value === '' ? null : String(value)
 }
 
@@ -70,7 +91,11 @@ export class WeixinIlinkChannel extends OneBotChannel {
   }
 
   extractContextToken(msg) {
-    return super.extractContextToken(msg) ?? msg.extensions?.wechat_clawbot?.context_token ?? null
+    return (
+      super.extractContextToken(msg) ??
+      msg.extensions?.wechat_clawbot?.context_token ??
+      null
+    )
   }
 
   resolveInboundMedia(msg, extracted) {
@@ -92,7 +117,9 @@ export class WeixinIlinkChannel extends OneBotChannel {
     }
     const indexes = reliableItemIndexes(msg, segments)
     if (segments.length > 1 && !indexes) {
-      this.log?.warn?.('[weixin-ilink] 多媒体消息缺少可靠 item_index，已拒绝下载')
+      this.log?.warn?.(
+        '[weixin-ilink] 多媒体消息缺少可靠 item_index，已拒绝下载',
+      )
       return { files: [], images: [] }
     }
     if (typeof this.client?.call !== 'function') {
@@ -108,27 +135,36 @@ export class WeixinIlinkChannel extends OneBotChannel {
       if (indexes?.[i] != null) params.item_index = indexes[i]
       try {
         const response = await this.client.call('download_media', params)
-        const result = response?.data && typeof response.data === 'object' ? response.data : response
+        const result =
+          response?.data && typeof response.data === 'object'
+            ? response.data
+            : response
         if (typeof result?.base64 !== 'string' || !result.base64.trim()) {
           throw new Error('download_media 未返回有效 Base64')
         }
         const buffer = Buffer.from(result.base64, 'base64')
         if (buffer.length === 0) throw new Error('download_media 返回空媒体')
         if (type === 'image') {
-          const localUrl = typeof this.bufferToImageUrl === 'function'
-            ? await this.bufferToImageUrl(buffer)
-            : await bufferToImageUrl(this.baseUrl || '', buffer)
+          const localUrl =
+            typeof this.bufferToImageUrl === 'function'
+              ? await this.bufferToImageUrl(buffer)
+              : await bufferToImageUrl(this.baseUrl || '', buffer)
           if (localUrl) images.push(localUrl)
         } else {
-          const fileName = result.file_name || result.fileName ||
+          const fileName =
+            result.file_name ||
+            result.fileName ||
             fileNameFromData(data, sourceFromData(data))
           const stored = await storageService.upload(buffer, fileName, 'file', {
-            contentType: result.mime_type || result.mimeType || 'application/octet-stream',
+            contentType:
+              result.mime_type || result.mimeType || 'application/octet-stream',
           })
           if (stored?.url) files.push({ name: fileName, url: stored.url })
         }
       } catch (error) {
-        this.log?.warn?.(`[weixin-ilink] 媒体下载解密失败: ${error?.message || error}`)
+        this.log?.warn?.(
+          `[weixin-ilink] 媒体下载解密失败: ${error?.message || error}`,
+        )
       }
     }
     return { files, images }

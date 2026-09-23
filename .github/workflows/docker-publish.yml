@@ -2,7 +2,7 @@ name: Build and Publish Docker Image
 
 on:
   push:
-    branches: [ production ]
+    branches: [production]
     paths:
       - 'Dockerfile'
       - 'package.json'
@@ -13,7 +13,7 @@ on:
       - 'config/**'
       - '.github/workflows/docker-publish.yml'
   pull_request:
-    branches: [ production ]
+    branches: [production]
     paths:
       - 'Dockerfile'
       - 'package.json'
@@ -97,4 +97,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          

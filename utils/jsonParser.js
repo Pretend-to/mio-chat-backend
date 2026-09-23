@@ -20,8 +20,55 @@ export function parseConcatenatedJson(input) {
   // 1. 尝试直接标准 JSON 解析
   try {
     return JSON.parse(trimmed)
-  } catch (e) {
+  } catch {
     // 存在紧密拼接或格式微瑕，继续深入流式分词提取
+  }
+
+  // Some models terminate a nested tool argument immediately after closing
+  // the inner object, leaving only the outer wrapper unclosed. Repair only
+  // that narrow case: strings must be complete and every observed closer must
+  // match its opener. This keeps large HTML/code payloads as normal JSON and
+  // avoids introducing a second string-encoded argument protocol.
+  const stack = []
+  let repairInString = false
+  let repairEscape = false
+  let repairable = true
+  for (const char of trimmed) {
+    if (repairEscape) {
+      repairEscape = false
+      continue
+    }
+    if (char === '\\' && repairInString) {
+      repairEscape = true
+      continue
+    }
+    if (char === '"') {
+      repairInString = !repairInString
+      continue
+    }
+    if (repairInString) continue
+    if (char === '{' || char === '[') {
+      stack.push(char)
+      continue
+    }
+    if (char === '}' || char === ']') {
+      const expected = char === '}' ? '{' : '['
+      if (stack.pop() !== expected) {
+        repairable = false
+        break
+      }
+    }
+  }
+  if (repairable && !repairInString && stack.length > 0) {
+    const suffix = stack
+      .toReversed()
+      .map((char) => (char === '{' ? '}' : ']'))
+      .join('')
+    try {
+      return JSON.parse(`${trimmed}${suffix}`)
+    } catch {
+      // Continue with concatenated-JSON extraction.
+    }
   }
 
   // 2. 流式括号平衡提取所有顶层独立 JSON 对象
@@ -61,7 +108,7 @@ export function parseConcatenatedJson(input) {
           const chunk = trimmed.substring(startIndex, i + 1)
           try {
             extracted.push(JSON.parse(chunk))
-          } catch (err) {
+          } catch {
             // ignore malformed chunk
           }
           startIndex = -1
@@ -80,14 +127,14 @@ export function parseConcatenatedJson(input) {
   try {
     const arrayWrapped = `[${trimmed.replace(/}\s*\{/g, '},{')}]`
     return JSON.parse(arrayWrapped)
-  } catch (e) {
+  } catch {
     // 4. Fallback: 尝试提取最外层第一个可用的 `{...}`
     const firstBrace = trimmed.indexOf('{')
     const lastBrace = trimmed.lastIndexOf('}')
     if (firstBrace !== -1 && lastBrace > firstBrace) {
       try {
         return JSON.parse(trimmed.substring(firstBrace, lastBrace + 1))
-      } catch (err) {}
+      } catch {}
     }
   }
 

@@ -10,20 +10,18 @@ const NATIVE_METADATA = Object.freeze({
 })
 
 function normalized(value) {
-  return String(value || '').trim().toLowerCase()
+  return String(value || '')
+    .trim()
+    .toLowerCase()
 }
 
 export function isIlinkChannel(channel = {}) {
-  const values = [
-    channel.type,
-    channel.adapterId,
-    channel.platform,
-  ].map(normalized)
-  return values.some(value => [
-    'wechat',
-    'wechat-clawbot',
-    'weixin-ilink',
-  ].includes(value))
+  const values = [channel.type, channel.adapterId, channel.platform].map(
+    normalized,
+  )
+  return values.some((value) =>
+    ['wechat', 'wechat-clawbot', 'weixin-ilink'].includes(value),
+  )
 }
 
 export function nativeIlinkMetadata() {
@@ -39,9 +37,10 @@ export function oneBotsSessionPath(channelId, cwd = process.cwd()) {
   )
 }
 
-export async function readOneBotsIlinkSession(channelId, {
-  cwd = process.cwd(),
-} = {}) {
+export async function readOneBotsIlinkSession(
+  channelId,
+  { cwd = process.cwd() } = {},
+) {
   const file = oneBotsSessionPath(channelId, cwd)
   try {
     const value = JSON.parse(await fs.promises.readFile(file, 'utf8'))
@@ -49,7 +48,8 @@ export async function readOneBotsIlinkSession(channelId, {
     return {
       accountId: typeof value.accountId === 'string' ? value.accountId : '',
       contextTokens:
-        value.contextTokens && typeof value.contextTokens === 'object' &&
+        value.contextTokens &&
+        typeof value.contextTokens === 'object' &&
         !Array.isArray(value.contextTokens)
           ? value.contextTokens
           : {},
@@ -72,8 +72,10 @@ function migrationPatch(channel, session) {
   if (!channel.token && session?.token) patch.token = session.token
   if (!channel.botId && session?.accountId) patch.botId = session.accountId
   const botId = patch.botId || channel.botId || session?.accountId || ''
-  const validUserId = value => Boolean(value) &&
-    !String(value).endsWith('@im.bot') && String(value) !== String(botId)
+  const validUserId = (value) =>
+    Boolean(value) &&
+    !String(value).endsWith('@im.bot') &&
+    String(value) !== String(botId)
   if (!validUserId(channel.userId)) {
     patch.userId = validUserId(session?.userId) ? session.userId : ''
   }
@@ -129,12 +131,15 @@ export async function migrateOneBotsIlinkToNative({
         }
       }
 
-      const userId = Object.hasOwn(patch, 'userId') ? patch.userId : channel.userId
+      const userId = Object.hasOwn(patch, 'userId')
+        ? patch.userId
+        : channel.userId
       const latestContextToken = userId && session?.contextTokens?.[userId]
       if (latestContextToken && typeof createMemory === 'function') {
         const memory = await createMemory(channel.agentId || 'wechat-master')
         const current = await memory.getAgentMeta('latestContextToken', null)
-        if (!current) await memory.setAgentMeta('latestContextToken', latestContextToken)
+        if (!current)
+          await memory.setAgentMeta('latestContextToken', latestContextToken)
       }
     } catch (error) {
       result.failed += 1
@@ -147,7 +152,7 @@ export async function migrateOneBotsIlinkToNative({
   if (result.migrated > 0) {
     logger.info?.(
       `[ChannelMigration] 已将 ${result.migrated} 个微信 iLink 实例切换到原生适配器` +
-      `（恢复凭据 ${result.recoveredCredentials} 个，失败 ${result.failed} 个）`,
+        `（恢复凭据 ${result.recoveredCredentials} 个，失败 ${result.failed} 个）`,
     )
   }
   return result

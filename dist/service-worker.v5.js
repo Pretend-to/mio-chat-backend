@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v20";
+const CACHE_VERSION = "v22";
 const SHELL_CACHE = `mio-shell-${CACHE_VERSION}`;
 const ASSET_CACHE = `mio-assets-${CACHE_VERSION}`;
 const MIO_CACHE_PREFIX = "mio-";
@@ -26,19 +26,14 @@ async function fetchAndUpdateShell(request) {
 }
 
 async function handleNavigation(event) {
-  const cache = await caches.open(SHELL_CACHE);
-  const cached =
-    (await cache.match(event.request)) || (await cache.match(APP_SHELL_URL));
-
-  if (cached) {
-    event.waitUntil(fetchAndUpdateShell(event.request).catch(() => undefined));
-    return cached;
-  }
-
+  // network-first：每次导航都先拿最新 shell（离线再回落缓存）。
+  // 曾经的 cache-first 会让「只被恢复、不重新导航」的移动端 PWA 永远停在旧 shell。
   try {
     return await fetchAndUpdateShell(event.request);
   } catch (error) {
-    const fallback = await cache.match(APP_SHELL_URL);
+    const cache = await caches.open(SHELL_CACHE);
+    const fallback =
+      (await cache.match(event.request)) || (await cache.match(APP_SHELL_URL));
     if (fallback) return fallback;
     throw error;
   }
@@ -135,9 +130,12 @@ self.addEventListener("fetch", (event) => {
   }
 
   // Network traffic must never wait for cache initialization or cache I/O.
+  // File storage (/f/), plugins (/p/), API, and WebSocket must bypass Service Worker.
   if (
     url.pathname.startsWith("/api/") ||
-    url.pathname.startsWith("/socket.io/")
+    url.pathname.startsWith("/socket.io/") ||
+    url.pathname.startsWith("/f/") ||
+    url.pathname.startsWith("/p/")
   ) {
     return;
   }

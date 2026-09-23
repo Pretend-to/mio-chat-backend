@@ -387,16 +387,14 @@ test('Gemini Adapter', async (t) => {
       base_url: 'https://generativelanguage.googleapis.com'
     });
 
-    // Test 1: extraSettings.gemini.internalTools.google_search: true
+    // Test 1: extraSettings.internalTools.google_search: true
     const body1 = {
       messages: [{ content: 'hello', role: 'user' }],
       settings: {
         base: { model: 'gemini-2.5-flash', stream: true },
         chatParams: {},
         extraSettings: {
-          gemini: {
-            internalTools: { google_search: true }
-          }
+          internalTools: { google_search: true }
         },
         toolCallSettings: { mode: 'AUTO', tools: [] }
       }

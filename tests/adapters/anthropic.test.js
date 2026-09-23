@@ -11,7 +11,7 @@ test('Anthropic Adapter - Basic Integration & Metadata', async (_t) => {
   assert.ok(metadata.supportedFeatures.includes('streaming'));
   assert.ok(metadata.supportedFeatures.includes('function_calling'));
   assert.ok(metadata.supportedFeatures.includes('vision'));
-  assert.ok(metadata.extraSettingsSchema?.anthropic?.web_search, 'web_search should be in extraSettingsSchema');
+  assert.ok(metadata.extraSettingsSchema?.web_search, 'web_search should be in extraSettingsSchema');
 
   const adapter = new AnthropicAdapter({
     api_key: 'sk-mock-key',
@@ -19,21 +19,21 @@ test('Anthropic Adapter - Basic Integration & Metadata', async (_t) => {
   });
   assert.strictEqual(adapter.provider, 'anthropic');
 
-  // Test web_search tool injection when enabled in extraSettings
-  const bodyWithSearch = {
+  // Test web_search tool injection when enabled in flat extraSettings
+  const bodyWithFlatSearch = {
     messages: [{ content: 'hello', role: 'user' }],
     settings: {
       base: { model: 'claude-3-5-sonnet-20241022', stream: true },
       chatParams: {},
       extraSettings: {
-        anthropic: { web_search: { enable: true } }
+        web_search: { enable: true }
       },
       toolCallSettings: { mode: 'AUTO', tools: [] }
     }
   };
-  const preparedSearch = await adapter._prepareChatBody(bodyWithSearch);
-  assert.ok(Array.isArray(preparedSearch.tools));
-  assert.ok(preparedSearch.tools.some((t) => t.name === 'web_search'));
+  const preparedFlatSearch = await adapter._prepareChatBody(bodyWithFlatSearch);
+  assert.ok(Array.isArray(preparedFlatSearch.tools));
+  assert.ok(preparedFlatSearch.tools.some((t) => t.name === 'web_search'));
 });
 
 test('Anthropic Adapter - Message Conversions & Caching', async (_t) => {

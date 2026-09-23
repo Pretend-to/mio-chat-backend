@@ -11,7 +11,7 @@ test('ChannelStore 渠道配置持久化', async () => {
 
   await test('默认字段保持平台无关，token 不明文返回', async () => {
     const c = await store.create({ name: '我的微信' })
-    assert.strictEqual(c.agentId, 'channel-master')
+    assert.strictEqual(c.agentId, undefined)
     assert.strictEqual(c.type, 'channel')
     assert.strictEqual(c.adapterId, '')
     assert.strictEqual(c.driver, '')
