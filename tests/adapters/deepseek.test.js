@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import './mock-env.js';
 import { runGenericAdapterTests } from './test-suite.js';
-import DeepSeekAdapter from '../../lib/chat/llm/adapters/implementations/deepseek.js';
+import { getAdapterClass } from '../../lib/chat/llm/adapters/registry.js';
+
+const DeepSeekAdapter = await getAdapterClass('deepseek');
 
 test('DeepSeek Adapter - Chat Body Preparation', async (_t) => {
   const config = {

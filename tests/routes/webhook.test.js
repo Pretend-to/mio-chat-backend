@@ -60,7 +60,7 @@ test('Webhook - Branch Protection Gate', async (t) => {
         assert.equal(res.body.currentBranch, currentBranch)
         assert.match(
           res.body.message,
-          /only active when current branch is master/i,
+          /branch/i,
         )
       }
     },

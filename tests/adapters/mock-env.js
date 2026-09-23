@@ -9,6 +9,7 @@ prismaManager.getClient = () => (
     systemSetting: {
       findMany: async () => [],
       findUnique: async () => null,
+      upsert: async (_args) => ({ id: 1 }),
     },
     pluginConfig: {
       findMany: async () => [],
@@ -44,6 +45,7 @@ global.logger = {
 global.middleware = {
   llm: {
     getLLMTools: (tools) => tools.map(t => ({ description: t, name: t, parameters: {} })),
+    getModelList: () => ({}),
     runTool: async (toolCallData) => (
       {
         call: toolCallData,

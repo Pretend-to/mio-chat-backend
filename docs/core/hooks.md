@@ -132,10 +132,8 @@ export default class MyAuditHook extends BaseHook {
 | :--- | :--- | :--- |
 | `ModelPermissionHook` | `LLM_BEFORE_CHAT` | 游客/管理员的模型访问权限校验（管理员直通，游客走白名单） |
 | `PresetHistoryHook` | `LLM_BEFORE_CHAT` | 合并预设的 System Prompt 与引导历史到消息链 |
-| `SkillCatalogHook` | `LLM_BEFORE_CHAT` | 动态向 Prompt 注入 Skill 技能目录（`<skill_registry>`） |
 | `checkPermission` | `TOOL_BEFORE_EXECUTE` | 工具执行前的权限/鉴权检查 |
 | `validateParams` | `TOOL_BEFORE_EXECUTE` | 基于 JSON Schema 的工具参数强校验 |
-| `ToolResolutionHook` | `TOOL_NOT_FOUND` | 工具名 MD5 纠错与引导提示 |
 | `ToolResponseLimitHook` | `TOOL_AFTER_EXECUTE` | 工具响应体大小限制与截断 |
 | `AuditHook` | `LLM_TOOL_RESULTS` 等 | 内存级的全量用量统计（Token/工具频次） |
 | `DatabaseAuditHook` | `LLM_TOOL_RESULTS` | 将用量审计数据异步写入数据库 |

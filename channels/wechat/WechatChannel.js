@@ -23,6 +23,7 @@ import {
 } from './msgHelper.js'
 import { bufferToImageUrl } from '../../utils/imgTools.js'
 import storageService from '../../lib/storage/StorageService.js'
+import { normalizeChannelEnvelope } from '../bindings/ChannelEnvelope.js'
 
 const LONG_POLL_MS = 30_000
 const RETRY_DELAY_MS = 3_000
@@ -32,7 +33,7 @@ export class WechatChannel extends BaseChannel {
    * @param {object} opts
    * @param {import('./IlinkClient.js').IlinkClient} opts.client      iLink 协议客户端
    * @param {import('../memory/MemoryStore.js').MemoryStore} opts.memory     记忆/会话落盘
-   * @param {string} opts.masterId   绑定者微信 UID（唯一对话用户，跳过其他）
+   * @param {string} opts.masterId   已认证微信账号 UID（仅用于协议级默认目标）
    * @param {object} opts.llm        { async process(ctx) -> { completed } } 处理普通消息
    * @param {boolean} [opts.typing]  是否启用"正在输入"反馈（默认 true）
    */
@@ -90,7 +91,7 @@ export class WechatChannel extends BaseChannel {
   // ===============================================================
   async _loop() {
     this.log?.info?.(
-      `[WechatChannel] 微信长轮询已启动，监听来自 masterId=${this.masterId} 的消息`,
+      `[WechatChannel] 微信长轮询已启动，认证账号=${this.masterId}`,
     )
     while (this.running) {
       try {
@@ -160,22 +161,46 @@ export class WechatChannel extends BaseChannel {
   async handleIncomingMessage(msg) {
     if (!msg) return
     const from = msg.from_user_id || msg.userId || msg.from
-    if (from !== this.masterId) {
-      return
-    }
-
     const text = extractText(msg)
     const contextToken = msg.context_token || null
+    const envelope = normalizeChannelEnvelope({
+      actor: {
+        displayName: msg.from_user_name || msg.sender_name || null,
+        externalUserId: from,
+      },
+      content: { text },
+      conversation: {
+        externalConversationId: String(from),
+        type: 'private',
+      },
+      message: {
+        externalMessageId: msg.message_id || msg.messageId || msg.client_id,
+        receivedAt: Date.now(),
+        sentAt: msg.create_time_ms || msg.createTime || Date.now(),
+      },
+      raw: msg,
+      source: {
+        accountId: this.client?.botId || null,
+        adapterId: this.platform || 'weixin-ilink',
+        channelId: this.channelId,
+        channelName: this.channel?.name || null,
+      },
+    })
+    const target = await this.resolveInboundTarget(envelope, {
+      contextToken,
+      from,
+    })
+    if (!target) return
     if (contextToken) {
-      this.latestContextToken = contextToken
-      if (this.memory) {
-        await this.memory
+      target.latestContextToken = contextToken
+      if (target.memory) {
+        await target.memory
           .setAgentMeta('latestContextToken', contextToken)
           .catch(() => {})
       }
     }
-    await this.keepAlive.recordActivity(
-      contextToken || this.latestContextToken || null,
+    await target.keepAlive.recordActivity(
+      contextToken || target.latestContextToken || null,
     )
 
     const rawImages = extractImages(msg)
@@ -247,8 +272,9 @@ export class WechatChannel extends BaseChannel {
     }
 
     const isSlash = typeof text === 'string' && text.trim().startsWith('/')
-    return this.enqueueInboundDebounce(from, {
+    return target.enqueueInboundDebounce(from, {
       contextToken,
+      ctx: { envelope },
       hasMedia,
       immediate: isSlash,
       pendingMediaPromise,
@@ -266,9 +292,7 @@ export class WechatChannel extends BaseChannel {
 
   buildSendMsg({ to, text, contextToken, fromBot }) {
     const targetTo =
-      to && to !== 'system_trigger' && to !== 'system'
-        ? to
-        : this.masterId
+      to && to !== 'system_trigger' && to !== 'system' ? to : this.masterId
     const targetToken = contextToken || this.latestContextToken || null
     return buildSendMsg({
       contextToken: targetToken,

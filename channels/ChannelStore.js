@@ -23,7 +23,6 @@ import { resolveChannelAdapter } from './ChannelAdapterRegistry.js'
  *     platform,      // 平台适配器，如 'weixin-ilink'
  *     protocol,      // 协议标识，如 'weixin.ilink'
  *     config,        // adapter 扩展配置
- *     agentId,       // 归属 agent（决定 memory/agents/<id> 与预设）
  *     token,         // bot_token（敏感，落盘）
  *     botId, userId, // iLink 登录返回的 bot 账户 id / 绑定者微信 id
  *     avatar,        // 头像链接（可选）
@@ -40,9 +39,12 @@ export class ChannelStore {
     encryptionKey = process.env.MIOCHAT_ENC_KEY,
     file = DEFAULT_FILE,
     logger = console,
-    mode = process.env.MIO_CHANNEL_PERSISTENCE_MODE || 'legacy',
+    mode = null,
     prisma = null,
   } = {}) {
+    mode ||=
+      process.env.MIO_CHANNEL_PERSISTENCE_MODE ||
+      (file !== DEFAULT_FILE ? 'legacy' : 'database')
     if (!['legacy', 'shadow', 'database-shadow', 'database'].includes(mode)) {
       throw new Error(`invalid channel persistence mode ${mode}`)
     }
@@ -75,7 +77,9 @@ export class ChannelStore {
       if (e.code === 'ENOENT') {
         this._cache = []
       } else if (e instanceof SyntaxError) {
-        console.error(`[ChannelStore] JSON parse error in ${this.file}: ${e.message}. Fallback to [].`)
+        console.error(
+          `[ChannelStore] JSON parse error in ${this.file}: ${e.message}. Fallback to [].`,
+        )
         this._cache = []
       } else {
         throw e
@@ -86,7 +90,11 @@ export class ChannelStore {
   async _save() {
     await fs.promises.mkdir(path.dirname(this.file), { recursive: true })
     const tmpFile = `${this.file}.${Date.now()}_${Math.random().toString(36).slice(2)}.tmp`
-    await fs.promises.writeFile(tmpFile, JSON.stringify(this._cache ?? [], null, 2), UTF8)
+    await fs.promises.writeFile(
+      tmpFile,
+      JSON.stringify(this._cache ?? [], null, 2),
+      UTF8,
+    )
     await fs.promises.rename(tmpFile, this.file)
   }
   _public(c) {
@@ -108,19 +116,18 @@ export class ChannelStore {
     try {
       legacy = row.legacyJson ? JSON.parse(row.legacyJson) : {}
     } catch (error) {
-      this.logger?.warn?.(`[ChannelStore] invalid legacy_json for ${row.id}: ${error.message}`)
+      this.logger?.warn?.(
+        `[ChannelStore] invalid legacy_json for ${row.id}: ${error.message}`,
+      )
     }
     return {
       ...legacy,
-      agentId: row.agentId,
       avatar: row.avatar || '',
       botId: row.botId || '',
       createdAt: row.createdAt.getTime(),
       id: row.id,
       lastActive: row.lastActive?.getTime() || 0,
-      model: row.model || '',
       name: row.name || '',
-      provider: row.provider || '',
       status: row.status,
       token: row.tokenEnc ? decryptToken(row.tokenEnc, this._key(true)) : '',
       type: row.type,
@@ -131,8 +138,10 @@ export class ChannelStore {
 
   async _listDatabase() {
     const prisma = await this._database()
-    const rows = await prisma.channel.findMany({ orderBy: { createdAt: 'asc' } })
-    return rows.map(row => this._fromDatabase(row))
+    const rows = await prisma.channel.findMany({
+      orderBy: { createdAt: 'asc' },
+    })
+    return rows.map((row) => this._fromDatabase(row))
   }
 
   async _getDatabase(id) {
@@ -143,19 +152,20 @@ export class ChannelStore {
 
   async _writeDatabase(channel) {
     const prisma = await this._database()
-    const tokenEnc = channel.token ? encryptToken(channel.token, this._key(true)) : null
-    await prisma.agent.upsert({ create: { id: channel.agentId }, update: {}, where: { id: channel.agentId } })
+    const tokenEnc = channel.token
+      ? encryptToken(channel.token, this._key(true))
+      : null
     const legacyJson = { ...channel }
     delete legacyJson.token
+    delete legacyJson.agentId
+    delete legacyJson.provider
+    delete legacyJson.model
     const data = {
-      agentId: channel.agentId,
       avatar: channel.avatar || null,
       botId: channel.botId || null,
       lastActive: channel.lastActive ? new Date(channel.lastActive) : null,
       legacyJson: JSON.stringify(legacyJson),
-      model: channel.model || null,
       name: channel.name || null,
-      provider: channel.provider || null,
       status: channel.status || 'unbound',
       tokenEnc,
       type: channel.type || 'channel',
@@ -163,7 +173,11 @@ export class ChannelStore {
       userId: channel.userId || null,
     }
     await prisma.channel.upsert({
-      create: { ...data, createdAt: new Date(channel.createdAt), id: channel.id },
+      create: {
+        ...data,
+        createdAt: new Date(channel.createdAt),
+        id: channel.id,
+      },
       update: data,
       where: { id: channel.id },
     })
@@ -179,7 +193,9 @@ export class ChannelStore {
     try {
       return await action()
     } catch (error) {
-      this.logger?.error?.(`[ChannelStore] ${this.mode} ${method} mirror failed: ${error.message}`)
+      this.logger?.error?.(
+        `[ChannelStore] ${this.mode} ${method} mirror failed: ${error.message}`,
+      )
       if (this.mode === 'database-shadow') throw error
       return null
     }
@@ -197,9 +213,10 @@ export class ChannelStore {
     return list.map((c) => this._public(c))
   }
   async get(id) {
-    const found = this.mode === 'database' || this.mode === 'database-shadow'
-      ? await this._getDatabase(id)
-      : (await this._load()).find((c) => c.id === id)
+    const found =
+      this.mode === 'database' || this.mode === 'database-shadow'
+        ? await this._getDatabase(id)
+        : (await this._load()).find((c) => c.id === id)
     return found ? found : null
   }
   async getPublic(id) {
@@ -207,17 +224,21 @@ export class ChannelStore {
     return c ? this._public(c) : null
   }
   async create(data = {}) {
-    const list = this.mode === 'database' || this.mode === 'database-shadow'
-      ? await this._listDatabase()
-      : await this._load()
+    const list =
+      this.mode === 'database' || this.mode === 'database-shadow'
+        ? await this._listDatabase()
+        : await this._load()
     const now = Date.now()
     // Before the versioned adapter API, bound WeChat channels were sometimes
     // written directly without any type metadata. Preserve only that legacy
     // shape; a new unbound record remains platform-neutral.
-    const legacyBoundRecord = !data.type && !data.adapterId && !data.driver &&
-      !data.platform && Boolean(data.token || data.userId || data.botId)
+    const legacyBoundRecord =
+      !data.type &&
+      !data.adapterId &&
+      !data.driver &&
+      !data.platform &&
+      Boolean(data.token || data.userId || data.botId)
     const channel = {
-      agentId: 'channel-master',
       avatar: '',
       botId: '',
       createdAt: now,
@@ -230,54 +251,67 @@ export class ChannelStore {
       driver: legacyBoundRecord ? 'native' : '',
       platform: legacyBoundRecord ? 'weixin-ilink' : '',
       protocol: legacyBoundRecord ? 'weixin.ilink' : '',
-      provider: data.provider || '',
-      model: data.model || '',
       updatedAt: now,
       userId: '',
       lastActive: 0,
       ...data,
     }
+    delete channel.agentId
+    delete channel.provider
+    delete channel.model
     list.push(channel)
     this._cache = list
     if (this.mode === 'database' || this.mode === 'database-shadow') {
       await this._writeDatabase(channel)
-      if (this.mode === 'database-shadow') await this._mirror('create', () => this._save())
+      if (this.mode === 'database-shadow')
+        await this._mirror('create', () => this._save())
     } else {
       await this._save()
-      if (this.mode === 'shadow') await this._mirror('create', () => this._writeDatabase(channel))
+      if (this.mode === 'shadow')
+        await this._mirror('create', () => this._writeDatabase(channel))
     }
     return this._public(channel)
   }
   async update(id, patch = {}) {
-    const list = this.mode === 'database' || this.mode === 'database-shadow'
-      ? await this._listDatabase()
-      : await this._load()
+    const list =
+      this.mode === 'database' || this.mode === 'database-shadow'
+        ? await this._listDatabase()
+        : await this._load()
     const ch = list.find((c) => c.id === id)
     if (!ch) return null
-    Object.assign(ch, patch, { updatedAt: Date.now() })
+    const nextPatch = { ...patch }
+    delete nextPatch.agentId
+    delete nextPatch.provider
+    delete nextPatch.model
+    Object.assign(ch, nextPatch, { updatedAt: Date.now() })
     this._cache = list
     if (this.mode === 'database' || this.mode === 'database-shadow') {
       await this._writeDatabase(ch)
-      if (this.mode === 'database-shadow') await this._mirror('update', () => this._save())
+      if (this.mode === 'database-shadow')
+        await this._mirror('update', () => this._save())
     } else {
       await this._save()
-      if (this.mode === 'shadow') await this._mirror('update', () => this._writeDatabase(ch))
+      if (this.mode === 'shadow')
+        await this._mirror('update', () => this._writeDatabase(ch))
     }
     return this._public(ch)
   }
   async remove(id) {
-    const list = this.mode === 'database' || this.mode === 'database-shadow'
-      ? await this._listDatabase()
-      : await this._load()
+    const list =
+      this.mode === 'database' || this.mode === 'database-shadow'
+        ? await this._listDatabase()
+        : await this._load()
     const next = list.filter((c) => c.id !== id)
     if (next.length === list.length) return false
     this._cache = next
     if (this.mode === 'database' || this.mode === 'database-shadow') {
       await this._removeDatabase(id)
-      if (this.mode === 'database-shadow') await this._mirror('remove', () => this._save())
+      if (this.mode === 'database-shadow')
+        await this._mirror('remove', () => this._save())
     } else {
       await this._save()
-      if (this.mode === 'shadow') await this._mirror('remove', () => this._removeDatabase(id))
+      if (this.mode === 'shadow')
+        await this._mirror('remove', () => this._removeDatabase(id))
     }
     return true
   }

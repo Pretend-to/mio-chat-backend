@@ -7,6 +7,8 @@
 *   [**Hooks 拦截机制**](./core/hooks.md): V3 架构的灵魂，AOP 编程模型。
 *   [**上下文压缩机制**](./core/context-compression.md): 如何实现极致的上下文压缩与 Cache 优化。
 *   [**ChatEvent 领域事件体系重构计划**](./architecture/chat-event-refactor-plan.md): 统一事件契约、身份、场景、输出边界及分阶段迁移方案。
+*   [**Agent、Session 与 Channel 重构规格**](./architecture/channel-agent-refactor/Spec.md): 明确 Agent/Channel 多对多、Session 树、统一执行链、设置页、调度与删除生命周期。
+*   [**SubAgent as a Tool 异步开发计划**](./architecture/channel-agent-refactor/SubAgentAsyncDevelopmentPlan.md): 普通主 Session 编排、child Session 隔离、Run/Inbox 生命周期、前端 UI、测试与验收。
 
 ## 🛠️ 扩展与开发 (Development)
 手把手教你如何为系统增加新能力。

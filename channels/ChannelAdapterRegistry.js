@@ -5,7 +5,9 @@ const definitions = []
 const aliases = new Map()
 
 function normalizeId(value) {
-  return String(value || '').trim().toLowerCase()
+  return String(value || '')
+    .trim()
+    .toLowerCase()
 }
 
 export function registerChannelAdapter(definition) {
@@ -14,7 +16,9 @@ export function registerChannelAdapter(definition) {
   const runtime = normalizeId(definition?.runtime)
   const protocol = normalizeId(definition?.protocol)
   if (!definition?.name || !runtime || !protocol) {
-    throw new TypeError(`Channel adapter ${id} requires name, runtime, and protocol`)
+    throw new TypeError(
+      `Channel adapter ${id} requires name, runtime, and protocol`,
+    )
   }
   if (runtime === 'onebots' && !normalizeId(definition.onebots?.platform)) {
     throw new TypeError(`Channel adapter ${id} requires onebots.platform`)
@@ -24,17 +28,24 @@ export function registerChannelAdapter(definition) {
     id,
     runtime,
     protocol,
-    aliases: Array.isArray(definition.aliases) ? definition.aliases.map(normalizeId).filter(Boolean) : [],
-    auth: definition.auth && typeof definition.auth === 'object'
-      ? { ...definition.auth }
-      : { type: 'none', label: '无需绑定' },
-    capabilities: definition.capabilities && typeof definition.capabilities === 'object'
-      ? { ...definition.capabilities }
-      : {},
-    defaults: definition.defaults && typeof definition.defaults === 'object'
-      ? { ...definition.defaults }
-      : {},
-    configSchema: Array.isArray(definition.configSchema) ? [...definition.configSchema] : [],
+    aliases: Array.isArray(definition.aliases)
+      ? definition.aliases.map(normalizeId).filter(Boolean)
+      : [],
+    auth:
+      definition.auth && typeof definition.auth === 'object'
+        ? { ...definition.auth }
+        : { type: 'none', label: '无需绑定' },
+    capabilities:
+      definition.capabilities && typeof definition.capabilities === 'object'
+        ? { ...definition.capabilities }
+        : {},
+    defaults:
+      definition.defaults && typeof definition.defaults === 'object'
+        ? { ...definition.defaults }
+        : {},
+    configSchema: Array.isArray(definition.configSchema)
+      ? [...definition.configSchema]
+      : [],
     ...(runtime === 'onebots' && {
       onebots: {
         ...definition.onebots,
@@ -42,7 +53,7 @@ export function registerChannelAdapter(definition) {
       },
     }),
   }
-  const index = definitions.findIndex(item => item.id === id)
+  const index = definitions.findIndex((item) => item.id === id)
   if (index >= 0) definitions[index] = normalized
   else definitions.push(normalized)
   for (const [alias, target] of aliases) {
@@ -50,7 +61,8 @@ export function registerChannelAdapter(definition) {
   }
   aliases.set(id, id)
   for (const alias of normalized.aliases) aliases.set(alias, id)
-  if (normalized.onebots?.platform) aliases.set(normalizeId(normalized.onebots.platform), id)
+  if (normalized.onebots?.platform)
+    aliases.set(normalizeId(normalized.onebots.platform), id)
   return normalized
 }
 
@@ -59,7 +71,7 @@ registerChannelAdapter(weixinIlinkAdapter)
 export function getChannelAdapterDefinition(value) {
   const key = normalizeId(value)
   const id = aliases.get(key) ?? key
-  return definitions.find(item => item.id === id) ?? null
+  return definitions.find((item) => item.id === id) ?? null
 }
 
 export function resolveChannelAdapter(channel = {}) {
@@ -68,7 +80,8 @@ export function resolveChannelAdapter(channel = {}) {
     if (definition) return definition
   }
   const platform = normalizeId(channel.platform)
-  if (platform && platform !== 'onebots') return getChannelAdapterDefinition(platform)
+  if (platform && platform !== 'onebots')
+    return getChannelAdapterDefinition(platform)
   return getChannelAdapterDefinition(channel.type)
 }
 
@@ -85,9 +98,15 @@ export function isOneBotsChannel(channel) {
 export function isNativeIlinkChannel(channel) {
   if (!channel) return false
   const driver = normalizeId(channel.driver)
-  if (driver) return driver === 'native' && resolveChannelAdapter(channel)?.protocol === 'weixin.ilink'
+  if (driver)
+    return (
+      driver === 'native' &&
+      resolveChannelAdapter(channel)?.protocol === 'weixin.ilink'
+    )
   const definition = resolveChannelAdapter(channel)
-  return definition?.runtime === 'native' && definition?.protocol === 'weixin.ilink'
+  return (
+    definition?.runtime === 'native' && definition?.protocol === 'weixin.ilink'
+  )
 }
 
 export function resolveOneBotsPlatform(channel = {}) {
@@ -110,47 +129,93 @@ function publicDefinition(definition) {
 
 export function getChannelCatalog() {
   const adapters = definitions.map(publicDefinition)
-  const runtimes = [...new Set(definitions.map(item => item.runtime))].map(id => ({
-    id,
-    name: id === 'native' ? 'MioChat Native' : id,
-    description: id === 'native'
-      ? 'MioChat 内置、可直接排查的渠道运行时'
-      : '渠道底层运行时',
-    protocols: [...new Set(
-      definitions.filter(item => item.runtime === id).map(item => item.protocol),
-    )],
-  }))
+  const runtimes = [...new Set(definitions.map((item) => item.runtime))].map(
+    (id) => ({
+      id,
+      name: id === 'native' ? 'MioChat Native' : id,
+      description:
+        id === 'native'
+          ? 'MioChat 内置、可直接排查的渠道运行时'
+          : '渠道底层运行时',
+      protocols: [
+        ...new Set(
+          definitions
+            .filter((item) => item.runtime === id)
+            .map((item) => item.protocol),
+        ),
+      ],
+    }),
+  )
   return {
     version: CATALOG_VERSION,
     runtimes,
     adapters,
-    // Compatibility alias for older frontends. New clients should consume
-    // `adapters`: these entries describe MioChat adapters, not OneBots platforms.
-    platforms: structuredClone(adapters),
   }
 }
 
-/** Normalize the versioned creation contract and former flat requests. */
+/** Normalize the strict versioned Channel creation contract. */
 export function normalizeChannelCreatePayload(body = {}) {
-  if (body.version != null && body.version !== CATALOG_VERSION) {
+  if (body.version !== CATALOG_VERSION) {
     throw new TypeError(`Unsupported channel creation version: ${body.version}`)
   }
-  const adapterRequest = body.adapter && typeof body.adapter === 'object' ? body.adapter : {}
-  const profile = body.profile && typeof body.profile === 'object' ? body.profile : body
-  const requestedId = adapterRequest.id || adapterRequest.platform || body.adapterId ||
-    body.platform || body.type || 'weixin-ilink'
+  const forbidden = [
+    'agentId',
+    'sessionId',
+    'bindingId',
+    'masterId',
+    'userId',
+    'botId',
+    'provider',
+    'model',
+    'preset',
+  ].filter(
+    (key) => Object.hasOwn(body, key) || Object.hasOwn(body.profile || {}, key),
+  )
+  if (forbidden.length) {
+    throw new TypeError(
+      `Channel creation does not accept Agent or internal identity fields: ${forbidden.join(', ')}`,
+    )
+  }
+  if (
+    !body.adapter ||
+    typeof body.adapter !== 'object' ||
+    Array.isArray(body.adapter)
+  ) {
+    throw new TypeError('Channel creation requires an adapter object')
+  }
+  if (
+    !body.profile ||
+    typeof body.profile !== 'object' ||
+    Array.isArray(body.profile)
+  ) {
+    throw new TypeError('Channel creation requires a profile object')
+  }
+  const adapterRequest = body.adapter
+  const profile = body.profile
+  const requestedId = adapterRequest.id
+  if (!requestedId) throw new TypeError('Channel adapter id is required')
   const definition = getChannelAdapterDefinition(requestedId)
-  if (!definition) throw new TypeError(`Unsupported channel adapter: ${normalizeId(requestedId) || '(empty)'}`)
+  if (!definition)
+    throw new TypeError(
+      `Unsupported channel adapter: ${normalizeId(requestedId) || '(empty)'}`,
+    )
 
-  const runtime = normalizeId(adapterRequest.runtime || body.driver || definition.runtime)
-  const protocol = normalizeId(adapterRequest.protocol || body.protocol || definition.protocol)
+  const runtime = normalizeId(adapterRequest.runtime || definition.runtime)
+  const protocol = normalizeId(adapterRequest.protocol || definition.protocol)
   if (runtime !== definition.runtime) {
-    throw new TypeError(`Unsupported runtime for ${definition.id}: ${runtime || '(empty)'}`)
+    throw new TypeError(
+      `Unsupported runtime for ${definition.id}: ${runtime || '(empty)'}`,
+    )
   }
   if (protocol !== definition.protocol) {
-    throw new TypeError(`Unsupported protocol for ${definition.id}: ${protocol || '(empty)'}`)
+    throw new TypeError(
+      `Unsupported protocol for ${definition.id}: ${protocol || '(empty)'}`,
+    )
   }
-  if (body.config != null && (typeof body.config !== 'object' || Array.isArray(body.config))) {
+  if (
+    body.config != null &&
+    (typeof body.config !== 'object' || Array.isArray(body.config))
+  ) {
     throw new TypeError('Channel config must be an object')
   }
 
@@ -158,17 +223,15 @@ export function normalizeChannelCreatePayload(body = {}) {
     type: definition.id,
     adapterId: definition.id,
     driver: definition.runtime,
-    platform: definition.platform || definition.onebots?.platform || definition.id,
+    platform:
+      definition.platform || definition.onebots?.platform || definition.id,
     protocol,
     name: profile.name || definition.defaults.name || definition.name,
-    agentId: profile.agentId || definition.defaults.agentId || 'channel-master',
-    provider: profile.provider || '',
-    model: profile.model || '',
     config: {
       ...Object.fromEntries(
         definition.configSchema
-          .filter(field => field.default !== undefined)
-          .map(field => [field.key, field.default]),
+          .filter((field) => field.default !== undefined)
+          .map((field) => [field.key, field.default]),
       ),
       ...body.config,
     },

@@ -20,8 +20,12 @@ export class KeepAliveManager {
     this.userTimeoutMs = config.userTimeoutMs ?? 24 * 60 * 60 * 1000 // 24h
     this.remindBeforeMs = config.remindBeforeMs ?? 60 * 60 * 1000 // 到期前 1h 提醒
     this.checkEveryMs = config.checkEveryMs ?? 5 * 60 * 1000
-    this.remindText = config.remindText ?? '你有一阵没跟我说话啦～渠道连接很快需要保活，回我一句话我们就保持联系！'
-    this.expireText = config.expireText ?? '渠道会话可能已超时失效：回复任意消息重新激活，或到管理后台重新绑定。'
+    this.remindText =
+      config.remindText ??
+      '你有一阵没跟我说话啦～渠道连接很快需要保活，回我一句话我们就保持联系！'
+    this.expireText =
+      config.expireText ??
+      '渠道会话可能已超时失效：回复任意消息重新激活，或到管理后台重新绑定。'
     this._timer = null
     this.lastContextToken = null
   }
@@ -59,7 +63,10 @@ export class KeepAliveManager {
     const idle = Date.now() - last
     const remaining = this.userTimeoutMs - idle
     if (idle >= this.userTimeoutMs) {
-      const reminded = await this.memory.getAgentMeta('keepalive_expire_reminded', false)
+      const reminded = await this.memory.getAgentMeta(
+        'keepalive_expire_reminded',
+        false,
+      )
       if (!reminded) {
         await this._send(this.expireText)
         await this.memory.setAgentMeta('keepalive_expire_reminded', true)
@@ -67,7 +74,10 @@ export class KeepAliveManager {
       return
     }
     if (remaining < this.remindBeforeMs) {
-      const lastRemind = await this.memory.getAgentMeta('keepalive_last_reminder', 0)
+      const lastRemind = await this.memory.getAgentMeta(
+        'keepalive_last_reminder',
+        0,
+      )
       if (!lastRemind || Date.now() - lastRemind > this.remindBeforeMs) {
         await this._send(this.remindText)
         await this.memory.setAgentMeta('keepalive_last_reminder', Date.now())

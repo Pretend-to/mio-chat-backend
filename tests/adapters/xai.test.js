@@ -29,20 +29,18 @@ test('xAI Adapter', async (t) => {
       base_url: 'https://api.x.ai/v1'
     });
 
-    // Test 1: web_search enabled via extraSettings.xai.web_search
+    // Test 1: web_search enabled via flat extraSettings.web_search
     const body1 = {
       messages: [{ content: 'latest news', role: 'user' }],
       settings: {
         base: { model: 'grok-beta', stream: true },
         chatParams: { reasoning_effort: 2 },
         extraSettings: {
-          xai: {
-            web_search: {
-              allowed_domains: ['x.ai'],
-              enable: true,
-              enable_image_understanding: true,
-              excluded_domains: ['bad.com']
-            }
+          web_search: {
+            allowed_domains: ['x.ai'],
+            enable: true,
+            enable_image_understanding: true,
+            excluded_domains: ['bad.com']
           }
         },
         toolCallSettings: { mode: 'AUTO', tools: [] }
@@ -61,7 +59,7 @@ test('xAI Adapter', async (t) => {
       }
     });
 
-    // Test 2: x_search enabled via extraSettings.x_search
+    // Test 2: x_search enabled via flat extraSettings.x_search
     const body2 = {
       messages: [{ content: 'trending posts', role: 'user' }],
       settings: {
@@ -96,10 +94,8 @@ test('xAI Adapter', async (t) => {
         base: { model: 'grok-beta', stream: true },
         chatParams: {},
         extraSettings: {
-          xai: {
-            web_search: { enable: true },
-            x_search: { enable: true }
-          }
+          web_search: { enable: true },
+          x_search: { enable: true }
         },
         toolCallSettings: { mode: 'AUTO', tools: [] }
       }

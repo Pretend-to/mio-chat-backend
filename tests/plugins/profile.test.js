@@ -117,7 +117,7 @@ test('ProfileTool - read, update, clear and client system message emission', asy
     assert.strictEqual(systemMessages[0].data.opening, '')
   })
 
-  await t.test('should be marked as groupOnly tool', () => {
-    assert.strictEqual(tool.groupOnly, true)
+  await t.test('should be restricted to group conversations', () => {
+    assert.deepStrictEqual(tool.access.scene.conversationKinds, ['group'])
   })
 })

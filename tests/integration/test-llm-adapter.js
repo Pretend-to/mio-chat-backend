@@ -37,8 +37,9 @@ async function testLLMAdapter() {
       throw new Error('添加 LLM 实例失败')
     }
     
-    const {instanceIndex} = addResponse.data.data
-    logger.info(`✓ LLM 实例添加成功，索引: ${instanceIndex}`)
+    const {instanceId} = addResponse.data.data
+    if (!instanceId) throw new Error('添加响应缺少稳定实例 ID')
+    logger.info(`✓ LLM 实例添加成功，ID: ${instanceId}`)
     
     // 测试更新 LLM 实例
     logger.info('\n测试更新 LLM 实例...')
@@ -47,7 +48,7 @@ async function testLLMAdapter() {
       name: `更新测试实例_${Date.now()}`
     }
     
-    const updateResponse = await axios.put(`${runtime.baseUrl}/api/config/llm/openai/${instanceIndex}`, updateConfig, { headers })
+    const updateResponse = await axios.put(`${runtime.baseUrl}/api/config/llm/openai/${instanceId}`, updateConfig, { headers })
     logger.info(`更新实例状态码: ${updateResponse.status}`)
     console.log('更新实例响应:', JSON.stringify(updateResponse.data, null, 2))
     
@@ -59,7 +60,7 @@ async function testLLMAdapter() {
     
     // 测试删除 LLM 实例
     logger.info('\n测试删除 LLM 实例...')
-    const deleteResponse = await axios.delete(`${runtime.baseUrl}/api/config/llm/openai/${instanceIndex}`, { headers })
+    const deleteResponse = await axios.delete(`${runtime.baseUrl}/api/config/llm/openai/${instanceId}`, { headers })
     logger.info(`删除实例状态码: ${deleteResponse.status}`)
     console.log('删除实例响应:', JSON.stringify(deleteResponse.data, null, 2))
     

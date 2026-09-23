@@ -40,7 +40,7 @@ test('WakeProtocol: rejects invalid and oversized payloads', () => {
 test('TriggerRegistry: mutating operations can be scoped to an agent', async () => {
   const dataDir = await makeTempDir()
   const registry = new TriggerRegistry({ dataDir })
-  await registry.create({ agentId: 'agent-a', id: 'shared-id' })
+  await registry.create({ agentId: 'agent-a', id: 'shared-id', sessionId: 'session-a' })
 
   assert.equal(await registry.get('shared-id', { agentId: 'agent-b' }), null)
   assert.equal(
@@ -61,6 +61,7 @@ test('WakeInjector: missing target does not fall back to another channel', async
     agentId: 'agent-a',
     channelId: 'channel-a',
     id: 'target-test',
+    sessionId: 'session-a',
   })
   const messages = []
   const injector = new WakeInjector({
@@ -76,6 +77,9 @@ test('WakeInjector: missing target does not fall back to another channel', async
       ]),
     },
     registry,
+    sessionTurnService: {
+      runTurn: async () => { throw new Error('target unavailable') },
+    },
   })
 
   const result = await injector.processWake(trigger, {
@@ -83,7 +87,7 @@ test('WakeInjector: missing target does not fall back to another channel', async
     reason: 'target check',
   })
   assert.equal(result.injected, false)
-  assert.equal(result.status, 'target_unavailable')
+  assert.equal(result.status, 'inject_failed')
   assert.equal(messages.length, 0)
 })
 

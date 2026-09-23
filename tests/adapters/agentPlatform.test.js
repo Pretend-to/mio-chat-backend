@@ -164,7 +164,7 @@ test('Agent Platform - block_express behavior', async (t) => {
     }
   })
 
-  await t.test('_prepareChatBody prioritizes extraSettings.agentPlatform over default extraSettings.gemini', async () => {
+  await t.test('_prepareChatBody enables internal tools from flat extraSettings.internalTools', async () => {
     const adapter = new AgentPlatformAdapter({
       api_key: 'test-api-key',
       base_url: 'https://us-central1-aiplatform.googleapis.com',
@@ -177,12 +177,7 @@ test('Agent Platform - block_express behavior', async (t) => {
         base: { model: 'gemini-2.5-flash', stream: true },
         chatParams: {},
         extraSettings: {
-          agentPlatform: {
-            internalTools: { google_search: true }
-          },
-          gemini: {
-            internalTools: { google_search: false }
-          }
+          internalTools: { google_search: true }
         },
         toolCallSettings: { mode: 'AUTO', tools: [] }
       }
@@ -190,6 +185,55 @@ test('Agent Platform - block_express behavior', async (t) => {
 
     const prepared = await adapter._prepareChatBody(body)
     assert.ok(Array.isArray(prepared.tools), 'Should output tools array')
-    assert.deepStrictEqual(prepared.tools, [{ googleSearch: {} }], 'Should enable googleSearch tool from extraSettings.agentPlatform')
+    assert.deepStrictEqual(prepared.tools, [{ googleSearch: {} }], 'Should enable googleSearch tool from flat extraSettings.internalTools')
+  })
+
+  await t.test('supports custom proxy baseUrl and normalizes trailing slashes', async () => {
+    const adapter = new AgentPlatformAdapter({
+      api_key: 'test-proxy-key',
+      base_url: 'https://my-custom-vertex-proxy.example.com/api///',
+      block_express: false,
+      project_id: 'proxy-project',
+    })
+
+    const { core } = adapter
+    assert.strictEqual(core.transportStrategy.baseUrl, 'https://my-custom-vertex-proxy.example.com/api')
+    const url = core._getRequestUrl('gemini-2.5-pro', true)
+    assert.ok(
+      url.startsWith('https://my-custom-vertex-proxy.example.com/api/v1/projects/proxy-project/'),
+      `URL should use custom proxy baseUrl without duplicate slashes, got: ${url}`
+    )
+  })
+
+  await t.test('uses models_api_key and models_base_url when configured', async () => {
+    const adapter = new AgentPlatformAdapter({
+      api_key: 'vertex-key',
+      base_url: 'https://aiplatform.googleapis.com',
+      block_express: true,
+      models_api_key: 'custom-studio-key',
+      models_base_url: 'https://studio-proxy.example.com:8443',
+      project_id: 'test-project',
+    })
+
+    const originalFetch = global.fetch
+    let fetchedUrl = null
+    global.fetch = async (url) => {
+      fetchedUrl = url
+      return {
+        ok: true,
+        json: async () => ({
+          models: [{ name: 'models/gemini-2.5-flash', supportedGenerationMethods: ['generateContent'] }],
+        }),
+      }
+    }
+
+    try {
+      const models = await adapter._getModels()
+      assert.ok(fetchedUrl.startsWith('https://studio-proxy.example.com:8443'), `Should fetch from models_base_url, got: ${fetchedUrl}`)
+      assert.ok(fetchedUrl.includes('key=custom-studio-key'), `Should use models_api_key, got: ${fetchedUrl}`)
+      assert.ok(models.some((g) => g.models.includes('gemini-2.5-flash')), 'Grouped models should contain gemini-2.5-flash')
+    } finally {
+      global.fetch = originalFetch
+    }
   })
 })

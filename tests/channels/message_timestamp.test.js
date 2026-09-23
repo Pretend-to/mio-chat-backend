@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  appendFileReferences,
   appendRecursiveContextMessages,
   collectRecursiveUserMessages,
   convertChatHistoryToLLMMessages,
@@ -11,6 +12,7 @@ import {
 import {
   ensureMessageTime,
   formatMessageTime,
+  wrapUserMessageWithMetadata,
   wrapUserMessageWithTimestamp,
 } from '../../lib/chat/messageTimestamp.js'
 
@@ -28,6 +30,25 @@ test('message timestamp helpers are deterministic and source-independent', () =>
     wrapUserMessageWithTimestamp(`<message time="${iso}">\nhello\n</message>`, time),
     `<message time="${iso}">\nhello\n</message>`,
   )
+})
+
+test('channel metadata envelope is stable, allowlisted, and attribute-escaped', () => {
+  const time = 1_780_000_000_123
+  const envelope = {
+    actor: { displayName: 'A & "B"', externalUserId: 'user<1>' },
+    conversation: { externalConversationId: 'group-1', type: 'group' },
+    message: { externalMessageId: 'message-1', sentAt: time },
+    raw: { secret: 'must-not-leak' },
+    source: { adapterId: 'wechat', channelId: 'wechat-main', channelName: '工作微信' },
+    version: 2,
+  }
+  const wrapped = wrapUserMessageWithMetadata('hello', time, envelope)
+
+  assert.match(wrapped, /^<message version="2" channel="工作微信"/)
+  assert.match(wrapped, /user_id="user&lt;1&gt;"/)
+  assert.match(wrapped, /user_name="A &amp; &quot;B&quot;"/)
+  assert.doesNotMatch(wrapped, /must-not-leak|secret/)
+  assert.equal(wrapUserMessageWithMetadata(wrapped, time, envelope), wrapped)
 })
 
 test('channel history wraps persisted user times without mutating stored messages', () => {
@@ -75,6 +96,7 @@ test('current channel input and persisted history use stable timestamp envelopes
 
   const messageTime = 1_780_000_000_123
   const result = await llm.process({
+    agentId: 'agent-timestamp',
     channel: {},
     chat: [{
       content: [{ data: { text: 'previous' }, type: 'text' }],
@@ -88,6 +110,7 @@ test('current channel input and persisted history use stable timestamp envelopes
     memory: {
       getAgentMeta: async () => null,
     },
+    sessionId: 'session-timestamp',
     text: 'current',
   })
 
@@ -107,6 +130,21 @@ test('multimodal channel input round-trips to the identical request content', ()
   }])
 
   assert.deepEqual(restored[0].content, prepared.latestContent)
+})
+
+test('file attachments are folded into the current Agent turn without duplicate links', () => {
+  const files = [
+    { name: '课程安排.docx', url: '/uploaded/file/course.docx' },
+  ]
+  const appended = appendFileReferences('这个是啥', files)
+
+  assert.match(appended, /这个是啥/)
+  assert.match(appended, /课程安排\.docx/)
+  assert.match(appended, /\/uploaded\/file\/course\.docx/)
+  assert.equal(
+    appendFileReferences(appended, files).match(/course\.docx/g)?.length,
+    1,
+  )
 })
 
 test('recursive user context is preserved at its tool-call boundary', () => {
@@ -176,6 +214,7 @@ test('crystallization persistence completes before the backend process resolves'
   })
 
   const result = await llm.process({
+    agentId: 'agent-crystal',
     channel: {},
     chat: [],
     crystal: '',
@@ -207,7 +246,7 @@ test('ordinary Channel turns never re-persist the existing crystal', async () =>
     },
   } })
   const result = await llm.process({
-    channel: {}, chat: [], crystal: '<memory_crystal>committed</memory_crystal>',
+    agentId: 'agent-no-compression', channel: {}, chat: [], crystal: '<memory_crystal>committed</memory_crystal>',
     globalMem: '', memory: {
       clearPendingMemories: async () => calls.push('clear'),
       getAgentMeta: async () => null,
@@ -232,7 +271,7 @@ test('failed crystallization snapshots cannot mutate durable memory', async () =
     },
   } })
   const result = await llm.process({
-    channel: {}, chat: [], crystal: '<memory_crystal>committed</memory_crystal>',
+    agentId: 'agent-failed-compression', channel: {}, chat: [], crystal: '<memory_crystal>committed</memory_crystal>',
     globalMem: '', memory: {
       clearPendingMemories: async () => calls.push('clear'),
       getAgentMeta: async () => null,
@@ -257,7 +296,7 @@ test('crystal persistence failure rejects and preserves pending memories', async
     },
   } })
   await assert.rejects(llm.process({
-    channel: {}, chat: [], crystal: '<memory_crystal>old</memory_crystal>',
+    agentId: 'agent-persistence-failure', channel: {}, chat: [], crystal: '<memory_crystal>old</memory_crystal>',
     globalMem: '', memory: {
       clearPendingMemories: async () => calls.push('clear'),
       getAgentMeta: async () => null,

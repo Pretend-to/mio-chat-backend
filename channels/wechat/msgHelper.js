@@ -31,8 +31,9 @@ export function extractImages(msg) {
     if (it.image_item || it.type === 2) {
       const media = it.image_item?.media || {}
       const aesKey = media?.aes_key || it.image_item?.aeskey || ''
-      const fullUrl = media.full_url?.trim()
-        || (media.encrypt_query_param
+      const fullUrl =
+        media.full_url?.trim() ||
+        (media.encrypt_query_param
           ? `https://novac2c.cdn.weixin.qq.com/c2c/download?encrypted_query_param=${encodeURIComponent(media.encrypt_query_param)}`
           : '')
       if (fullUrl && aesKey) {
@@ -51,8 +52,9 @@ export function extractFiles(msg) {
     if (it.file_item || it.type === 4) {
       const media = it.file_item?.media || {}
       const aesKey = media?.aes_key || it.file_item?.aeskey || ''
-      const fullUrl = media.full_url?.trim()
-        || (media.encrypt_query_param
+      const fullUrl =
+        media.full_url?.trim() ||
+        (media.encrypt_query_param
           ? `https://novac2c.cdn.weixin.qq.com/c2c/download?encrypted_query_param=${encodeURIComponent(media.encrypt_query_param)}`
           : '')
       const fileName = it.file_item?.file_name || 'file'
@@ -63,8 +65,6 @@ export function extractFiles(msg) {
   }
   return files
 }
-
-
 
 /**
  * 构造下行文本 WeixinMessage（发给用户，带回 context_token，message_type=2 bot）。
@@ -131,7 +131,14 @@ export function buildSendImageMsg({ to, fromBot, contextToken, mediaInfo }) {
 /**
  * 构造下行原生语音 WeixinMessage（Silk 格式）。
  */
-export function buildSendVoiceMsg({ to, fromBot, contextToken, mediaInfo, durationMs = 0, text = '' }) {
+export function buildSendVoiceMsg({
+  to,
+  fromBot,
+  contextToken,
+  mediaInfo,
+  durationMs = 0,
+  text = '',
+}) {
   const now = Date.now()
   const randomSuffix = Math.random().toString(36).slice(2, 10)
   const mediaObj = {
@@ -152,7 +159,10 @@ export function buildSendVoiceMsg({ to, fromBot, contextToken, mediaInfo, durati
         type: 3, // VOICE
         voice_item: {
           media: mediaObj,
-          play_length: durationMs > 0 ? Math.round(durationMs) : (mediaInfo.play_length || 1000),
+          play_length:
+            durationMs > 0
+              ? Math.round(durationMs)
+              : mediaInfo.play_length || 1000,
           text: text || '',
         },
       },
@@ -164,7 +174,13 @@ export function buildSendVoiceMsg({ to, fromBot, contextToken, mediaInfo, durati
 /**
  * 构造下行原生文件 WeixinMessage。
  */
-export function buildSendFileMsg({ to, fromBot, contextToken, mediaInfo, fileName = 'file' }) {
+export function buildSendFileMsg({
+  to,
+  fromBot,
+  contextToken,
+  mediaInfo,
+  fileName = 'file',
+}) {
   const now = Date.now()
   const randomSuffix = Math.random().toString(36).slice(2, 10)
   const mediaObj = {
@@ -185,7 +201,9 @@ export function buildSendFileMsg({ to, fromBot, contextToken, mediaInfo, fileNam
         type: 4, // FILE
         file_item: {
           file_name: fileName,
-          len: String(mediaInfo.raw_size || mediaInfo.file_size_ciphertext || 0),
+          len: String(
+            mediaInfo.raw_size || mediaInfo.file_size_ciphertext || 0,
+          ),
           md5: mediaInfo.raw_file_md5 || '',
           media: mediaObj,
         },
@@ -198,7 +216,13 @@ export function buildSendFileMsg({ to, fromBot, contextToken, mediaInfo, fileNam
 /**
  * 构造下行原生视频 WeixinMessage。
  */
-export function buildSendVideoMsg({ to, fromBot, contextToken, mediaInfo, durationMs = 0 }) {
+export function buildSendVideoMsg({
+  to,
+  fromBot,
+  contextToken,
+  mediaInfo,
+  durationMs = 0,
+}) {
   const now = Date.now()
   const randomSuffix = Math.random().toString(36).slice(2, 10)
   const mediaObj = {
@@ -245,7 +269,8 @@ export function splitWechatText(text) {
   let last = 0
   let m
   while ((m = msgRe.exec(t)) !== null) {
-    if (m.index > last) units.push({ kind: 'raw', content: t.slice(last, m.index) })
+    if (m.index > last)
+      units.push({ kind: 'raw', content: t.slice(last, m.index) })
     units.push({ kind: 'msg', content: m[1].trim() })
     last = msgRe.lastIndex
   }

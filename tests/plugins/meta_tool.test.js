@@ -6,7 +6,26 @@ import MetaTool, {
   extractQueryTools,
   extractTargetCall,
 } from '../../lib/plugins/ai-plugin/tools/meta_tool.js'
+import SentinelTool from '../../lib/plugins/ai-plugin/tools/sentinel.js'
 import { MioFunction } from '../../lib/function.js'
+import { parseConcatenatedJson } from '../../utils/jsonParser.js'
+
+/**
+ * meta_tool.findTool 的唯一数据源是 `global.middleware.llm.getAllTools()`
+ * （生产里 llm.plugins 就是 middleware.plugins）。测试 mock 只给 plugins 时
+ * 工具解析会全部落空，这里统一补齐 llm 视图。
+ */
+function withLlm(middleware) {
+  const plugins = middleware?.plugins || []
+  const allTools = new Map()
+  for (const plugin of plugins) {
+    if (typeof plugin?.getTools !== 'function') continue
+    for (const [, toolsArray] of plugin.getTools()) {
+      for (const tool of toolsArray) allTools.set(tool.name, tool)
+    }
+  }
+  return { ...middleware, llm: { getAllTools: () => allTools } }
+}
 
 test('MetaTool - parameter extraction', () => {
   // 1. Standard call parameters
@@ -38,6 +57,53 @@ test('MetaTool - parameter extraction', () => {
   assert.deepStrictEqual(q3, ['replace'])
 })
 
+test('MetaTool - repairs a missing outer brace without string-encoding HTML', async () => {
+  class PublishTool extends MioFunction {
+    constructor() {
+      super({
+        description: 'Publish HTML',
+        name: 'publish',
+        parameters: {
+          properties: { html: { type: 'string' } },
+          required: ['html'],
+          type: 'object',
+        },
+      })
+      this.func = async (event) => ({ html: event.params.html, success: true })
+    }
+  }
+
+  const publish = new PublishTool()
+  global.middleware = withLlm({
+    plugins: [{ getTools: () => new Map([['web', [publish]]]), name: 'web' }],
+  })
+  const raw =
+    '{"action":"call","tool_name":"publish","schema":{"html":"<div data-json=\\"{&quot;x&quot;:1}\\">hello</div>"}'
+  const params = parseConcatenatedJson(raw)
+  assert.equal(params.action, 'call')
+  assert.deepEqual(params.schema, {
+    html: '<div data-json="{&quot;x&quot;:1}">hello</div>',
+  })
+
+  const result = await new MetaTool()._execute({ params })
+  assert.equal(result.success, true)
+  assert.equal(result.html, params.schema.html)
+})
+
+test('JSON repair refuses truncated strings and mismatched delimiters', () => {
+  assert.deepStrictEqual(
+    parseConcatenatedJson('{"action":"call","schema":{"html":"unterminated}'),
+    {},
+  )
+  assert.deepStrictEqual(parseConcatenatedJson('{"schema":[}'), {})
+})
+
+test('MetaTool - does not silently route empty parameters to list', async () => {
+  const result = await new MetaTool()._execute({ params: {} })
+  assert.equal(result.success, false)
+  assert.match(result.error, /action/)
+})
+
 test('MetaTool - action: list', async () => {
   const meta = new MetaTool()
 
@@ -52,12 +118,12 @@ test('MetaTool - action: list', async () => {
     }
   }
 
-  class ChannelOnlyTool extends MioFunction {
+  class AgentOnlyTool extends MioFunction {
     constructor() {
       super({
-        channelOnly: true,
-        description: 'Channel only tool',
-        name: 'channel_only_tool',
+        access: { requires: { agentContext: true } },
+        description: 'Agent-only tool',
+        name: 'agent_only_tool',
         parameters: { properties: {}, type: 'object' },
       })
       this.func = async () => ({})
@@ -65,18 +131,18 @@ test('MetaTool - action: list', async () => {
   }
 
   const toolA = new ToolA()
-  const channelTool = new ChannelOnlyTool()
+  const agentTool = new AgentOnlyTool()
 
-  global.middleware = {
+  global.middleware = withLlm({
     plugins: [
       {
-        getTools: () => new Map([['plugin-one', [toolA, channelTool]]]),
+        getTools: () => new Map([['plugin-one', [toolA, agentTool]]]),
         name: 'plugin-one',
       },
     ],
-  }
+  })
 
-  // 1. Web context (channelOnly tool should be hidden)
+  // 1. Frontend OpenAI WebSession (Agent-scoped tool should be hidden)
   const webList = await meta._execute({
     params: { action: 'list' },
     parentEvent: { body: {} },
@@ -86,14 +152,19 @@ test('MetaTool - action: list', async () => {
   assert.strictEqual(webList.tools[0].name, 'tool_a')
   assert.ok(webList.groups['plugin-one'])
 
-  // 2. Channel context (channelOnly tool should be visible)
+  // 2. Server Agent context remains visible regardless of transport
   const channelList = await meta._execute({
     params: { action: 'list' },
-    parentEvent: { channel: { id: 'wx' }, source: 'channel' },
+    parentEvent: {
+      agentId: 'agent-1',
+      channel: { id: 'wx' },
+      sessionId: 'session-1',
+      source: 'channel',
+    },
   })
   assert.strictEqual(channelList.success, true)
   assert.strictEqual(channelList.total, 2)
-  assert.ok(channelList.tools.some((t) => t.name === 'channel_only_tool'))
+  assert.ok(channelList.tools.some((t) => t.name === 'agent_only_tool'))
 })
 
 test('MetaTool - action: query', async () => {
@@ -102,7 +173,7 @@ test('MetaTool - action: query', async () => {
   class FileEditorTool extends MioFunction {
     constructor() {
       super({
-        adminOnly: true,
+        access: { requires: { admin: true } },
         description: 'Replace code in file',
         name: 'replace',
         parameters: {
@@ -139,7 +210,7 @@ test('MetaTool - action: query', async () => {
   const replaceTool = new FileEditorTool()
   const ttsTool = new TtsTool()
 
-  global.middleware = {
+  global.middleware = withLlm({
     plugins: [
       {
         getTools: () =>
@@ -150,7 +221,7 @@ test('MetaTool - action: query', async () => {
         name: 'test-plugins',
       },
     ],
-  }
+  })
 
   // Query multiple tools with array
   const res = await meta._execute({
@@ -158,6 +229,7 @@ test('MetaTool - action: query', async () => {
       action: 'query',
       tools: ['replace', 'tts_speech', 'non_existent_tool'],
     },
+    parentEvent: { user: { isAdmin: true, role: 'admin' } },
   })
 
   assert.strictEqual(res.success, true)
@@ -165,7 +237,6 @@ test('MetaTool - action: query', async () => {
 
   const queriedReplace = res.tools.find((t) => t.name === 'replace')
   assert.strictEqual(queriedReplace.success, true)
-  assert.strictEqual(queriedReplace.adminOnly, true)
   assert.ok(queriedReplace.parameters.properties.filePath)
 
   const queriedTts = res.tools.find((t) => t.name === 'tts_speech')
@@ -210,14 +281,14 @@ test('MetaTool - action: call without extraRender duplication', async () => {
   }
 
   const soundTool = new SoundTool()
-  global.middleware = {
+  global.middleware = withLlm({
     plugins: [
       {
         getTools: () => new Map([['tts', [soundTool]]]),
         name: 'tts-plugin',
       },
     ],
-  }
+  })
 
   let extraRenderCallCount = 0
   const e = {
@@ -243,6 +314,179 @@ test('MetaTool - action: call without extraRender duplication', async () => {
   assert.strictEqual(extraRenderCallCount, 1)
 })
 
+test('MetaTool cannot call a tool not exposed to meta or when meta_tool is not allowed in parent allowlist', async () => {
+  const meta = new MetaTool()
+  let invoked = false
+  class HiddenTool extends MioFunction {
+    constructor() {
+      super({
+        access: { exposure: ['schema'] },
+        description: 'Hidden tool',
+        name: 'hidden_tool',
+        parameters: { properties: {}, type: 'object' },
+      })
+      this.func = async () => {
+        invoked = true
+        return { success: true }
+      }
+    }
+  }
+  class PublicTool extends MioFunction {
+    constructor() {
+      super({
+        description: 'Public tool',
+        name: 'public_tool',
+        parameters: { properties: {}, type: 'object' },
+      })
+      this.func = async () => {
+        invoked = true
+        return { success: true }
+      }
+    }
+  }
+  global.middleware = withLlm({
+    plugins: [
+      {
+        getTools: () =>
+          new Map([
+            ['hidden', [new HiddenTool()]],
+            ['public', [new PublicTool()]],
+          ]),
+        name: 'test-plugin',
+      },
+    ],
+  })
+
+  // 1. Tool with exposure: ['schema'] cannot be called via meta_tool
+  const resNotExposed = await meta._execute({
+    params: { action: 'call', tool_name: 'hidden_tool' },
+    parentEvent: {
+      settings: { toolCallSettings: { tools: ['meta_tool'] } },
+    },
+  })
+  assert.equal(resNotExposed.success, false)
+  assert.match(resNotExposed.error, /not found/)
+  assert.equal(invoked, false)
+
+  // 2. When meta_tool itself is not in parent allowlist, call is rejected
+  const resMetaDisallowed = await meta._execute({
+    params: { action: 'call', tool_name: 'public_tool' },
+    parentEvent: {
+      settings: { toolCallSettings: { tools: ['other_tool'] } },
+    },
+  })
+  assert.equal(resMetaDisallowed.success, false)
+  assert.match(resMetaDisallowed.error, /not found/)
+  assert.equal(invoked, false)
+})
+
+test('MetaTool can discover and call universal tools (like tts_speech) when parentEvent has core Agent tool allowlist', async () => {
+  const meta = new MetaTool()
+  let ttsInvoked = false
+  class UniversalTtsTool extends MioFunction {
+    constructor() {
+      super({
+        description: 'Text to speech synthesis',
+        name: 'tts_speech',
+        parameters: {
+          properties: { text: { type: 'string' } },
+          required: ['text'],
+          type: 'object',
+        },
+      })
+      this.func = async () => {
+        ttsInvoked = true
+        return { audioUrl: 'https://example.com/audio.mp3', success: true }
+      }
+    }
+  }
+
+  global.middleware = withLlm({
+    plugins: [
+      {
+        getTools: () => new Map([['edge-tts', [new UniversalTtsTool()]]]),
+        name: 'edge-tts-plugin',
+      },
+    ],
+  })
+
+  // Agent parent event has the core Agent tool allowlist (ai-plugin, meta_tool, etc.)
+  const channelParentEvent = {
+    agentId: 'agent-1',
+    channel: { type: 'weixin-ilink' },
+    sessionId: 'session-1',
+    settings: {
+      toolCallSettings: {
+        mode: 'AUTO',
+        tools: ['meta_tool', 'agent_profile', 'bash', 'read'],
+      },
+    },
+    source: 'channel',
+  }
+
+  // 1. list discovers tts_speech from edge-tts-plugin
+  const listRes = await meta._execute({
+    params: { action: 'list' },
+    parentEvent: channelParentEvent,
+  })
+  assert.equal(listRes.success, true)
+  assert.ok(listRes.tools.some((t) => t.name === 'tts_speech'))
+  assert.ok(listRes.groups['edge-tts-plugin'] || listRes.groups['edge-tts'])
+
+  // 2. query returns tts_speech schema
+  const queryRes = await meta._execute({
+    params: { action: 'query', tools: ['tts_speech'] },
+    parentEvent: channelParentEvent,
+  })
+  assert.equal(queryRes.success, true)
+  assert.equal(queryRes.tools[0].name, 'tts_speech')
+  assert.ok(queryRes.tools[0].parameters.properties.text)
+
+  // 3. call executes tts_speech successfully through meta bridge
+  const callRes = await meta._execute({
+    params: {
+      action: 'call',
+      schema: { text: '你好，我是服务端Agent' },
+      tool_name: 'tts_speech',
+    },
+    parentEvent: channelParentEvent,
+  })
+  assert.equal(callRes.success, true)
+  assert.equal(ttsInvoked, true)
+  assert.equal(callRes.audioUrl, 'https://example.com/audio.mp3')
+})
+
+test('MetaTool list exposes sentinel to an admin Web Agent', async () => {
+  const previous = global.middleware
+  const sentinel = new SentinelTool()
+  global.middleware = withLlm({
+    plugins: [
+      {
+        getTools: () => new Map([['ai-plugin', [sentinel]]]),
+        name: 'ai-plugin',
+      },
+    ],
+  })
+
+  try {
+    const result = await new MetaTool()._execute({
+      params: { action: 'list' },
+      parentEvent: {
+        agentId: 'agent-1',
+        conversationKind: 'direct',
+        principal: { id: 'web:admin', isAdmin: true, role: 'system_admin' },
+        sessionId: 'session-1',
+        source: 'web',
+        triggerKind: 'interactive',
+        user: { id: 'web:admin', isAdmin: true, role: 'system_admin' },
+      },
+    })
+    assert.ok(result.tools.some((tool) => tool.name === 'sentinel'))
+  } finally {
+    global.middleware = previous
+  }
+})
+
 test('MetaTool - text display echo (getDisplayName)', () => {
   const meta = new MetaTool()
 
@@ -262,14 +506,14 @@ test('MetaTool - text display echo (getDisplayName)', () => {
   }
 
   const editorTool = new EditorTool()
-  global.middleware = {
+  global.middleware = withLlm({
     plugins: [
       {
         getTools: () => new Map([['editor', [editorTool]]]),
         name: 'editor',
       },
     ],
-  }
+  })
 
   // 1. list display name
   assert.strictEqual(
@@ -283,13 +527,13 @@ test('MetaTool - text display echo (getDisplayName)', () => {
     'Querying schema: replace, write',
   )
 
-  // 3. call display name (delegates to target tool's getDisplayName)
+  // 3. call display name stays generic until access is evaluated
   assert.strictEqual(
     meta.getDisplayName({
       action: 'call',
       schema: { filePath: 'index.js' },
       tool_name: 'replace',
     }),
-    'Replacing in index.js',
+    'Calling replace',
   )
 })

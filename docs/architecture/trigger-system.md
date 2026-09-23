@@ -1,5 +1,9 @@
 # MioChat Trigger Architecture v0.5
 
+> Identity/lifecycle update (2026-09-15): Trigger 的 `agentId/sessionId/channelId`
+> 绑定、执行与删除语义将由
+> [`channel-agent-refactor/Spec.md`](./channel-agent-refactor/Spec.md) 重构；两者冲突时以新规格为准。
+>
 > 状态：Registry 数据库化与长驻哨兵进程已实现；脚本按 AdminOnly 受信任代码运行
 > 日期：2026-08-31
 > 依赖：[`session-persistence.md`](./session-persistence.md)

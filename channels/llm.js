@@ -3,78 +3,20 @@
  *
  * 职责：
  * 1. 统一为所有渠道（微信、飞书、钉钉、Telegram 等）构造标准化内部请求事件 (Internal Event)
- * 2. 默认装配注入全量核心工具集（ai-plugin, terminal-pty, file-editor-plugin）
+ * 2. 默认装配 Agent 管理与核心执行工具集
  * 3. 渐进式披露：技能由 ai-plugin 中的 skill 工具按需发现与加载，保护 Prompt Cache
  * 4. 监听底层流式输出并利用状态机将完成的文本块和原生媒体 (图片等) 实时推送给渠道
  * 5. 精密装配并还原历史消息中的 Tool Calls（ID、入参、运行结果）及思考链，防止多轮对话工具依赖断裂
  */
 
-import { wrapUserMessageWithTimestamp } from '../lib/chat/messageTimestamp.js'
+import { wrapUserMessageWithMetadata } from '../lib/chat/messageTimestamp.js'
 import { coalesceCrystallizeEvents } from '../lib/chat/crystallizationContent.js'
 import sessions from '../lib/server/socket.io/services/sessions.js'
 import streamCache from '../lib/server/socket.io/services/streamCache.js'
-import { getChannelToolNames } from '../lib/chat/llm/toolPolicy.js'
+import { getAgentToolNames } from '../lib/chat/llm/toolPolicy.js'
 import CrystallizationService from '../lib/chat/llm/services/CrystallizationService.js'
-
-/**
- * 动态获取当前系统已加载的所有可用工具完整名称（带 _mid_ 实例哈希）
- * 与前端及系统全局 Preset 规范保持 100% 一致，杜绝硬编码
- */
-export function getRegisteredSystemToolNames() {
-  const plugins = global.middleware?.plugins || []
-  const toolNames = []
-  for (const plugin of plugins) {
-    if (typeof plugin.getTools !== 'function') continue
-    const toolsMap = plugin.getTools()
-    if (toolsMap && typeof toolsMap.values === 'function') {
-      for (const toolsArray of toolsMap.values()) {
-        if (Array.isArray(toolsArray)) {
-          for (const t of toolsArray) {
-            if (t.name && !toolNames.includes(t.name)) {
-              toolNames.push(t.name)
-            }
-          }
-        }
-      }
-    }
-  }
-  return toolNames
-}
-
-/**
- * 自动识别并补全存量 meta.json 中没有哈希的短工具名（如 'search', 'memory' -> 'search_mid_xxx'）
- * @param {Array<string>} tools
- * @param {Array<string>} [allSystemTools]
- * @returns {{ migrated: boolean, tools: Array<string> }}
- */
-export function completeToolHashes(tools, allSystemTools = []) {
-  if (!Array.isArray(tools) || tools.length === 0) {
-    return { migrated: false, tools: tools || [] }
-  }
-  const systemTools =
-    Array.isArray(allSystemTools) && allSystemTools.length > 0
-      ? allSystemTools
-      : getRegisteredSystemToolNames()
-
-  let migrated = false
-  const completed = tools.map((t) => {
-    if (typeof t !== 'string') return t
-    if (t.includes('_mid_')) {
-      return t
-    }
-    const matched = systemTools.find(
-      (st) =>
-        st === t || st.split('_mid_')[0] === t || st.startsWith(`${t}_mid_`),
-    )
-    if (matched) {
-      migrated = true
-      return matched
-    }
-    return t
-  })
-
-  return { migrated, tools: completed }
-}
+import approvalNotificationBroker from '../lib/approvals/ApprovalNotificationBroker.js'
+import { resolveOrigin } from '../utils/origin.js'
 
 export function createEchoLlm({ prefix = '' } = {}) {
   return {
@@ -119,6 +61,7 @@ export function prepareChannelUserInput(
   text = '',
   images = [],
   messageTime = null,
+  envelope = null,
 ) {
   const originalText = typeof text === 'string' ? text : String(text ?? '')
   const imageList = []
@@ -155,7 +98,11 @@ export function prepareChannelUserInput(
     }
   }
 
-  const timestampedText = wrapUserMessageWithTimestamp(sourceText, messageTime)
+  const timestampedText = wrapUserMessageWithMetadata(
+    sourceText,
+    messageTime,
+    envelope,
+  )
   const latestContent =
     imageList.length > 0
       ? [
@@ -184,6 +131,23 @@ export function prepareChannelUserInput(
     persistedContent,
     sourceText,
   }
+}
+
+/** Attach file references to the same logical user turn as their follow-up. */
+export function appendFileReferences(text = '', files = []) {
+  const sourceText = typeof text === 'string' ? text : String(text ?? '')
+  if (!Array.isArray(files) || files.length === 0) return sourceText
+  const normalized = files
+    .map((file) => ({
+      name: String(file?.name || 'file').trim() || 'file',
+      url: String(file?.url || file?.file || '').trim(),
+    }))
+    .filter((file) => file.url && !sourceText.includes(file.url))
+  if (normalized.length === 0) return sourceText
+  const references = normalized
+    .map((file) => `- [${file.name}](${file.url})`)
+    .join('\n')
+  return `${sourceText}${sourceText ? '\n\n' : ''}以下是用户本轮上传的文件，请结合文件内容回答：\n${references}`
 }
 
 /**
@@ -304,11 +268,11 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
   const msgs = []
   if (!Array.isArray(chatHistory)) return msgs
 
-  const convertStoredUserContent = (content, time) => {
+  const convertStoredUserContent = (content, time, envelope = null) => {
     if (!Array.isArray(content)) {
       const textContent = typeof content === 'string' ? content : ''
       return parseMultimodalContent(
-        wrapUserMessageWithTimestamp(textContent, time),
+        wrapUserMessageWithMetadata(textContent, time, envelope),
       )
     }
 
@@ -340,7 +304,11 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
       }
     }
 
-    const timestampedText = wrapUserMessageWithTimestamp(textContent, time)
+    const timestampedText = wrapUserMessageWithMetadata(
+      textContent,
+      time,
+      envelope,
+    )
     if (hasExplicitImage) {
       return [
         ...explicitImages,
@@ -368,7 +336,11 @@ export function convertChatHistoryToLLMMessages(chatHistory) {
         }
       } else if (item.role === 'user') {
         msgs.push({
-          content: convertStoredUserContent(item.content, item.time),
+          content: convertStoredUserContent(
+            item.content,
+            item.time,
+            item.metadata,
+          ),
           role: 'user',
         })
       } else if (item.role === 'assistant' || item.role === 'other') {
@@ -766,12 +738,23 @@ export function createBackendLlm(opts = {}) {
     },
 
     process: async (ctx) => {
+      const executionAgentId = ctx.agentId || ctx.memory?.agentId
+      if (!executionAgentId || !ctx.sessionId) {
+        throw new Error(
+          'Channel execution requires exact agentId and sessionId',
+        )
+      }
       const svc =
         customService ||
         (typeof global !== 'undefined' && global.middleware?.llm)
       if (!svc) {
         return { text: `[Echo] ${ctx.text}` }
       }
+      const wakeType = ctx.isWake
+        ? ctx.source === 'subagent'
+          ? 'subagent'
+          : 'trigger'
+        : null
 
       const messages = []
 
@@ -782,7 +765,7 @@ export function createBackendLlm(opts = {}) {
       systemSections.push(
         [
           '【工具使用与自治能力】',
-          '你可以使用 `channel_profile` 自主管理自身灵魂，使用 `channel_session` 管理会话历史，使用 `channel_model` 切换底层模型，使用 `meta_tool` 动态查看与调用系统所有工具，使用 `memory` 记录用户事实，使用 `bash` 执行终端命令，使用 `skill` 加载专家能力。',
+          '你可以使用 `agent_profile` 自主管理当前 Agent 的灵魂与资料，使用 `agent_session` 管理当前会话作用域内的普通 Session，使用 `agent_model` 切换 Agent 模型，使用 `meta_tool` 动态查看与调用系统所有工具，使用 `memory` 记录用户事实，使用 `bash` 执行终端命令，使用 `skill` 加载专家能力。SubAgent 必须由专用 `subagent` 工具按 RunGroup/Run 协议派发，不能通过 `agent_session` 单独创建。',
         ].join('\n'),
       )
 
@@ -803,7 +786,7 @@ export function createBackendLlm(opts = {}) {
             '【灵魂设定】',
             '你当前尚未设定专属灵魂人格 (Soul)。你是一个温暖、聪明、善解人意的全能 AI 助手。',
             '💡【引导提示】：由于你还没有专属人设，请在适当时机（例如初次认识、开启新对话或交流顺畅时），自然友好地向用户自我介绍，并主动建议用户为你设定专属人格、语气或名字（例如：“你希望我怎样陪伴你呢？可以随时给我取个专属名字或者设定喜欢的性格哦～”）。',
-            '一旦用户明确表达了对你的名字、性格、语气或角色期待，你可以直接调用 `channel_profile(action="update", soul="...")` 工具自主将这份灵魂固化保存，永久成为用户的专属陪伴。',
+            '一旦用户明确表达了对你的名字、性格、语气或角色期待，你可以直接调用 `agent_profile(action="update", soul="...")` 工具自主将这份灵魂固化保存，永久成为用户的专属陪伴。',
           ].join('\n'),
         )
       }
@@ -840,6 +823,7 @@ export function createBackendLlm(opts = {}) {
         ctx.text,
         ctx.images,
         ctx.messageTime,
+        ctx.envelope,
       )
       const currentUserMessage = {
         content: preparedInput.latestContent,
@@ -894,10 +878,21 @@ export function createBackendLlm(opts = {}) {
         }
       }
 
-      const finalTools = getChannelToolNames({
-        channel: ctx.channel || { type: 'channel' },
-        source: 'channel',
-      })
+      const finalTools = Array.isArray(ctx.toolNames)
+        ? [...ctx.toolNames]
+        : getAgentToolNames({
+            agentId: executionAgentId,
+            channel: ctx.channel || { type: 'channel' },
+            conversationKind:
+              ctx.envelope?.conversation?.type === 'group' ? 'group' : 'direct',
+            principal: ctx.principal || null,
+            sessionId: ctx.sessionId,
+            source: 'channel',
+            triggerKind: ctx.isTask ? 'task' : 'interactive',
+            user: {
+              isAdmin: ctx.principal?.isAdmin === true,
+            },
+          })
       const savedEffort = ctx.memory
         ? await ctx.memory.getAgentMeta('reasoning_effort', 0)
         : 0
@@ -932,13 +927,50 @@ export function createBackendLlm(opts = {}) {
       const auditChannelId =
         ctx.channelId || ctx.channel?.id || ctx.channel?.channelId || null
       const event = {
-        source: 'channel',
-        conversationKind: 'direct',
-        triggerKind: ctx.isTask ? 'task' : 'interactive',
+        agentId: executionAgentId,
+        // ChannelRuntime resolves these identifiers before the adapter queue.
+        // Keep them on the event itself (and in body below) for legacy tools
+        // that still receive the compatibility event shape.
+        bindingId: ctx.bindingId || ctx.channelBindingId || null,
+        channelConversationId: ctx.channelConversationId || null,
+        externalConversationId:
+          ctx.externalConversationId ||
+          ctx.envelope?.conversation?.externalConversationId ||
+          null,
+        externalThreadId:
+          ctx.externalThreadId ||
+          ctx.envelope?.conversation?.externalThreadId ||
+          null,
+        envelope: ctx.envelope || null,
+        subagentRunId: ctx.subagentRunId || null,
+        actorId: ctx.principal?.externalUserId || ctx.from || 'channel_user',
+        principal: ctx.principal || null,
+        principalId:
+          ctx.principal?.id ||
+          `channel:${auditChannelId || 'unknown'}:${ctx.from || 'channel_user'}`,
+        sessionScope: ctx.sessionScope || null,
+        source: ctx.source || 'channel',
+        isWake: Boolean(ctx.isWake),
+        conversationKind:
+          ctx.envelope?.conversation?.type === 'group' ? 'group' : 'direct',
+        // Wake is an audit/detail flag, not a new policy scene. Keep the
+        // canonical trigger dimension as task so tool policy and event
+        // validators do not reject the parent wake turn.
+        triggerKind: ctx.isTask || ctx.isWake ? 'task' : 'interactive',
         body: {
           channel: ctx.channel?.channelType || 'channel',
           channelId: auditChannelId,
-          contactorId: auditChannelId,
+          bindingId: ctx.bindingId || ctx.channelBindingId || null,
+          channelConversationId: ctx.channelConversationId || null,
+          externalConversationId:
+            ctx.externalConversationId ||
+            ctx.envelope?.conversation?.externalConversationId ||
+            null,
+          externalThreadId:
+            ctx.externalThreadId ||
+            ctx.envelope?.conversation?.externalThreadId ||
+            null,
+          contactorId: executionAgentId,
           messages,
           sessionId: ctx.sessionId || null,
           settings: {
@@ -961,7 +993,7 @@ export function createBackendLlm(opts = {}) {
         },
         sessionId: ctx.sessionId || null,
         channel: ctx.channel || {
-          agentId: ctx.agentId || 'channel-master',
+          agentId: executionAgentId,
           memory: ctx.memory,
           model: ctx.model,
           provider: ctx.provider,
@@ -1017,7 +1049,18 @@ export function createBackendLlm(opts = {}) {
         registerInteraction: async (interactionId, callback) => {
           event.interactions.set(interactionId, callback)
 
-          if (ctx.isWeb && ctx.webClient && ctx.messageId) {
+          if (ctx.approvalTarget) {
+            approvalNotificationBroker.register({
+              action: lastActionData || {
+                actionType: 'REQUEST_APPROVAL',
+                interactionId,
+                prompt: 'SubAgent 正在申请执行敏感操作，是否授权？',
+              },
+              event,
+              interactionId,
+              target: ctx.approvalTarget,
+            })
+          } else if (ctx.isWeb && ctx.webClient && ctx.messageId) {
             // 1. 来自 Web 客户端：注册到 webClient 活跃事件集，由前端通过 Socket.IO 就地弹窗与 tool:interact 交互
             ctx.webClient.pushEvent(ctx.messageId, event)
           } else {
@@ -1123,8 +1166,9 @@ export function createBackendLlm(opts = {}) {
 
           // 无论 Web 客户端是否在线，流式 Chunks 异步沉淀至 streamCache（完全不阻塞微信下发）
           const resolvedContactorId =
+            ctx.streamContactorId ||
+            executionAgentId ||
             ctx.channelId ||
-            ctx.agentId ||
             ctx.channel?.id ||
             ctx.channel?.channelId ||
             ctx.memory?.agentId ||
@@ -1172,6 +1216,10 @@ export function createBackendLlm(opts = {}) {
                 isTask: Boolean(ctx.isTask),
                 messageId: ctx.messageId,
                 triggerType: ctx.isTask ? 'task' : 'chat',
+                ...(wakeType ? { wakeType } : {}),
+                ...(ctx.subagentContact
+                  ? { subagentContact: ctx.subagentContact }
+                  : {}),
                 ...data.metaData,
               },
             }
@@ -1397,14 +1445,21 @@ export function createBackendLlm(opts = {}) {
           }
         },
         user: {
-          agentId: ctx.agentId || 'channel-master',
+          agentId: executionAgentId,
           channel: ctx.channel?.channelType || 'channel',
           channelType: ctx.channel?.channelType || 'channel',
-          id: ctx.from || 'channel_master',
-          isAdmin: true,
-          origin: ctx.isWeb ? 'web' : 'channel',
-          role: 'admin',
-          username: 'ChannelMaster',
+          id:
+            ctx.principal?.id ||
+            `channel:${auditChannelId || 'unknown'}:${ctx.from || 'channel_user'}`,
+          isAdmin: ctx.principal?.isAdmin === true,
+          origin: resolveOrigin(
+            ctx.isWeb
+              ? ctx.webClient?.origin || ctx.origin
+              : ctx.origin || ctx.webClient?.origin,
+          ),
+          role: ctx.principal?.role || 'user',
+          username:
+            ctx.envelope?.actor?.displayName || ctx.from || 'ChannelUser',
         },
       }
 
@@ -1433,8 +1488,9 @@ export function createBackendLlm(opts = {}) {
             // window are visible to the next FIFO Channel request.
             await contextPersistenceQueue
             const resolvedContactorId =
+              ctx.streamContactorId ||
+              executionAgentId ||
               ctx.channelId ||
-              ctx.agentId ||
               ctx.channel?.id ||
               ctx.channel?.channelId ||
               ctx.memory?.agentId ||
@@ -1465,6 +1521,10 @@ export function createBackendLlm(opts = {}) {
                     metaData: {
                       contactorId: resolvedContactorId,
                       messageId: ctx.messageId,
+                      ...(wakeType ? { wakeType } : {}),
+                      ...(ctx.subagentContact
+                        ? { subagentContact: ctx.subagentContact }
+                        : {}),
                     },
                   },
                   ctx.messageId,
@@ -1482,8 +1542,9 @@ export function createBackendLlm(opts = {}) {
           isDone = true
           streamError = err
           const resolvedContactorId =
+            ctx.streamContactorId ||
+            executionAgentId ||
             ctx.channelId ||
-            ctx.agentId ||
             ctx.channel?.id ||
             ctx.channel?.channelId ||
             ctx.memory?.agentId ||
@@ -1517,6 +1578,10 @@ export function createBackendLlm(opts = {}) {
                   metaData: {
                     contactorId: resolvedContactorId,
                     messageId: ctx.messageId,
+                    ...(wakeType ? { wakeType } : {}),
+                    ...(ctx.subagentContact
+                      ? { subagentContact: ctx.subagentContact }
+                      : {}),
                   },
                 },
                 ctx.messageId,

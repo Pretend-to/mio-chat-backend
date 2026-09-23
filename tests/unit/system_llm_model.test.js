@@ -5,7 +5,7 @@ import '../adapters/mock-env.js'
 import SystemSettingsService from '../../lib/database/services/SystemSettingsService.js'
 import llmService from '../../lib/chat/llm/index.js'
 
-test('system title generation resolves display name and configured model', async (t) => {
+test('title generation uses the current conversation provider and model', async (t) => {
   const originalGet = SystemSettingsService.get
   const originalLlms = llmService.llms
   const originalMetadata = llmService.instanceMetadata
@@ -16,11 +16,7 @@ test('system title generation resolves display name and configured model', async
     llmService.instanceMetadata = originalMetadata
   })
 
-  SystemSettingsService.get = async (key) => {
-    if (key === 'system_llm_channel') return { value: '标题模型渠道' }
-    if (key === 'system_llm_model') return { value: 'title-model-2' }
-    return null
-  }
+  SystemSettingsService.get = async () => null
 
   let selectedModel = null
   llmService.instanceMetadata = {
@@ -44,7 +40,7 @@ test('system title generation resolves display name and configured model', async
 
   const title = await llmService.generateChatTitle([
     { role: 'user', content: '请优化启动速度' },
-  ])
+  ], { model: 'title-model-2', provider: '标题模型渠道' })
 
   assert.equal(selectedModel, 'title-model-2')
   assert.equal(title, '启动优化')

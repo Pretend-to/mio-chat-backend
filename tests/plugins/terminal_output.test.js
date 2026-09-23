@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { filterExecOutput } from '../../lib/plugins/terminal-pty/lib/TerminalSessionManager.js'
+import {
+  cleanTerminalOutput,
+  filterExecOutput,
+} from '../../lib/plugins/terminal-pty/lib/TerminalSessionManager.js'
 
 test('PTY exec output keeps command result and removes shell echo/prompt/marker', () => {
   const command = "date '+%Y-%m-%d %H:%M:%S %A %Z'"
@@ -27,5 +30,12 @@ test('PTY timeout output removes only a leading submitted-command echo', () => {
   assert.equal(
     filterExecOutput('echo same\nsame', 'echo same'),
     'same',
+  )
+})
+
+test('terminal output cleanup renders carriage returns and preserves blank lines', () => {
+  assert.equal(
+    cleanTerminalOutput('progress 1\rprogress 2\n\nready\u0007\n'),
+    'progress 2\n\nready\n',
   )
 })

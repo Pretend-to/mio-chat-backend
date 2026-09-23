@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import './mock-env.js';
 import { runGenericAdapterTests } from './test-suite.js';
-import XiaomiMiMoAdapter from '../../lib/chat/llm/adapters/implementations/xiaomimimo.js';
+import { getAdapterClass } from '../../lib/chat/llm/adapters/registry.js';
+
+const XiaomiMiMoAdapter = await getAdapterClass('xiaomimimo');
 
 test('Xiaomi MiMo Adapter', async (t) => {
   const config = {
