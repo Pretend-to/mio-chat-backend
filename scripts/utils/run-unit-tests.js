@@ -12,6 +12,9 @@ import {
   removeIsolatedRoot,
 } from './testIsolation.js'
 
+/** 单测每个用例的默认死线（可用 TEST_TIMEOUT_MS 覆盖，0 = 不超时）*/
+const DEFAULT_TEST_TIMEOUT_MS = 60_000
+
 /** 递归收集测试文件：不依赖 shell glob，换 cwd 后依然稳定 */
 async function collectTestFiles(dir) {
   const entries = await fs.readdir(dir, { withFileTypes: true })
@@ -22,6 +25,24 @@ async function collectTestFiles(dir) {
       files.push(...(await collectTestFiles(full)))
     } else if (entry.name.endsWith('.test.js')) {
       files.push(full)
+    }
+  }
+  return files
+}
+
+/**
+ * 目标可以是文件或目录。目录递归展开成 *.test.js 列表 ——
+ * node --test 在隔离 cwd 下不接受裸目录（会报 test failed，什么也不跑）。
+ */
+async function expandTargets(targets) {
+  const files = []
+  for (const target of targets) {
+    const absolute = path.resolve(projectRoot, target)
+    const stat = await fs.stat(absolute).catch(() => null)
+    if (stat?.isDirectory()) {
+      files.push(...(await collectTestFiles(absolute)))
+    } else {
+      files.push(absolute)
     }
   }
   return files
@@ -54,14 +75,37 @@ async function main() {
     const targets = process.argv.slice(2)
     const testFiles =
       targets.length > 0
-        ? targets
+        ? await expandTargets(targets)
         : await collectTestFiles(path.join(projectRoot, 'tests'))
-    const child = spawn(process.execPath, ['--test', ...testFiles], {
-      cwd: root,
-      // 不注入任何 env：单测里大量用例会 mock config / 鉴权，注入 ADMIN_CODE /
-      // USER_CODE / NODE_ENV 会把它们 mock 掉的状态盖回去（曾导致 29 个用例失败）。
-      stdio: 'inherit',
-    })
+
+    // 每个用例的死线：Node 默认不超时，一个挂死的用例（漏了 close 的 setInterval /
+    // 长连接）会让整个套件永生 —— 曾见测试进程挂死 5 天无人发现。
+    // TEST_TIMEOUT_MS=0 可关掉（恢复 Node 默认行为）。
+    const testTimeout = Number(
+      process.env.TEST_TIMEOUT_MS ?? DEFAULT_TEST_TIMEOUT_MS,
+    )
+    if (testTimeout !== DEFAULT_TEST_TIMEOUT_MS) {
+      console.log(`⏱  单测用例超时: ${testTimeout || '关闭'}`)
+    }
+
+    const child = spawn(
+      process.execPath,
+      [
+        '--test',
+        `--test-timeout=${testTimeout}`,
+        // 光有超时不够：用例被判定失败后，它泄漏的 interval / socket 仍会撑住
+        // 事件循环，进程照样不退出（僵尸就是这么来的）。force-exit 让套件跑完后
+        // 直接退出，把「挂死」变成「失败 + 退出码非 0」。
+        '--test-force-exit',
+        ...testFiles,
+      ],
+      {
+        cwd: root,
+        // 不注入任何 env：单测里大量用例会 mock config / 鉴权，注入 ADMIN_CODE /
+        // USER_CODE / NODE_ENV 会把它们 mock 掉的状态盖回去（曾导致 29 个用例失败）。
+        stdio: 'inherit',
+      },
+    )
 
     const code = await new Promise((resolve) => {
       child.once('error', () => resolve(1))
