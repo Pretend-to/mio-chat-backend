@@ -44,12 +44,14 @@ pnpm docker:up / docker:down / docker:logs
 - 单测用 Node 内置 `node --test`，无第三方框架。适配器测试最全（每个 provider 一个文件），业务逻辑覆盖较薄。
 - 单测**跑不到真库**：`scripts/utils/testIsolation.js` 会换 cwd 并复制一份真库副本给测试进程。不要给单测进程注入 `ADMIN_CODE` / `USER_CODE` / `NODE_ENV`。
 - 已知失败：`tests/adapters/image-url.test.js` 的 2 个用例（GeminiAdapter base64、Image URL pre-processing），与你的改动无关时不要当回归信号。
-- 单测进程**没有 per-test 超时**：某个用例挂死不会失败，只会永生（曾见 setInterval 泄漏把 `node --test` 吊住 5 天）。带定时器 / WebSocket / 长连接的测试必须在 `t.after` 里 close，否则挂死很难被发现。
+- 单测每个用例默认 **60s 死线**（`TEST_TIMEOUT_MS=0` 可关掉），并带 `--test-force-exit`：漏了 close 的定时器 / 长连接不会再让套件永生（曾见测试进程挂死 5 天；两个开关都在 `scripts/utils/run-unit-tests.js`）。目标参数可以是文件或目录（目录递归展开），但仍应给带定时器 / 长连接的测试在 `t.after` 里显式 close。
 
-> **发布门禁（OneBots 微信补丁）**：`package.json` 的 `patchedDependencies` 指向本地补丁
-> `patches/@onebots__adapter-wechat-clawbot@3.0.12.patch`。上游 `onebots` 发布包含该修复的正式版之前，
-> **不要把 WeChat(onebots) 迁移带进发布分支**（`master` / `production`）。上游发布后：删 `patchedDependencies`
-> → 升级依赖 → 跑全量测试 → 再合并。
+> **发布门禁（已解除 2026-09-23）**：WeChat(onebots) 集成曾依赖本地补丁
+> `patches/@onebots__adapter-wechat-clawbot@3.0.12.patch`（给上游适配器加 `outbound_text_format`）。
+> 上游已在 `onebots@1.2.14` / `@onebots/*@3.0.14` 正式发布该能力，因此补丁与 `patchedDependencies` 已删除、
+> 依赖已升级，`master` 已同步。后续升级这条上游线时，只要确认 `outbound_text_format` 仍在包内即可
+> —— `channels/weixin-ilink/OneBotsBridge.js` 依赖它（`channels/weixin-ilink/index.js` 暴露为配置项）。
+> 同时 `Dockerfile` 里不再需要 `COPY patches/`。
 
 ## 启动流程
 
@@ -273,5 +275,5 @@ this.name = `${name}_mid_${this.hash}`;
 ## 已知的坑
 
 - 旧文档里的 `lib/chat/acp/` 已不存在。
-- 全量套件里可能存在与本次改动无关的红（先 `git log`/`blame` 确认再当回归信号）；单测无 per-test 超时，挂死不会失败。
+- 全量套件里可能存在与本次改动无关的红（先 `git log`/`blame` 确认再当回归信号）；已知红：`tests/adapters/image-url.test.js` 的 2 个用例。
 - 工具注册名带 `_mid_<hash>`：改了工具描述后，存量前端配置里的旧名会在日志里报 `not_registered`，让用户重开一次配置即可自愈（见"工具命名与权限"）。
