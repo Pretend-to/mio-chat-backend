@@ -63,7 +63,10 @@ test('Image URL pre-processing and data wrapping', async (t) => {
   });
 
   await t.test('GeminiAdapter: should preserve raw base64 payload for inline data conversion', async () => {
-    const rawBase64 = 'iVBORw0KGgoAAAANS';
+    // 裸 base64 载荷（不含 data: 前缀）。必须是真实长度的合法 base64：
+    // resolveImageAsBase64 的 isRawBase64Payload 要求 length > 50 且字符集严格匹配，
+    // 过短的假载荷会被判为「无法解析的地址」而丢弃。
+    const rawBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
     const rawMessages = [
       {
         content: [
@@ -74,6 +77,22 @@ test('Image URL pre-processing and data wrapping', async (t) => {
     ];
     const adapter = new GeminiAdapter({ api_key: 'test', base_url: 'http://localhost' });
     const processed = await adapter._processMessages(rawMessages);
-    assert.strictEqual(processed[0].content[0].image_url.url, rawBase64);
+
+    // _processMessages 的契约是把 image_url 规范化成 data URI（与 OpenAIAdapter 一致），
+    // 而不是把裸载荷原样透传。
+    assert.strictEqual(processed[0].content[0].type, 'image_url');
+    assert.strictEqual(processed[0].content[0].image_url.url, `data:image/jpeg;base64,${rawBase64}`);
+
+    // 载荷本身必须逐字节存活到 inline_data（不被丢弃、不被改写）
+    const { contents } = await adapter.core._preProcessMessage(processed);
+    assert.strictEqual(contents[0].parts[0].inline_data.data, rawBase64);
+    // 这里**故意不断言** mime_type === 'image/jpeg'：resolveImageAsBase64 对裸 base64
+    // 硬编码 image/jpeg（utils/imgTools.js），而本 fixture 实际是 PNG。断言它等于 jpeg
+    // 等于把一个已知缺陷固化成契约。只要求它是一个可用的 image/* MIME，
+    // 待 imgTools 的 MIME 推断修正后再收紧。
+    assert.match(
+      contents[0].parts[0].inline_data.mime_type,
+      /^image\/[a-z0-9.+-]+$/,
+    );
   });
 });
