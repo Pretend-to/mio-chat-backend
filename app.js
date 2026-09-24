@@ -5,6 +5,7 @@ import { monitorEventLoopDelay } from 'node:perf_hooks'
 // 全局变量存储服务器实例
 let httpServer = null
 let isShuttingDown = false
+let stopSessionWorkRunner = null
 
 function startEventLoopDelayMonitor() {
   const delay = monitorEventLoopDelay({ resolution: 20 })
@@ -283,6 +284,9 @@ async function gracefulShutdown(signal) {
       logger.warn('清理哨兵进程时警告:', error.message)
     }
 
+    stopSessionWorkRunner?.()
+    stopSessionWorkRunner = null
+
     // 1. 关闭 Socket.IO 服务器
     try {
       if (global.middleware && global.middleware.socketServer) {
@@ -442,9 +446,35 @@ async function startApp() {
         logger.warn('[ChannelRuntime] 自动恢复渠道时出错:', e.message)
       }
 
-      // 渠道恢复完成后再启动哨兵，避免启动窗口把目标 Channel 误判为不可用。
       const { getTriggerService } = await import('./lib/triggers/index.js')
-      await getTriggerService().startScheduler()
+      const triggerService = getTriggerService()
+      triggerService.injector.startListening?.()
+
+      // Install the durable Session work runner at the composition root so
+      // accepted work resumes even if no Cron or Trigger module is imported
+      // before the pending inbox is drained.
+      try {
+        const [{ SessionTurnService }, { getChatEventDispatcher }] =
+          await Promise.all([
+            import('./lib/chat/sessions/SessionTurnService.js'),
+            import('./lib/chat/llm/events/ChatEventDispatcher.js'),
+          ])
+        const sessionTurnService = new SessionTurnService({ channelRuntime })
+        const dispatcher = getChatEventDispatcher()
+        stopSessionWorkRunner = dispatcher.registerWakeRunner((workItem) =>
+          sessionTurnService.runWorkItem(workItem),
+        )
+        const resumed = await dispatcher.resumePending()
+        if (resumed > 0) {
+          logger.info(`[SessionWork] 已恢复 ${resumed} 条待处理工作`)
+        }
+      } catch (e) {
+        logger.error('[SessionWork] 恢复持久 Session 工作失败:', e.message)
+        throw e
+      }
+
+      // 渠道恢复完成后再启动哨兵，避免启动窗口把目标 Channel 误判为不可用。
+      await triggerService.startScheduler()
 
       await taskScheduler.initialize(global.middleware.llm, channelRuntime)
     } else {

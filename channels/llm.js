@@ -17,6 +17,8 @@ import { getAgentToolNames } from '../lib/chat/llm/toolPolicy.js'
 import CrystallizationService from '../lib/chat/llm/services/CrystallizationService.js'
 import approvalNotificationBroker from '../lib/approvals/ApprovalNotificationBroker.js'
 import { resolveOrigin } from '../utils/origin.js'
+import { ChatEventFactory } from '../lib/chat/llm/events/ChatEventFactory.js'
+import { getChatEventDispatcher } from '../lib/chat/llm/events/ChatEventDispatcher.js'
 
 export function createEchoLlm({ prefix = '' } = {}) {
   return {
@@ -210,6 +212,18 @@ export function appendRecursiveContextMessages(content, entries) {
       data: {
         content: entry.message?.content,
         role: 'user',
+        ...(entry.message?._workEventId
+          ? { eventId: entry.message._workEventId }
+          : {}),
+        ...(entry.message?._workIdempotencyKey
+          ? { idempotencyKey: entry.message._workIdempotencyKey }
+          : {}),
+        ...(entry.message?._wakeKind
+          ? { wakeKind: entry.message._wakeKind }
+          : {}),
+        ...(entry.message?._originRef
+          ? { originRef: entry.message._originRef }
+          : {}),
       },
       type: 'context_message',
     }
@@ -751,9 +765,7 @@ export function createBackendLlm(opts = {}) {
         return { text: `[Echo] ${ctx.text}` }
       }
       const wakeType = ctx.isWake
-        ? ctx.source === 'subagent'
-          ? 'subagent'
-          : 'trigger'
+        ? ctx.wakeKind || (ctx.source === 'subagent' ? 'subagent' : 'trigger')
         : null
 
       const messages = []
@@ -926,7 +938,7 @@ export function createBackendLlm(opts = {}) {
       }
       const auditChannelId =
         ctx.channelId || ctx.channel?.id || ctx.channel?.channelId || null
-      const event = {
+      let event = {
         agentId: executionAgentId,
         // ChannelRuntime resolves these identifiers before the adapter queue.
         // Keep them on the event itself (and in body below) for legacy tools
@@ -1152,7 +1164,9 @@ export function createBackendLlm(opts = {}) {
           }
         },
         reply: () => {},
-        requestId: `${ctx.channel?.channelType || 'channel'}_${ctx.sessionId || Date.now()}_${Date.now()}`,
+        requestId:
+          ctx.eventId ||
+          `${ctx.channel?.channelType || 'channel'}_${ctx.sessionId || Date.now()}_${Date.now()}`,
         unregisterInteraction: (interactionId) => {
           return event.interactions.delete(interactionId)
         },
@@ -1463,11 +1477,41 @@ export function createBackendLlm(opts = {}) {
         },
       }
 
+      // The channel compatibility event must still be a real ChatEvent:
+      // adjustments are owned by the event that is running the adapter loop.
+      // Preserve the channel-specific output handlers while keeping the base
+      // class's adjustment queue and lifecycle methods on its prototype.
+      const bridge = event
+      const typedEvent = ChatEventFactory.createForChannel({
+        ctx: { ...ctx, agentId: executionAgentId },
+        messages: bridge.body.messages,
+        settings: bridge.body.settings,
+      })
+      Object.defineProperty(typedEvent, 'body', {
+        configurable: true,
+        value: bridge.body,
+        writable: true,
+      })
+      Object.assign(typedEvent, bridge)
+      event = typedEvent
+      event.eventId = event.requestId
+      event.deliveryMode =
+        ctx.deliveryMode || (event.bindingId ? 'channel' : 'default')
+      event.deliveryBindingId =
+        ctx.deliveryBindingId || event.bindingId || null
+      ctx.onChatEvent?.(event)
+
       if (typeof ctx.onRegisterAbort === 'function') {
         ctx.onRegisterAbort(() => event.abort())
       }
 
       // 等待底层 LLM 完整运行完毕（包含所有递归工具轮次）
+      const dispatcher = getChatEventDispatcher()
+      if (event.agentId && event.sessionId) {
+        if (!dispatcher.registerActive(event)) {
+          throw new Error(`Session ${event.sessionId} already has an active ChatEvent`)
+        }
+      }
       await new Promise((resolve, reject) => {
         let isDone = false
         const rejectAfterContextPersistence = (error) => {
@@ -1479,6 +1523,8 @@ export function createBackendLlm(opts = {}) {
         event.complete = async () => {
           if (isDone) return
           isDone = true
+          event.completed = true
+          event.deliveryStatus = 'finished'
           try {
             if (currentBlockType === 'text' || currentTextBlock.trim()) {
               await flushTextBlock()
@@ -1540,6 +1586,8 @@ export function createBackendLlm(opts = {}) {
         event.error = (err) => {
           if (isDone) return
           isDone = true
+          event.completed = true
+          event.deliveryStatus = 'finished'
           streamError = err
           const resolvedContactorId =
             ctx.streamContactorId ||
@@ -1596,6 +1644,10 @@ export function createBackendLlm(opts = {}) {
           isDone = true
           rejectAfterContextPersistence(err)
         })
+      }).finally(() => {
+        if (event.agentId && event.sessionId) {
+          dispatcher.unregisterActive(event)
+        }
       })
 
       if (streamError && !event.aborted) {

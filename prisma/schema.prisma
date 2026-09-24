@@ -149,6 +149,8 @@ model Task {
 model TaskExecution {
   id                Int       @id @default(autoincrement())
   taskId            String    @map("task_id")
+  // Scalar audit link: adding a FK here would rebuild this populated SQLite table.
+  sessionWorkItemId String?   @map("session_work_item_id")
   round             Int       @default(1)
   agentId           String    @map("agent_id")
   sessionId         String    @map("session_id")
@@ -165,11 +167,12 @@ model TaskExecution {
   finishedAt        DateTime? @map("finished_at")
   errorMessage      String?   @map("error_message")
 
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task            Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([taskId])
   @@index([taskId, round])
   @@index([agentId, sessionId])
+  @@index([sessionWorkItemId])
   @@index([status])
   @@map("task_executions")
 }
@@ -305,6 +308,7 @@ model Agent {
   subAgentRunGroups      SubAgentRunGroup[]
   subAgentRuns           SubAgentRun[]
   sessionInboxEvents     SessionInboxEvent[]
+  sessionWorkItems       SessionWorkItem[]
 
   @@map("agents")
 }
@@ -502,6 +506,8 @@ model Session {
   subAgentRuns               SubAgentRun[]         @relation("SubAgentRunSession")
   parentedSubAgentRuns       SubAgentRun[]         @relation("SubAgentRunParentSession")
   sessionInboxEvents         SessionInboxEvent[]
+  workItems                  SessionWorkItem[]
+  workLease                  SessionWorkLease?
 
   @@unique([agentId, parentSessionId, subagentKey])
   @@index([agentId, updatedAt])
@@ -669,6 +675,62 @@ model SessionInboxEvent {
   @@index([sessionId, status, availableAt])
   @@index([agentId, status])
   @@map("session_inbox_events")
+}
+
+// Durable ChatEvent delivery record for work that targets an Agent Session.
+// Source-specific execution records remain separate and link through this row.
+model SessionWorkItem {
+  id                         String    @id
+  eventId                    String    @unique @map("event_id")
+  agentId                    String    @map("agent_id")
+  sessionId                  String    @map("session_id")
+  conversationKey            String    @map("conversation_key")
+  kind                       String
+  wakeKind                   String    @map("wake_kind")
+  originRef                  String?   @map("origin_ref")
+  idempotencyKey             String    @map("idempotency_key")
+  instruction                String
+  deliveryMode               String    @default("default") @map("delivery_mode")
+  deliveryBindingId          String?   @map("delivery_binding_id")
+  principalJson              String?   @map("principal_json")
+  status                     String    @default("accepted")
+  absorbedByEventId          String?   @map("absorbed_by_event_id")
+  absorbedAssistantMessageId String?   @map("absorbed_assistant_message_id")
+  completionJson             String?   @map("completion_json")
+  lastError                  String?   @map("last_error")
+  attempts                   Int       @default(0)
+  availableAt                DateTime  @default(now()) @map("available_at")
+  claimedAt                  DateTime? @map("claimed_at")
+  startedAt                  DateTime? @map("started_at")
+  finishedAt                 DateTime? @map("finished_at")
+  createdAt                  DateTime  @default(now()) @map("created_at")
+  updatedAt                  DateTime  @updatedAt @map("updated_at")
+
+  agent             Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  session           Session            @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, sessionId, idempotencyKey])
+  @@index([sessionId, status, availableAt])
+  @@index([agentId, status])
+  @@index([originRef])
+  @@map("session_work_items")
+}
+
+// Per-Session write/execution lease. fencingToken increases on each takeover;
+// holders must verify both owner and token before committing protected writes.
+model SessionWorkLease {
+  sessionId      String   @id @map("session_id")
+  leaseOwner     String   @map("lease_owner")
+  fencingToken   Int      @default(1) @map("fencing_token")
+  leaseExpiresAt DateTime @map("lease_expires_at")
+  heartbeatAt    DateTime @default(now()) @map("heartbeat_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([leaseExpiresAt])
+  @@map("session_work_leases")
 }
 
 model Message {
@@ -843,25 +905,28 @@ model Trigger {
 }
 
 model TriggerExecution {
-  id         String    @id
-  triggerId  String?   @map("trigger_id")
-  triggerKey String    @map("trigger_key")
-  wake       Boolean
-  reason     String?
-  dataJson   String?   @map("data_json")
-  sessionId  String?   @map("session_id")
-  messageId  String?   @map("message_id")
-  durationMs Int?      @map("duration_ms")
-  error      String?
-  status     String    @default("ok")
-  firedAt    DateTime? @map("fired_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  legacyJson String?   @map("legacy_json")
+  id                String    @id
+  // Scalar audit link: adding a FK here would rebuild this populated SQLite table.
+  sessionWorkItemId String?   @map("session_work_item_id")
+  triggerId         String?   @map("trigger_id")
+  triggerKey        String    @map("trigger_key")
+  wake              Boolean
+  reason            String?
+  dataJson          String?   @map("data_json")
+  sessionId         String?   @map("session_id")
+  messageId         String?   @map("message_id")
+  durationMs        Int?      @map("duration_ms")
+  error             String?
+  status            String    @default("ok")
+  firedAt           DateTime? @map("fired_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  legacyJson        String?   @map("legacy_json")
 
-  trigger Trigger? @relation(fields: [triggerId], references: [id], onDelete: Cascade)
+  trigger         Trigger?         @relation(fields: [triggerId], references: [id], onDelete: Cascade)
 
   @@index([triggerKey, createdAt])
   @@index([status, createdAt])
+  @@index([sessionWorkItemId])
   @@map("trigger_executions")
 }
 
