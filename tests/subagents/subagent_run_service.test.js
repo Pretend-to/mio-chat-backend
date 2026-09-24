@@ -238,22 +238,24 @@ test('dispatcher executes dependency DAG asynchronously and persists results for
       }
     },
   }
-  const wakes = []
   const wakeAttempts = []
   let parentWakeAttempts = 0
   const dispatcher = new SubAgentDispatcher({
     executor,
     runService,
     parentWakeRetryDelays: [0, 0],
-    sessionTurnService: {
-      runTurn: async (request) => {
+    dispatcher: {
+      submitWake: async (request) => {
         parentWakeAttempts += 1
         wakeAttempts.push(request)
         if (parentWakeAttempts === 1) {
           throw new Error('transient parent session failure')
         }
-        wakes.push(request)
-        return { deliveryStatus: 'not_requested' }
+        return {
+          eventId: `event-${parentWakeAttempts}`,
+          status: 'accepted',
+          workItemId: `work-${parentWakeAttempts}`,
+        }
       },
     },
   })
@@ -294,19 +296,20 @@ test('dispatcher executes dependency DAG asynchronously and persists results for
   assert.deepEqual(JSON.parse(firstResult.resultJson), {
     summary: 'first done',
   })
-  assert.equal(wakes.length, 1)
+  assert.equal(wakeAttempts.length, 2)
   assert.equal(parentWakeAttempts, 2)
-  assert.notEqual(wakeAttempts[0].messageId, wakeAttempts[1].messageId)
-  assert.match(wakeAttempts[1].messageId, /_retry_1$/)
-  assert.equal(wakes[0].agentId, agentId)
-  assert.equal(wakes[0].sessionId, parentSessionId)
-  assert.equal(wakes[0].isWake, true)
-  assert.equal(wakes[0].source, 'subagent')
-  assert.equal(wakes[0].persistUserMessage, undefined)
-  assert.match(wakes[0].userMessageId, /^msg_u_subagent_wake_/)
-  assert.match(wakes[0].text, new RegExp(group.id))
-  assert.match(wakes[0].text, /status|read_result/)
-  assert.doesNotMatch(wakes[0].text, /first done/)
+  assert.equal(wakeAttempts[0].idempotencyKey, wakeAttempts[1].idempotencyKey)
+  assert.equal(wakeAttempts[0].agentId, agentId)
+  assert.equal(wakeAttempts[0].sessionId, parentSessionId)
+  assert.equal(wakeAttempts[0].kind, 'system')
+  assert.equal(wakeAttempts[0].wakeKind, 'subagent_done')
+  assert.equal(
+    wakeAttempts[0].originRef,
+    `subagent_group:${group.id}:revision:${completed.revision}`,
+  )
+  assert.match(wakeAttempts[0].instruction, new RegExp(group.id))
+  assert.match(wakeAttempts[0].instruction, /status|read_result/)
+  assert.doesNotMatch(wakeAttempts[0].instruction, /first done/)
   assert.equal(
     await prisma.sessionInboxEvent.count({
       where: { sessionId: parentSessionId },
@@ -318,7 +321,7 @@ test('dispatcher executes dependency DAG asynchronously and persists results for
   // second time. A continuation creates a new revision and is woken separately.
   assert.equal(dispatcher.startGroup(group.id), true)
   await dispatcher.waitForGroup(group.id)
-  assert.equal(wakes.length, 1)
+  assert.equal(wakeAttempts.length, 2)
 
   const continuation = await runService.continueRun(completed.runs[0].id, {
     instruction: 'Check one more source',
@@ -327,9 +330,12 @@ test('dispatcher executes dependency DAG asynchronously and persists results for
   assert.equal(revision.revision > completed.revision, true)
   assert.equal(dispatcher.startGroup(group.id), true)
   await dispatcher.waitForGroup(group.id)
-  assert.equal(wakes.length, 2)
-  assert.notEqual(wakes[0].messageId, wakes[1].messageId)
-  assert.match(wakes[1].text, new RegExp(continuation.id))
+  assert.equal(wakeAttempts.length, 3)
+  assert.notEqual(
+    wakeAttempts[0].idempotencyKey,
+    wakeAttempts[2].idempotencyKey,
+  )
+  assert.match(wakeAttempts[2].instruction, new RegExp(continuation.id))
 })
 
 test('running SubAgent Sessions are visible but cannot become ordinary Channel chat targets', async () => {
@@ -396,7 +402,9 @@ test('recoverStaleRuns recovers in-flight runs to interrupted on restart, suppor
   assert.equal(inFlight2.finishedAt, null)
 
   // Simulate process restart: call recoverStaleRuns()
-  const recovered = await runService.recoverStaleRuns({ reason: 'process_restarted' })
+  const recovered = await runService.recoverStaleRuns({
+    reason: 'process_restarted',
+  })
   assert.equal(recovered.length, 2)
 
   const updatedRun1 = await runService.getRun(run1.id)
@@ -415,7 +423,10 @@ test('recoverStaleRuns recovers in-flight runs to interrupted on restart, suppor
   assert.equal(updatedGroup.status, GROUP_STATUS.FAILED)
 
   // Test 1: User cancels an interrupted run via dispatcher.abortRun
-  const cancelledRun2 = await dispatcher.abortRun(run2.id, 'User stopped interrupted run')
+  const cancelledRun2 = await dispatcher.abortRun(
+    run2.id,
+    'User stopped interrupted run',
+  )
   assert.equal(cancelledRun2.status, RUN_STATUS.CANCELLED)
   assert.equal(cancelledRun2.cancelReason, 'User stopped interrupted run')
 

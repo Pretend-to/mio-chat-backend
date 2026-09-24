@@ -40,21 +40,32 @@ test('WakeProtocol: rejects invalid and oversized payloads', () => {
 test('TriggerRegistry: mutating operations can be scoped to an agent', async () => {
   const dataDir = await makeTempDir()
   const registry = new TriggerRegistry({ dataDir })
-  await registry.create({ agentId: 'agent-a', id: 'shared-id', sessionId: 'session-a' })
+  await registry.create({
+    agentId: 'agent-a',
+    id: 'shared-id',
+    sessionId: 'session-a',
+  })
 
   assert.equal(await registry.get('shared-id', { agentId: 'agent-b' }), null)
   assert.equal(
-    await registry.update('shared-id', { enabled: false }, { agentId: 'agent-b' }),
+    await registry.update(
+      'shared-id',
+      { enabled: false },
+      { agentId: 'agent-b' },
+    ),
     null,
   )
-  assert.equal(await registry.remove('shared-id', { agentId: 'agent-b' }), false)
+  assert.equal(
+    await registry.remove('shared-id', { agentId: 'agent-b' }),
+    false,
+  )
   assert.equal(
     (await registry.get('shared-id', { agentId: 'agent-a' })).enabled,
     true,
   )
 })
 
-test('WakeInjector: missing target does not fall back to another channel', async () => {
+test('WakeInjector: a rejected dispatcher submission does not claim a wake', async () => {
   const dataDir = await makeTempDir()
   const registry = new TriggerRegistry({ dataDir })
   const trigger = await registry.create({
@@ -65,21 +76,13 @@ test('WakeInjector: missing target does not fall back to another channel', async
   })
   const messages = []
   const injector = new WakeInjector({
-    channelRuntime: {
-      running: new Map([
-        [
-          'channel-b',
-          {
-            channel: { agentId: 'agent-b', id: 'channel-b' },
-            chn: { appendUserMessage: async (...args) => messages.push(args) },
-          },
-        ],
-      ]),
+    dispatcher: {
+      onWorkItemStatus: () => () => {},
+      submitWake: async () => {
+        throw new Error('target unavailable')
+      },
     },
     registry,
-    sessionTurnService: {
-      runTurn: async () => { throw new Error('target unavailable') },
-    },
   })
 
   const result = await injector.processWake(trigger, {
@@ -89,6 +92,9 @@ test('WakeInjector: missing target does not fall back to another channel', async
   assert.equal(result.injected, false)
   assert.equal(result.status, 'inject_failed')
   assert.equal(messages.length, 0)
+  const [execution] = await registry.listExecutions('target-test')
+  assert.equal(execution.status, 'failed')
+  assert.equal(execution.wake, false)
 })
 
 test('TriggerService: once keeps its process lifecycle after a failed injection', async () => {
@@ -126,6 +132,41 @@ test('TriggerService: once keeps its process lifecycle after a failed injection'
   assert.equal(state.status, 'wake_skipped')
 })
 
+test('TriggerService: needs_attention releases a queued sentinel wake', async () => {
+  const trigger = {
+    agentId: 'agent-a',
+    enabled: true,
+    id: 'attention-trigger',
+    mode: 'persistent',
+    type: 'script',
+  }
+  const service = new TriggerService({
+    registry: {
+      get: async () => trigger,
+    },
+    runner: { startScript: () => null },
+  })
+  const state = {
+    id: trigger.id,
+    agentId: trigger.agentId,
+    lastExitAt: Date.now(),
+    pendingExecutionId: 'exec-attention',
+    status: 'wake_queued',
+    stableTimer: null,
+    wakeStarted: false,
+  }
+  service._processes.set(state.id, state)
+
+  await service._handleWakeStatus({
+    executionId: 'exec-attention',
+    status: 'needs_attention',
+  })
+
+  assert.equal(state.status, 'needs_attention')
+  assert.equal(state.pendingExecutionId, null)
+  assert.equal(service._processes.has(state.id), false)
+})
+
 test('TriggerRunner: long-lived script emits one wake and can be killed by PID handle', async () => {
   const dataDir = await makeTempDir()
   const scriptPath = path.join(dataDir, 'loop.js')
@@ -147,7 +188,8 @@ test('TriggerRunner: long-lived script emits one wake and can be killed by PID h
           resolve(payload)
         },
         onExit: (result) => {
-          if (!result.wake) reject(new Error('long-lived script exited before wake'))
+          if (!result.wake)
+            reject(new Error('long-lived script exited before wake'))
         },
       },
     )
