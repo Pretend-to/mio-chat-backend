@@ -1,9 +1,28 @@
 import logger from './utils/logger.js'
+import { monitorEventLoopDelay } from 'node:perf_hooks'
 // Import taskScheduler from './lib/corn.js'
 
 // 全局变量存储服务器实例
 let httpServer = null
 let isShuttingDown = false
+
+function startEventLoopDelayMonitor() {
+  const delay = monitorEventLoopDelay({ resolution: 20 })
+  delay.enable()
+
+  const timer = setInterval(() => {
+    const maxMs = delay.max / 1e6
+    if (maxMs >= 250) {
+      const p99Ms = delay.percentile(99) / 1e6
+      logger.warn(
+        `[EventLoop] 最近约5秒检测到主线程延迟: p99=${p99Ms.toFixed(1)}ms max=${maxMs.toFixed(1)}ms`,
+      )
+    }
+    delay.reset()
+  }, 5000)
+
+  timer.unref()
+}
 
 /**
  * 检查并执行自动迁移（包括 OneBot 配置迁移）
@@ -366,6 +385,8 @@ async function gracefulShutdown(signal) {
 
 // 应用启动流程
 async function startApp() {
+  startEventLoopDelayMonitor()
+
   try {
     // 自动初始化：从 lib/initialization 导入并执行
     const { performFullInitialization } =
