@@ -37,6 +37,11 @@ import {
 } from '../../lib/chat/sessions/SessionWorkCoordinator.js'
 import { getChatEventDispatcher } from '../../lib/chat/llm/events/ChatEventDispatcher.js'
 
+// 渠道入口等待租约的上限。渠道的历史语义是「一直等」（原为一个
+// `for (;;) sleep 250ms` 自旋），这里保留同一语义：租约 TTL 30s 且只有活着的
+// 持有者会续租，持有者死掉/退出后等待会自然自愈，不需要额外上限。
+const CHANNEL_LEASE_WAIT_MS = Number.POSITIVE_INFINITY
+
 export class BaseChannel {
   /**
    * @param {object} opts
@@ -1277,32 +1282,35 @@ export class BaseChannel {
       ? new SessionWorkCoordinator({ prisma: this.memory.database.prisma })
       : getSessionWorkCoordinator()
     const owner = `channel:${randomUUID()}`
-    for (;;) {
-      let entered = false
-      try {
-        return await coordinator.withSessionLease(
-          { agentId, owner, sessionId },
-          async ({ assertLease, lease }) => {
-            entered = true
-            ctx.sessionLease = {
-              agentId,
-              assertLease,
-              fencingToken: lease.fencingToken,
-              owner: lease.leaseOwner,
-              sessionId,
-            }
-            try {
-              return await this._processChatWithLease(text, ctx)
-            } finally {
-              delete ctx.sessionLease
-            }
-          },
-        )
-      } catch (error) {
-        if (entered || error?.code !== 'session_busy') throw error
-        if (ctx.signal?.aborted) throw ctx.signal.reason || error
-        await new Promise((resolve) => setTimeout(resolve, 250))
+    // 租约被其它入口（Cron / 哨兵 / Web Agent / 另一个渠道实例）占用时等待。
+    // 原实现是一个 `for (;;) sleep 250ms` 的自旋：每轮至少 4 次 DB 往返、
+    // 无排队语义、多个等待者互相抢。现在复用 SessionWorkCoordinator 的
+    // FIFO 门（waitMs > 0）——同一个门 Web Agent 入口也在用。
+    // 注意：渠道实例内的顺序保障在 _enqueueSession（_sessionLocks +
+    // _sessionWaitingQueues），这里只负责跨入口互斥，不要在这里造顺序。
+    try {
+      return await coordinator.withSessionLease(
+        { agentId, owner, sessionId, waitMs: CHANNEL_LEASE_WAIT_MS },
+        async ({ assertLease, lease }) => {
+          ctx.sessionLease = {
+            agentId,
+            assertLease,
+            fencingToken: lease.fencingToken,
+            owner: lease.leaseOwner,
+            sessionId,
+          }
+          try {
+            return await this._processChatWithLease(text, ctx)
+          } finally {
+            delete ctx.sessionLease
+          }
+        },
+      )
+    } catch (error) {
+      if (error?.code === 'session_busy' && ctx.signal?.aborted) {
+        throw ctx.signal.reason || error
       }
+      throw error
     }
   }
 
