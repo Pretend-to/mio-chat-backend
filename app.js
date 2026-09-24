@@ -461,15 +461,26 @@ async function startApp() {
           ])
         const sessionTurnService = new SessionTurnService({ channelRuntime })
         const dispatcher = getChatEventDispatcher()
+        // 装不上 runner 是结构性故障：启动失败是正确行为。
         stopSessionWorkRunner = dispatcher.registerWakeRunner((workItem) =>
           sessionTurnService.runWorkItem(workItem),
         )
-        const resumed = await dispatcher.resumePending()
-        if (resumed > 0) {
-          logger.info(`[SessionWork] 已恢复 ${resumed} 条待处理工作`)
+        // 恢复个别待处理工作失败 != 服务不可用：记录并继续启动。
+        // 这些工作项保持原状态，等下次启动或人工对账再收。
+        // 让它把整个进程拖垮，等于拿一次局部故障换一次全站不可用。
+        try {
+          const resumed = await dispatcher.resumePending()
+          if (resumed > 0) {
+            logger.info(`[SessionWork] 已恢复 ${resumed} 条待处理工作`)
+          }
+        } catch (recoveryError) {
+          logger.error(
+            '[SessionWork] 恢复待处理工作失败（服务继续启动）:',
+            recoveryError.message,
+          )
         }
       } catch (e) {
-        logger.error('[SessionWork] 恢复持久 Session 工作失败:', e.message)
+        logger.error('[SessionWork] 安装 Session 工作 runner 失败:', e.message)
         throw e
       }
 
