@@ -59,6 +59,10 @@ test('SessionTurnService persists a turn when the requested binding needs rebind
         messages.push(message)
         return { chat: messages }
       },
+      appendUserMessageOnce: async (_sessionId, message) => {
+        messages.push(message)
+        return { id: message.id, inserted: true }
+      },
       beginAssistantMessage: async () => 'draft-1',
       ensure: async () => {},
       finalizeAssistantMessage: async (_messageId, message) => {
@@ -114,6 +118,10 @@ test('SessionTurnService session_only never falls back to Agent default', async 
     appendUserMessage: async (_sessionId, message) => {
       observed.push(message)
       return { chat: observed }
+    },
+    appendUserMessageOnce: async (_sessionId, message) => {
+      observed.push(message)
+      return { id: message.id, inserted: true }
     },
     beginAssistantMessage: async () => 'draft-1',
     ensure: async () => {},
@@ -175,6 +183,7 @@ test('SessionTurnService explicit channel mode reports needs_rebind instead of A
       appendAssistantChunk: async () => null,
       appendToChat: async () => ({ chat: [] }),
       appendUserMessage: async () => ({ chat: [] }),
+      appendUserMessageOnce: async (_sessionId, message) => ({ id: message.id, inserted: true }),
       beginAssistantMessage: async () => 'draft-1',
       ensure: async () => {},
       finalizeAssistantMessage: async () => true,
@@ -231,6 +240,7 @@ test('SessionTurnService ignores a legacy Web Agent default', async () => {
       appendAssistantChunk: async () => null,
       appendToChat: async () => ({ chat: [] }),
       appendUserMessage: async () => ({ chat: [] }),
+      appendUserMessageOnce: async (_sessionId, message) => ({ id: message.id, inserted: true }),
       beginAssistantMessage: async () => 'draft-1',
       ensure: async () => {},
       finalizeAssistantMessage: async () => true,

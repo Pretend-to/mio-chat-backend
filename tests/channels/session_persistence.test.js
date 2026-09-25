@@ -206,6 +206,38 @@ test('DatabaseMemoryStore preserves the MemoryStore contract and archive semanti
   assert.equal(retryDbRows[0].id, userMsgId)
 })
 
+test('external message id is idempotent across retries and sessions', async (t) => {
+  const { prisma } = await createFixture(t)
+  const memory = new DatabaseMemoryStore({ agentId: 'agent-external-id', prisma })
+  await memory.createSession({ id: 'external-first' })
+  await memory.createSession({ id: 'external-second' })
+
+  const first = {
+    ...user('original', 1_000),
+    channel_id: 'wechat-1',
+    external_message_id: 'dup-1',
+    id: 'incoming-first',
+  }
+  assert.equal(await memory.appendUserMessage('external-first', first), 'incoming-first')
+
+  const duplicate = {
+    ...user('redelivered', 2_000),
+    channel_id: 'wechat-1',
+    external_message_id: 'dup-1',
+    id: 'incoming-second',
+  }
+  assert.equal(await memory.appendUserMessage('external-second', duplicate), 'incoming-first')
+  assert.equal(await prisma.message.count({ where: { channelId: 'wechat-1', externalMessageId: 'dup-1' } }), 1)
+  assert.equal((await memory.getChat('external-first'))[0].text, 'original')
+  assert.deepEqual(await memory.getChat('external-second'), [])
+
+  assert.equal(
+    await memory.appendUserMessage('external-second', { ...duplicate, channel_id: 'wechat-2' }),
+    'incoming-second',
+  )
+  assert.equal(await prisma.message.count({ where: { externalMessageId: 'dup-1' } }), 2)
+})
+
 test('streaming lifecycle finalizes tool projections and recovers interrupted messages', async (t) => {
   const { prisma } = await createFixture(t)
   const memory = new DatabaseMemoryStore({ agentId: 'agent-stream', prisma })
@@ -341,6 +373,42 @@ test('BaseChannel persists user and assistant placeholder before invoking the LL
     await prisma.messageChunk.count({ where: { messageId: 'assistant-db' } }),
     1,
   )
+})
+
+test('BaseChannel does not invoke LLM for an external message redelivery', async (t) => {
+  const { prisma } = await createFixture(t)
+  const memory = new DatabaseMemoryStore({ agentId: 'agent-redelivery', prisma })
+  await memory.createSession({ id: 'redelivery-session' })
+  let llmCalls = 0
+  const channel = new BaseChannel({
+    client: { botId: 'bot' },
+    llm: {
+      process: async () => {
+        llmCalls++
+        return { content: [{ data: { text: 'answer' }, type: 'text' }], text: 'answer' }
+      },
+    },
+    masterId: 'master',
+    memory,
+  })
+  const envelope = normalizeChannelEnvelope({
+    actor: { externalUserId: 'external-user' },
+    conversation: { externalConversationId: 'external-user', type: 'private' },
+    message: { externalMessageId: 'dup-1', receivedAt: 1_000 },
+    source: { adapterId: 'wechat', channelId: 'channel-1' },
+  })
+  for (const suffix of ['first', 'redelivered']) {
+    await channel._processChat('hello', {
+      envelope,
+      from: 'external-user',
+      isWeb: true,
+      messageId: `assistant-${suffix}`,
+      sid: 'redelivery-session',
+      userMessageId: `user-${suffix}`,
+    })
+  }
+  assert.equal(llmCalls, 1)
+  assert.equal(await prisma.message.count({ where: { sessionId: 'redelivery-session' } }), 2)
 })
 
 

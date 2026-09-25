@@ -1379,48 +1379,6 @@ export class BaseChannel {
       ctx.messageId ||
       `msg_a_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
 
-    // 当消息来自第三方渠道（!ctx.isWeb）时，若 Web 客户端在线，向其广播用户消息并建立 Blank 占位
-    if (!ctx.isWeb && ctx.persistUserMessage !== false) {
-      const userMsgId = ctx.userMessageId
-      const assistantMsgId = ctx.messageId
-
-      const onlineWebClients = sessions.getAllAdminClients()
-      if (onlineWebClients && onlineWebClients.length > 0) {
-        const userMsgContent = [...preparedUserInput.persistedContent]
-        if (Array.isArray(ctx.files)) {
-          for (const f of ctx.files) {
-            userMsgContent.push({
-              data: { file: f.url, name: f.name },
-              type: 'file',
-            })
-          }
-        }
-        for (const client of onlineWebClients) {
-          client.send({
-            data: {
-              agentId: this.memory.agentId,
-              assistantMessageId: assistantMsgId,
-              channelId: ctx.channelId,
-              contactorId: ctx.streamContactorId || this.memory.agentId,
-              sessionId: sid,
-              ...(ctx.subagentContact
-                ? { subagentContact: ctx.subagentContact }
-                : {}),
-              userMessage: {
-                content: userMsgContent,
-                id: userMsgId,
-                role: 'user',
-                text: persistedUserText,
-                time: ctx.messageTime,
-              },
-            },
-            protocol: 'channel',
-            type: 'channel_user_message',
-          })
-        }
-      }
-    }
-
     const emittedBlocks = []
     let didEmitTextBlock = false
     const executionMetadata = {
@@ -1444,7 +1402,7 @@ export class BaseChannel {
 
     if (persistUserMessage) {
       await assertSessionLease()
-      await this.memory.appendUserMessage(sid, {
+      const persisted = await this.memory.appendUserMessageOnce(sid, {
         channel_id: ctx.envelope?.source?.channelId,
         content: persistedUserContent,
         external_conversation_id:
@@ -1458,6 +1416,51 @@ export class BaseChannel {
         text: persistedUserText,
         time: ctx.envelope?.message?.sentAt || ctx.messageTime,
       })
+      if (!persisted.inserted && ctx.envelope?.message?.externalMessageId) {
+        this.log?.info?.(
+          `[${this.channelType}:${this.id}] 重复外部消息已忽略 | channelId=${ctx.envelope.source.channelId} externalMessageId=${ctx.envelope.message.externalMessageId} existingMessageId=${persisted.id}`,
+        )
+        return { duplicate: true, messageId: persisted.id }
+      }
+    }
+
+    // 持久化成功后再镜像给 Web；重复投递不生成第二个用户气泡或助手占位。
+    if (!ctx.isWeb && persistUserMessage) {
+      const onlineWebClients = sessions.getAllAdminClients()
+      if (onlineWebClients && onlineWebClients.length > 0) {
+        const userMsgContent = [...preparedUserInput.persistedContent]
+        if (Array.isArray(ctx.files)) {
+          for (const f of ctx.files) {
+            userMsgContent.push({
+              data: { file: f.url, name: f.name },
+              type: 'file',
+            })
+          }
+        }
+        for (const client of onlineWebClients) {
+          client.send({
+            data: {
+              agentId: this.memory.agentId,
+              assistantMessageId: ctx.messageId,
+              channelId: ctx.channelId,
+              contactorId: ctx.streamContactorId || this.memory.agentId,
+              sessionId: sid,
+              ...(ctx.subagentContact
+                ? { subagentContact: ctx.subagentContact }
+                : {}),
+              userMessage: {
+                content: userMsgContent,
+                id: ctx.userMessageId,
+                role: 'user',
+                text: persistedUserText,
+                time: ctx.messageTime,
+              },
+            },
+            protocol: 'channel',
+            type: 'channel_user_message',
+          })
+        }
+      }
     }
     await assertSessionLease()
     assistantPersistenceId = await this.memory.beginAssistantMessage(sid, {

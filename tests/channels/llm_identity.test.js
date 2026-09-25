@@ -28,6 +28,10 @@ function createMemory(agentId = 'agent-1') {
     appendAssistantChunk: async () => null,
     appendToChat: async (_sessionId, message) => append(message),
     appendUserMessage: async (_sessionId, message) => append(message),
+    appendUserMessageOnce: async (_sessionId, message) => {
+      append(message)
+      return { id: message.id, inserted: true }
+    },
     beginAssistantMessage: async () => {
       draftSeq += 1
       const messageId = `draft-${draftSeq}`
