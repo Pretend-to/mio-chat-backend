@@ -190,3 +190,33 @@ test('update 命中时替换、只动目标分区', () => {
   assert.equal(zones.constraints, '甲\n丙')
   assert.equal(zones.current_plan, '不要动我')
 })
+
+test('压缩回写的一致性：提交后（新结晶 + 空缓冲）解析出的镜像必须与提交前一致', () => {
+  const events = [
+    { action: 'add', content: '用户是后端主力', target: '', zone: 'long_term_profile' },
+    { action: 'add', content: '正在收敛 ChatEvent', target: '', zone: 'current_plan' },
+  ]
+  const before = resolveMirror({ pending_memory_events: events, previous_summary: '' })
+
+  // 压缩产出新结晶 = 当前镜像的序列化结果；
+  // "机械回写" = setCrystal(新结晶) + clearPendingMemories()（两端都已实现）
+  const committedCrystal = buildXmlFromZones(before.zones)
+  const after = resolveMirror({
+    pending_memory_events: [],
+    previous_summary: committedCrystal,
+  })
+
+  assert.deepEqual(after.zones, before.zones, '提交前后镜像必须完全一致')
+  assert.equal(after.events.length, 0, '缓冲应已清空')
+
+  // 反例：如果只落结晶、忘了清缓冲 —— 同一批编辑会在下一轮被应用第二次
+  const notCleared = resolveMirror({
+    pending_memory_events: events,
+    previous_summary: committedCrystal,
+  })
+  assert.notDeepEqual(
+    notCleared.zones,
+    before.zones,
+    '忘记清缓冲就是这个后果：编辑被重放第二次（两端都必须清）',
+  )
+})
