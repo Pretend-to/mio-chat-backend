@@ -390,6 +390,8 @@ await sessionTurnService.runTurn({
 - 校验 Agent、Session 和父子关系；
 - 加载 Agent 配置、工具、技能和记忆；
 - Session FIFO、user 消息立即落盘、assistant 生命周期和崩溃恢复；
+- 繁忙 Session 的新工作通过统一协调器进入当前工具循环或下一轮；实施方案见
+  [`ChatEvent 统一唤起与运行时调整`](../session-work-injection-development-plan.md)；
 - 创建规范 ChatEvent；
 - 调用 LLM；
 - 将最终输出交给可选的 Channel OutputPort；

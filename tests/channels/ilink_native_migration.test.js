@@ -5,6 +5,7 @@ import path from 'node:path'
 import test from 'node:test'
 
 import { ChannelStore } from '../../channels/ChannelStore.js'
+import { createPrismaFixture } from '../helpers/prismaFixture.js'
 import {
   migrateOneBotsIlinkToNative,
   oneBotsSessionPath,
@@ -14,7 +15,8 @@ test('OneBots iLink records migrate idempotently to the native adapter', async t
   const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'mio-ilink-migration-'))
   t.after(() => fs.promises.rm(root, { force: true, recursive: true }))
 
-  const store = new ChannelStore({ file: path.join(root, 'channels.json') })
+  const { prisma } = await createPrismaFixture(t)
+  const store = new ChannelStore({ encryptionKey: '44'.repeat(32), prisma })
   const created = await store.create({
     agentId: 'wechat-master',
     driver: 'onebots',
@@ -81,7 +83,8 @@ test('OneBots iLink records migrate idempotently to the native adapter', async t
 test('running iLink record without recoverable credentials is stopped safely', async t => {
   const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'mio-ilink-migration-'))
   t.after(() => fs.promises.rm(root, { force: true, recursive: true }))
-  const store = new ChannelStore({ file: path.join(root, 'channels.json') })
+  const { prisma } = await createPrismaFixture(t)
+  const store = new ChannelStore({ encryptionKey: '44'.repeat(32), prisma })
   const created = await store.create({
     driver: 'onebots',
     id: 'missing-credentials',

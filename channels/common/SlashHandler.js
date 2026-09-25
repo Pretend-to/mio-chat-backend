@@ -31,7 +31,7 @@ import {
 export class SlashHandler {
   /**
    * @param {object} opts
-   * @param {import('../memory/MemoryStore.js').MemoryStore} opts.memory 记忆存储
+   * @param {import('../../lib/chat/persistence/SessionPersistence.js').SessionPersistence} opts.memory 记忆存储
    * @param {import('./BaseChannel.js').BaseChannel} opts.channel 关联的渠道实例
    */
   constructor({ memory, channel }) {
@@ -639,10 +639,7 @@ export class SlashHandler {
         const session = await this.memory.getSession(cur)
         if (!session?.chat?.length) return wrap('当前会话没有可压缩的对话')
         const crystal = await this.memory.getCrystal(cur)
-        const pendingMemories =
-          typeof this.memory.getPendingMemories === 'function'
-            ? await this.memory.getPendingMemories(cur)
-            : []
+        const pendingMemories = await this.memory.getPendingMemories(cur)
         const result = await this.channel.llm.compact({
           chat: session.chat,
           crystal,
@@ -657,9 +654,7 @@ export class SlashHandler {
 
         await this.memory.setCrystal(cur, result.summary)
         const rotation = await this.memory.rotateChat(cur, 0)
-        if (typeof this.memory.clearPendingMemories === 'function') {
-          await this.memory.clearPendingMemories(cur)
-        }
+        await this.memory.clearPendingMemories(cur)
         return wrap(
           `✅ 上下文压缩完成：已生成 ${result.summary.length} 字符的会话结晶，归档 ${rotation?.removedCount || 0} 条原始消息。下一轮将不再携带旧对话 few-shot。`,
         )

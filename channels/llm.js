@@ -12,11 +12,10 @@
 import { wrapUserMessageWithMetadata } from '../lib/chat/messageTimestamp.js'
 import { coalesceCrystallizeEvents } from '../lib/chat/crystallizationContent.js'
 import sessions from '../lib/server/socket.io/services/sessions.js'
-import streamCache from '../lib/server/socket.io/services/streamCache.js'
 import { getAgentToolNames } from '../lib/chat/llm/toolPolicy.js'
 import CrystallizationService from '../lib/chat/llm/services/CrystallizationService.js'
-import approvalNotificationBroker from '../lib/approvals/ApprovalNotificationBroker.js'
-import { resolveOrigin } from '../utils/origin.js'
+import { ChatEventFactory } from '../lib/chat/llm/events/ChatEventFactory.js'
+import { getChatEventDispatcher } from '../lib/chat/llm/events/ChatEventDispatcher.js'
 
 export function createEchoLlm({ prefix = '' } = {}) {
   return {
@@ -210,6 +209,18 @@ export function appendRecursiveContextMessages(content, entries) {
       data: {
         content: entry.message?.content,
         role: 'user',
+        ...(entry.message?._workEventId
+          ? { eventId: entry.message._workEventId }
+          : {}),
+        ...(entry.message?._workIdempotencyKey
+          ? { idempotencyKey: entry.message._workIdempotencyKey }
+          : {}),
+        ...(entry.message?._wakeKind
+          ? { wakeKind: entry.message._wakeKind }
+          : {}),
+        ...(entry.message?._originRef
+          ? { originRef: entry.message._originRef }
+          : {}),
       },
       type: 'context_message',
     }
@@ -751,9 +762,7 @@ export function createBackendLlm(opts = {}) {
         return { text: `[Echo] ${ctx.text}` }
       }
       const wakeType = ctx.isWake
-        ? ctx.source === 'subagent'
-          ? 'subagent'
-          : 'trigger'
+        ? ctx.wakeKind || (ctx.source === 'subagent' ? 'subagent' : 'trigger')
         : null
 
       const messages = []
@@ -849,35 +858,6 @@ export function createBackendLlm(opts = {}) {
         }
       }
 
-      const emittedRenders = new Set()
-      const collectedChunks = []
-
-      // 5. 构造虚拟 Event
-      let currentTextBlock = ''
-      let currentBlockType = 'idle'
-      let streamError = null
-      // Crystallization is triggered from adapter recursion through a
-      // fire-and-forget update callback.  Serialize its storage side effects
-      // and make completion wait for them, otherwise the next queued Channel
-      // user message can read the old crystal/chat window.
-      let contextPersistenceQueue = Promise.resolve()
-      let crystalPersistenceSucceeded = false
-
-      /**
-       * 将累积的完整文本块原样交给渠道，由渠道适配器负责最终发送。
-       * 按自身协议（<break/>）统一切分，再经伪队列逐条发送。
-       */
-      const flushTextBlock = async () => {
-        let textToSend = currentTextBlock.trim()
-        currentTextBlock = '' // ← 先清空，防止 re-entrant 重复 emit
-        if (!textToSend) {
-          return
-        }
-        if (typeof ctx.onEmitTextBlock === 'function') {
-          await ctx.onEmitTextBlock(textToSend)
-        }
-      }
-
       const finalTools = Array.isArray(ctx.toolNames)
         ? [...ctx.toolNames]
         : getAgentToolNames({
@@ -888,7 +868,7 @@ export function createBackendLlm(opts = {}) {
             principal: ctx.principal || null,
             sessionId: ctx.sessionId,
             source: 'channel',
-            triggerKind: ctx.isTask ? 'task' : 'interactive',
+            triggerKind: ctx.isTask || ctx.isWake ? 'task' : 'interactive',
             user: {
               isAdmin: ctx.principal?.isAdmin === true,
             },
@@ -910,710 +890,165 @@ export function createBackendLlm(opts = {}) {
         `[${ctx.channel?.channelType || 'channel'}] 🧠 记忆载入详情: Soul=${ctx.soul ? '已设定' : '无'}, GlobalMem=${ctx.globalMem ? `${ctx.globalMem.length}字` : '无'}, Crystal=${ctx.crystal ? `${ctx.crystal.length}字` : '无'}`,
       )
 
-      let lastActionData = null
-      let latestCrystal = null
-      let currentReasoningStartTime = null
-      const abortCallbacks = []
       let sessionYolo = false
       try {
         sessionYolo = ctx.channel?.isSessionYoloEnabled
           ? await ctx.channel.isSessionYoloEnabled(ctx.sessionId)
           : false
       } catch {
-        // A metadata read failure must not break an otherwise valid chat; the
-        // shell hook independently fails closed when it cannot read YOLO.
         sessionYolo = false
       }
-      const auditChannelId =
-        ctx.channelId || ctx.channel?.id || ctx.channel?.channelId || null
-      const event = {
+
+      const settings = {
+        base: { model: targetModel, stream: true },
+        chatParams,
+        crystallization: { enabled: true },
+        crystallization_token_watermark: 'auto',
+        pending_memory_events: ctx.pendingMemories || [],
+        previous_summary: ctx.crystal || '',
+        provider: targetProvider,
+        yolo: sessionYolo,
+        toolCallSettings: { mode: 'AUTO', tools: finalTools },
+      }
+      // ChannelChatEvent owns streaming, approval, and completion. The
+      // execution context supplies only the channel's external side effects.
+      let contextPersistenceQueue = Promise.resolve()
+      const eventCtx = {
+        ...ctx,
         agentId: executionAgentId,
-        // ChannelRuntime resolves these identifiers before the adapter queue.
-        // Keep them on the event itself (and in body below) for legacy tools
-        // that still receive the compatibility event shape.
-        bindingId: ctx.bindingId || ctx.channelBindingId || null,
-        channelConversationId: ctx.channelConversationId || null,
-        externalConversationId:
-          ctx.externalConversationId ||
-          ctx.envelope?.conversation?.externalConversationId ||
-          null,
-        externalThreadId:
-          ctx.externalThreadId ||
-          ctx.envelope?.conversation?.externalThreadId ||
-          null,
-        envelope: ctx.envelope || null,
-        subagentRunId: ctx.subagentRunId || null,
-        actorId: ctx.principal?.externalUserId || ctx.from || 'channel_user',
-        principal: ctx.principal || null,
-        principalId:
-          ctx.principal?.id ||
-          `channel:${auditChannelId || 'unknown'}:${ctx.from || 'channel_user'}`,
-        sessionScope: ctx.sessionScope || null,
-        source: ctx.source || 'channel',
-        isWake: Boolean(ctx.isWake),
-        conversationKind:
-          ctx.envelope?.conversation?.type === 'group' ? 'group' : 'direct',
-        // Wake is an audit/detail flag, not a new policy scene. Keep the
-        // canonical trigger dimension as task so tool policy and event
-        // validators do not reject the parent wake turn.
-        triggerKind: ctx.isTask || ctx.isWake ? 'task' : 'interactive',
-        body: {
-          channel: ctx.channel?.channelType || 'channel',
-          channelId: auditChannelId,
-          bindingId: ctx.bindingId || ctx.channelBindingId || null,
-          channelConversationId: ctx.channelConversationId || null,
-          externalConversationId:
-            ctx.externalConversationId ||
-            ctx.envelope?.conversation?.externalConversationId ||
-            null,
-          externalThreadId:
-            ctx.externalThreadId ||
-            ctx.envelope?.conversation?.externalThreadId ||
-            null,
-          contactorId: executionAgentId,
-          messages,
-          sessionId: ctx.sessionId || null,
-          settings: {
-            base: {
-              model: targetModel,
-              stream: true,
-            },
-            chatParams,
-            crystallization: { enabled: true },
-            crystallization_token_watermark: 'auto',
-            pending_memory_events: ctx.pendingMemories || [],
-            previous_summary: ctx.crystal || '',
-            provider: targetProvider,
-            yolo: sessionYolo,
-            toolCallSettings: {
-              mode: 'AUTO',
-              tools: finalTools,
-            },
-          },
-        },
-        sessionId: ctx.sessionId || null,
-        channel: ctx.channel || {
-          agentId: executionAgentId,
-          memory: ctx.memory,
-          model: ctx.model,
-          provider: ctx.provider,
-          type: 'channel',
-        },
-        memory: ctx.memory,
-        client: {
-          emit: () => {},
-          on: () => {},
-          popConnection: () => {},
-          popEvent: () => {},
-          pushConnection: () => {},
-          pushEvent: () => {},
-          removeListener: () => {},
-          sendOpenaiMessage: () => {},
-        },
-        interactions: new Map(),
-        emitInteraction: (interactionId, data) => {
-          const cb = event.interactions.get(interactionId)
-          if (cb) {
-            event.interactions.delete(interactionId)
-            cb(data)
-            return true
-          }
-          return false
-        },
-        error: (err) => {
-          streamError = err
-        },
-        aborted: false,
-        abort: () => {
-          if (event.aborted) return
-          event.aborted = true
-          abortCallbacks.forEach((cb) => {
-            try {
-              cb()
-            } catch {}
+        wakeType,
+      }
+      const event = ChatEventFactory.createForChannel({
+        ctx: eventCtx,
+        messages,
+        settings,
+      })
+      event.deliveryMode =
+        ctx.deliveryMode || (event.bindingId ? 'channel' : 'default')
+      event.deliveryBindingId =
+        ctx.deliveryBindingId || event.bindingId || null
+
+      eventCtx.onMirrorUpdate = ({ data, isChannelApproval }) => {
+        for (const client of resolveWebClients(ctx, isChannelApproval)) {
+          client.sendOpenaiMessage('update', data, ctx.messageId)
+        }
+      }
+      eventCtx.onCrystallize = (summary, activeEvent) => {
+        if (!ctx.memory || !ctx.sessionId) return
+        contextPersistenceQueue = contextPersistenceQueue
+          .then(async () => {
+            await ctx.memory.setCrystal(ctx.sessionId, summary)
+            const keepTurns =
+              Number(activeEvent.body?.settings?.crystallization_keep_turns) || 1
+            const rotateRes = await ctx.memory.rotateChat(ctx.sessionId, keepTurns)
+            if (rotateRes?.rotated) {
+              ctx.channel?.log?.info?.(
+                `[${ctx.channel?.channelType || 'channel'}] 🗜️ 会话历史已归档并裁剪 | 归档: ${rotateRes.archivePath} | 裁剪 ${rotateRes.removedCount} 条, 保留 ${rotateRes.keptCount} 条`,
+              )
+            }
+            await ctx.memory.clearPendingMemories(ctx.sessionId)
+            activeEvent.crystalPersisted = true
           })
-          if (typeof event.complete === 'function') {
-            event.complete()
-          }
-        },
-        onAbort: (cb) => {
-          if (event.aborted) {
-            try {
-              cb()
-            } catch {}
-          } else {
-            abortCallbacks.push(cb)
-          }
-        },
-        pending: () => {},
-        registerInteraction: async (interactionId, callback) => {
-          event.interactions.set(interactionId, callback)
-
-          if (ctx.approvalTarget) {
-            approvalNotificationBroker.register({
-              action: lastActionData || {
-                actionType: 'REQUEST_APPROVAL',
-                interactionId,
-                prompt: 'SubAgent 正在申请执行敏感操作，是否授权？',
-              },
-              event,
-              interactionId,
-              target: ctx.approvalTarget,
-            })
-          } else if (ctx.isWeb && ctx.webClient && ctx.messageId) {
-            // 1. 来自 Web 客户端：注册到 webClient 活跃事件集，由前端通过 Socket.IO 就地弹窗与 tool:interact 交互
-            ctx.webClient.pushEvent(ctx.messageId, event)
-          } else {
-            // 2. 来自渠道端（微信长轮询等）：向第三方渠道推送文本确认卡片并通过消息回复进行交互
-            const reqFn =
-              ctx.channel?.requestConfirmation ||
-              ctx.channel?.requestUserConfirmation
-            if (ctx.channel && typeof reqFn === 'function') {
-              try {
-                const meta = lastActionData?.meta || {}
-                const prompt =
-                  lastActionData?.prompt ||
-                  'LLM 正在申请执行敏感操作，是否授权？'
-                let title = '安全操作二次确认'
-                const details = []
-
-                if (
-                  meta.type === 'global_memory' ||
-                  meta.fact ||
-                  meta.content
-                ) {
-                  title = '全局长期记忆更新审批'
-                  const contentText = meta.content || meta.fact || ''
-                  if (contentText) details.push(`📝 记忆内容：${contentText}`)
-                  if (meta.category)
-                    details.push(`📁 记忆分类：${meta.category}`)
-                  if (meta.action)
-                    details.push(
-                      `⚙️ 操作类型：${meta.action === 'add' ? '新增' : meta.action === 'update' ? '更新' : meta.action === 'delete' ? '删除' : meta.action}`,
-                    )
-                  if (meta.target) details.push(`🎯 记忆目标：${meta.target}`)
-                } else if (meta.command) {
-                  title = meta.highRisk
-                    ? '⚠️ 高危 Shell 命令授权'
-                    : '💻 Shell 命令授权'
-                  const commandPreview = meta.commandPreview || meta.command
-                  details.push(
-                    meta.rememberable === false
-                      ? `💻 待执行命令：\n${commandPreview}`
-                      : `💻 待执行命令：\`${commandPreview}\``,
-                  )
-                  if (meta.cwd) details.push(`📂 工作目录：${meta.cwd}`)
-                } else if (meta.params) {
-                  title = '⚙️ 系统配置修改审批'
-                  const paramsStr =
-                    typeof meta.params === 'object'
-                      ? JSON.stringify(meta.params, null, 2)
-                      : String(meta.params)
-                  details.push(`⚙️ 修改内容：\n${paramsStr}`)
-                } else if (meta.key && meta.value !== undefined) {
-                  title = '⚙️ 配置修改审批'
-                  details.push(
-                    `⚙️ 修改项：${meta.key} -> ${JSON.stringify(meta.value)}`,
-                  )
-                }
-
-                const description =
-                  details.length > 0
-                    ? `${prompt}\n\n${details.join('\n')}`
-                    : prompt
-
-                const res = await reqFn.call(
-                  ctx.channel,
-                  {
-                    contextToken: ctx.contextToken,
-                    command: meta.command,
-                    commandPrefix1: meta.commandPrefix1,
-                    commandPrefix2: meta.commandPrefix2,
-                    description,
-                    from: ctx.from,
-                    rememberable: meta.rememberable === true,
-                    title,
-                  },
-                  ctx,
-                )
-                event.emitInteraction(
-                  interactionId,
-                  typeof res === 'object' ? res : { approved: Boolean(res) },
-                )
-              } catch (err) {
-                event.emitInteraction(interactionId, {
-                  approved: false,
-                  reason: err.message,
-                })
-              }
-            } else {
-              event.emitInteraction(interactionId, { approved: true })
-            }
-          }
-        },
-        reply: () => {},
-        requestId: `${ctx.channel?.channelType || 'channel'}_${ctx.sessionId || Date.now()}_${Date.now()}`,
-        unregisterInteraction: (interactionId) => {
-          return event.interactions.delete(interactionId)
-        },
-        update: async (data) => {
-          if (!data) return
-          // 收集全量流式 chunk 用于完美组装结构化落盘数据
-          collectedChunks.push(data)
-          if (data.type === 'action' && data.content) {
-            lastActionData = data.content
-          }
-
-          // 无论 Web 客户端是否在线，流式 Chunks 异步沉淀至 streamCache（完全不阻塞微信下发）
-          const resolvedContactorId =
-            ctx.streamContactorId ||
-            executionAgentId ||
-            ctx.channelId ||
-            ctx.channel?.id ||
-            ctx.channel?.channelId ||
-            ctx.memory?.agentId ||
-            null
-          if (resolvedContactorId && ctx.messageId) {
-            let finalData = data
-            if (data.type === 'reasoningContent') {
-              if (!currentReasoningStartTime) {
-                currentReasoningStartTime = Date.now()
-              }
-              finalData = {
-                data: {
-                  duration: 0,
-                  startTime: currentReasoningStartTime,
-                  text: data.content || data.data?.text || '',
-                },
-                type: 'reason',
-              }
-            } else if (data.type === 'reason') {
-              if (!data.data && typeof data.content === 'string') {
-                if (!currentReasoningStartTime) {
-                  currentReasoningStartTime = Date.now()
-                }
-                finalData = {
-                  data: {
-                    duration: data.duration || 0,
-                    startTime: data.startTime || currentReasoningStartTime,
-                    text: data.content,
-                  },
-                  type: 'reason',
-                }
-              }
-            } else if (data.type === 'content' || data.type === 'toolCall') {
-              currentReasoningStartTime = null
-            }
-
-            const isChannelApproval =
-              !ctx.isWeb &&
-              data.type === 'action' &&
-              data.content?.actionType === 'REQUEST_APPROVAL'
-            const dataWithMeta = {
-              ...finalData,
-              metaData: {
-                contactorId: resolvedContactorId,
-                isTask: Boolean(ctx.isTask),
-                messageId: ctx.messageId,
-                triggerType: ctx.isTask ? 'task' : 'chat',
-                ...(wakeType ? { wakeType } : {}),
-                ...(ctx.subagentContact
-                  ? { subagentContact: ctx.subagentContact }
-                  : {}),
-                ...data.metaData,
-              },
-            }
-
-            // 渠道侧的审批卡片只能由渠道文本确认，不能写入/广播为 Web 可交互 action，
-            // 否则 Web 会出现看得见但找不到 activeEvent 的“幽灵”确认框。
-            if (!isChannelApproval) {
-              // 1. 并发写入 streamCache，支撑离线回放（admin 与发起者双写）
-              try {
-                streamCache.push(
-                  'admin',
-                  resolvedContactorId,
-                  ctx.messageId,
-                  finalData,
-                  dataWithMeta.metaData,
-                )
-                if (ctx.webClient?.id && ctx.webClient.id !== 'admin') {
-                  streamCache.push(
-                    ctx.webClient.id,
-                    resolvedContactorId,
-                    ctx.messageId,
-                    finalData,
-                    dataWithMeta.metaData,
-                  )
-                }
-              } catch {}
-            }
-
-            // 2. 若存在在线 Web 客户端，动态推送镜像流
-            const targetWebClients = resolveWebClients(ctx, isChannelApproval)
-            if (targetWebClients.length > 0) {
-              for (const client of targetWebClients) {
-                client.sendOpenaiMessage('update', dataWithMeta, ctx.messageId)
-              }
-            }
-          }
-
-          if (data.type === 'crystallize') {
-            // UI snapshots and failed compression must never mutate durable memory.
-            if (
-              data.content?.commit === true &&
-              data.content?.status === 'finished' &&
-              data.content?.summary
-            ) {
-              const summaryXml = data.content.summary.trim()
-              if (summaryXml) {
-                latestCrystal = summaryXml
-                if (ctx.memory && ctx.sessionId) {
-                  contextPersistenceQueue = contextPersistenceQueue
-                    .then(async () => {
-                      await ctx.memory.setCrystal(ctx.sessionId, summaryXml)
-                      // 上下文压缩闭环：归档 + 裁剪 + 读窗口更新必须在
-                      // 下一条排队 user 进入前完成，否则会读到旧上下文。
-                      if (typeof ctx.memory.rotateChat === 'function') {
-                        const keepTurns =
-                          Number(
-                            event.body?.settings?.crystallization_keep_turns,
-                          ) || 1
-                        const rotateRes = await ctx.memory.rotateChat(
-                          ctx.sessionId,
-                          keepTurns,
-                        )
-                        if (rotateRes?.rotated) {
-                          ctx.channel?.log?.info?.(
-                            `[${ctx.channel?.channelType || 'channel'}] 🗜️ 会话历史已归档并裁剪 | 归档: ${rotateRes.archivePath} | 裁剪 ${rotateRes.removedCount} 条, 保留 ${rotateRes.keptCount} 条`,
-                          )
-                        }
-                      }
-                      // Clear staged memory only after crystal storage and chat
-                      // rotation both succeeded, otherwise retry on next compression.
-                      if (
-                        typeof ctx.memory.clearPendingMemories === 'function'
-                      ) {
-                        await ctx.memory.clearPendingMemories(ctx.sessionId)
-                      }
-                      crystalPersistenceSucceeded = true
-                    })
-                    .catch((err) => {
-                      crystalPersistenceSucceeded = false
-                      ctx.channel?.log?.error?.(
-                        `[${ctx.channel?.channelType || 'channel'}] 记忆结晶/裁剪落盘失败:`,
-                        err,
-                      )
-                      throw err
-                    })
-                }
-              }
-            }
-          }
-
-          if (data.type === 'content') {
-            currentBlockType = 'text'
-            if (typeof data.content === 'string') {
-              currentTextBlock += data.content
-            }
-            // 同步阶段性输出到 activeJob
-            if (
-              ctx.channel?.activeJobs &&
-              ctx.sessionId &&
-              ctx.channel.activeJobs.has(ctx.sessionId)
-            ) {
-              const job = ctx.channel.activeJobs.get(ctx.sessionId)
-              job.lastProgressText = currentTextBlock.slice(0, 100)
-            }
-          } else {
-            if (currentBlockType === 'text') {
-              await flushTextBlock()
-            }
-            // 同步正在执行的工具到 activeJob
-            if (
-              data.type === 'toolCall' &&
-              ctx.channel?.activeJobs &&
-              ctx.sessionId &&
-              ctx.channel.activeJobs.has(ctx.sessionId)
-            ) {
-              const job = ctx.channel.activeJobs.get(ctx.sessionId)
-              if (data.content?.action === 'running') {
-                job.currentTool = data.content.name || '工具'
-                job.toolCount = (job.toolCount || 0) + 1
-              } else if (data.content?.action === 'finished') {
-                job.currentTool = null
-              }
-            }
-            // 严格以 extraRender（如 setOuterRender / setExtraRender）作为富媒体/状态渲染的契约
-            if (data.type === 'toolCall' || data.type === 'extraRender') {
-              const toolPayload = data.content || data
-              const renders = [
-                ...(Array.isArray(toolPayload?.extraRender)
-                  ? toolPayload.extraRender
-                  : toolPayload?.extraRender
-                    ? [toolPayload.extraRender]
-                    : []),
-                ...(Array.isArray(data.extraRender)
-                  ? data.extraRender
-                  : data.extraRender
-                    ? [data.extraRender]
-                    : []),
-              ]
-
-              // 扫描 extraRender 中的规范渲染项并实时推送到渠道
-              for (const r of renders) {
-                if (!r) continue
-                const renderKey =
-                  r.url ||
-                  r.text ||
-                  (r.title ? `${r.title}:${r.description}` : JSON.stringify(r))
-                if (emittedRenders.has(renderKey)) continue
-                emittedRenders.add(renderKey)
-
-                if (r.type === 'image' && (r.url || r.buffer || r.localPath)) {
-                  if (typeof ctx.onEmitTextBlock === 'function') {
-                    await ctx.onEmitTextBlock('', {
-                      extraRender: r,
-                      image: r.url,
-                    })
-                  }
-                } else if (
-                  (r.type === 'audio' || r.type === 'voice') &&
-                  (r.url || r.buffer || r.localPath)
-                ) {
-                  if (typeof ctx.onEmitTextBlock === 'function') {
-                    await ctx.onEmitTextBlock('', {
-                      audio: r.url,
-                      extraRender: r,
-                    })
-                  }
-                } else if (
-                  (r.type === 'file' || r.type === 'document') &&
-                  (r.url || r.buffer || r.localPath)
-                ) {
-                  if (typeof ctx.onEmitTextBlock === 'function') {
-                    await ctx.onEmitTextBlock('', {
-                      extraRender: r,
-                      file: r.url,
-                    })
-                  }
-                } else if (
-                  r.type === 'video' &&
-                  (r.url || r.buffer || r.localPath)
-                ) {
-                  if (typeof ctx.onEmitTextBlock === 'function') {
-                    await ctx.onEmitTextBlock('', {
-                      extraRender: r,
-                      video: r.url,
-                    })
-                  }
-                } else if (
-                  r.type === 'link' ||
-                  (!r.type && (r.url || r.href))
-                ) {
-                  const linkUrl = r.url || r.href || ''
-                  if (typeof ctx.onEmitTextBlock === 'function') {
-                    await ctx.onEmitTextBlock('', {
-                      extraRender: r,
-                      link: linkUrl,
-                    })
-                  }
-                } else if (r.type === 'card' || r.type === 'html') {
-                  if (typeof ctx.onEmitTextBlock === 'function') {
-                    await ctx.onEmitTextBlock('', {
-                      card: r,
-                      extraRender: r,
-                    })
-                  }
-                } else if (
-                  r.type === 'text' ||
-                  r.type === 'notice' ||
-                  r.type === 'alert'
-                ) {
-                  const notice =
-                    r.text ||
-                    (r.title
-                      ? `[${r.title}] ${r.description || ''}`
-                      : r.description)
-                  if (notice && typeof ctx.onEmitTextBlock === 'function') {
-                    await ctx.onEmitTextBlock(notice, {
-                      extraRender: r,
-                    })
-                  }
-                }
-              }
-            }
-          }
-        },
-        user: {
-          agentId: executionAgentId,
-          channel: ctx.channel?.channelType || 'channel',
-          channelType: ctx.channel?.channelType || 'channel',
-          id:
-            ctx.principal?.id ||
-            `channel:${auditChannelId || 'unknown'}:${ctx.from || 'channel_user'}`,
-          isAdmin: ctx.principal?.isAdmin === true,
-          origin: resolveOrigin(
-            ctx.isWeb
-              ? ctx.webClient?.origin || ctx.origin
-              : ctx.origin || ctx.webClient?.origin,
-          ),
-          role: ctx.principal?.role || 'user',
-          username:
-            ctx.envelope?.actor?.displayName || ctx.from || 'ChannelUser',
-        },
+          .catch((err) => {
+            activeEvent.crystalPersisted = false
+            ctx.channel?.log?.error?.(
+              `[${ctx.channel?.channelType || 'channel'}] 记忆结晶/裁剪落盘失败:`,
+              err,
+            )
+            throw err
+          })
       }
-
-      if (typeof ctx.onRegisterAbort === 'function') {
-        ctx.onRegisterAbort(() => event.abort())
+      eventCtx.awaitPersistence = () => contextPersistenceQueue
+      eventCtx.onProgressText = (text) => {
+        const job = ctx.channel?.activeJobs?.get(ctx.sessionId)
+        if (job) job.lastProgressText = text
       }
+      eventCtx.onToolStatus = (status) => {
+        const job = ctx.channel?.activeJobs?.get(ctx.sessionId)
+        if (!job) return
+        if (status?.action === 'running') {
+          job.currentTool = status.name || '工具'
+          job.toolCount = (job.toolCount || 0) + 1
+        } else if (status?.action === 'finished') {
+          job.currentTool = null
+        }
+      }
+      ctx.onChatEvent?.(event)
+      ctx.onRegisterAbort?.(() => event.abort())
 
-      // 等待底层 LLM 完整运行完毕（包含所有递归工具轮次）
+      const dispatcher = getChatEventDispatcher()
+      if (event.agentId && event.sessionId && !dispatcher.registerActive(event)) {
+        throw new Error(`Session ${event.sessionId} already has an active ChatEvent`)
+      }
       await new Promise((resolve, reject) => {
         let isDone = false
-        const rejectAfterContextPersistence = (error) => {
+        const rejectAfterPersistence = (error) => {
           contextPersistenceQueue.then(
             () => reject(error),
             () => reject(error),
           )
         }
-        event.complete = async () => {
-          if (isDone) return
-          isDone = true
-          try {
-            if (currentBlockType === 'text' || currentTextBlock.trim()) {
-              await flushTextBlock()
-            }
-            currentBlockType = 'idle'
-            // Do not announce completion until the crystal and rotated chat
-            // window are visible to the next FIFO Channel request.
-            await contextPersistenceQueue
-            const resolvedContactorId =
-              ctx.streamContactorId ||
-              executionAgentId ||
-              ctx.channelId ||
-              ctx.channel?.id ||
-              ctx.channel?.channelId ||
-              ctx.memory?.agentId ||
-              null
-            if (resolvedContactorId && ctx.messageId) {
-              try {
-                streamCache.complete(
-                  'admin',
-                  resolvedContactorId,
-                  ctx.messageId,
-                )
-                if (ctx.webClient?.id && ctx.webClient.id !== 'admin') {
-                  streamCache.complete(
-                    ctx.webClient.id,
-                    resolvedContactorId,
-                    ctx.messageId,
-                  )
-                }
-              } catch {}
-            }
-            const targetWebClients = resolveWebClients(ctx)
-            if (targetWebClients.length > 0 && ctx.messageId) {
-              for (const client of targetWebClients) {
-                client.popEvent?.(ctx.messageId)
-                client.sendOpenaiMessage(
-                  'complete',
-                  {
-                    metaData: {
-                      contactorId: resolvedContactorId,
-                      messageId: ctx.messageId,
-                      ...(wakeType ? { wakeType } : {}),
-                      ...(ctx.subagentContact
-                        ? { subagentContact: ctx.subagentContact }
-                        : {}),
-                    },
-                  },
-                  ctx.messageId,
-                )
-              }
-            }
-            resolve()
-          } catch (e) {
-            rejectAfterContextPersistence(e)
-          }
-        }
-
-        event.error = (err) => {
-          if (isDone) return
-          isDone = true
-          streamError = err
-          const resolvedContactorId =
-            ctx.streamContactorId ||
-            executionAgentId ||
-            ctx.channelId ||
-            ctx.channel?.id ||
-            ctx.channel?.channelId ||
-            ctx.memory?.agentId ||
-            null
-          if (resolvedContactorId && ctx.messageId) {
-            try {
-              streamCache.fail(
-                'admin',
-                resolvedContactorId,
-                ctx.messageId,
-                err?.message || String(err),
-              )
-              if (ctx.webClient?.id && ctx.webClient.id !== 'admin') {
-                streamCache.fail(
-                  ctx.webClient.id,
-                  resolvedContactorId,
-                  ctx.messageId,
-                  err?.message || String(err),
-                )
-              }
-            } catch {}
-          }
-          const targetWebClients = resolveWebClients(ctx)
-          if (targetWebClients.length > 0 && ctx.messageId) {
-            for (const client of targetWebClients) {
-              client.popEvent?.(ctx.messageId)
-              client.sendOpenaiMessage(
-                'failed',
-                {
-                  message: err?.message || String(err),
-                  metaData: {
-                    contactorId: resolvedContactorId,
-                    messageId: ctx.messageId,
-                    ...(wakeType ? { wakeType } : {}),
-                    ...(ctx.subagentContact
-                      ? { subagentContact: ctx.subagentContact }
-                      : {}),
-                  },
+        const notifyWeb = (kind, error = null) => {
+          if (!ctx.messageId) return
+          for (const client of resolveWebClients(ctx)) {
+            client.popEvent?.(ctx.messageId)
+            client.sendOpenaiMessage(
+              kind,
+              {
+                ...(error ? { message: error?.message || String(error) } : {}),
+                metaData: {
+                  contactorId: event.contactorId,
+                  messageId: ctx.messageId,
+                  ...(wakeType ? { wakeType } : {}),
+                  ...(ctx.subagentContact
+                    ? { subagentContact: ctx.subagentContact }
+                    : {}),
                 },
-                ctx.messageId,
-              )
-            }
+              },
+              ctx.messageId,
+            )
           }
-          rejectAfterContextPersistence(err)
         }
-
-        svc.handleMessage(event).catch((err) => {
+        eventCtx.onComplete = () => {
           if (isDone) return
           isDone = true
-          rejectAfterContextPersistence(err)
+          notifyWeb('complete')
+          resolve()
+        }
+        eventCtx.onError = (error) => {
+          if (isDone) return
+          isDone = true
+          notifyWeb('failed', error)
+          rejectAfterPersistence(error)
+        }
+        eventCtx.onCompletionFailure = (error) => {
+          if (isDone) return
+          isDone = true
+          rejectAfterPersistence(error)
+        }
+        svc.handleMessage(event).catch((error) => {
+          if (isDone) return
+          isDone = true
+          rejectAfterPersistence(error)
         })
+      }).finally(() => {
+        if (event.agentId && event.sessionId) {
+          dispatcher.unregisterActive(event)
+        }
       })
 
-      if (streamError && !event.aborted) {
-        throw streamError
-      }
-
-      await flushTextBlock()
+      await event.flushTextBlock()
 
       // 组装完整的结构化 content 节点数组用于 session 持久化落盘
-      const structuredContent = assembleStructuredContent(collectedChunks)
+      const structuredContent = assembleStructuredContent(event.collectedChunks)
 
       return {
         aborted: !!event.aborted,
         completed: !event.aborted,
         content: structuredContent,
         // Existing/request-local summaries are not new durable commits.
-        crystal: latestCrystal,
-        crystalPersisted: Boolean(latestCrystal) && crystalPersistenceSucceeded,
+        crystal: event.latestCrystal,
+        crystalPersisted: Boolean(event.latestCrystal) && event.crystalPersisted,
         recursiveUserMessages: collectRecursiveUserMessages(
           event.body.messages,
           currentUserMessage,

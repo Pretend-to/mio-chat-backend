@@ -518,7 +518,7 @@ test('Web RPC addresses Agent plus Session and never exposes web-default as a co
       text: 'hello',
     },
   })
-  const channelStore = new ChannelStore({ mode: 'database', prisma })
+  const channelStore = new ChannelStore({ prisma })
   const runtime = new ChannelRuntime({ channelStore, prisma })
   initChannelController({ channelStore, runtime, startTriggers: false })
   const sent = []
@@ -551,7 +551,7 @@ test('creating a WeChat Channel accepts transport data only and creates no Agent
     profile: { name: '工作微信' },
     version: 1,
   })
-  const store = new ChannelStore({ mode: 'database', prisma })
+  const store = new ChannelStore({ prisma })
   const channel = await store.create(payload)
   assert.equal(channel.name, '工作微信')
   assert.equal(channel.type, 'weixin-ilink')

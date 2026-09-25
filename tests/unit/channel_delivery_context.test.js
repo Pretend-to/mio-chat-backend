@@ -4,6 +4,15 @@ import test from 'node:test'
 import { ChatEventFactory } from '../../lib/chat/llm/events/ChatEventFactory.js'
 import SessionTurnService from '../../lib/chat/sessions/SessionTurnService.js'
 
+// SessionTurnService 的调用方自己持租约并把它传进这一轮 turn。单元测试里存储层是假的，
+// 但「谁持租约」不是可选项 —— 用一个 stub 明确声明这个前置条件。
+const leaseStub = {
+  withSessionLease: async ({ agentId, sessionId }, fn) =>
+    await fn({
+      sessionLease: { agentId, assertLease: async () => {}, sessionId },
+    }),
+}
+
 test('Channel ChatEvent exposes resolved binding and conversation routing fields', () => {
   const event = ChatEventFactory.createForChannel({
     ctx: {
@@ -35,16 +44,31 @@ test('Channel ChatEvent exposes resolved binding and conversation routing fields
 test('SessionTurnService persists a turn when the requested binding needs rebind', async () => {
   const messages = []
   const service = new SessionTurnService({
+    sessionWorkCoordinator: leaseStub,
     llm: {
       process: async () => ({ text: 'done' }),
     },
     persistenceFactory: async () => ({
       agentId: 'agent-1',
+      appendAssistantChunk: async () => null,
       appendToChat: async (_sessionId, message) => {
         messages.push(message)
         return { chat: messages }
       },
+      appendUserMessage: async (_sessionId, message) => {
+        messages.push(message)
+        return { chat: messages }
+      },
+      appendUserMessageOnce: async (_sessionId, message) => {
+        messages.push(message)
+        return { id: message.id, inserted: true }
+      },
+      beginAssistantMessage: async () => 'draft-1',
       ensure: async () => {},
+      finalizeAssistantMessage: async (_messageId, message) => {
+        messages.push(message)
+        return true
+      },
       getAgentMeta: async () => 0,
       getCrystal: async () => '',
       getPendingMemories: async () => [],
@@ -86,11 +110,25 @@ test('SessionTurnService session_only never falls back to Agent default', async 
   const observed = []
   const memory = {
     agentId: 'agent-1',
+    appendAssistantChunk: async () => null,
     appendToChat: async (_sessionId, message) => {
       observed.push(message)
       return { chat: observed }
     },
+    appendUserMessage: async (_sessionId, message) => {
+      observed.push(message)
+      return { chat: observed }
+    },
+    appendUserMessageOnce: async (_sessionId, message) => {
+      observed.push(message)
+      return { id: message.id, inserted: true }
+    },
+    beginAssistantMessage: async () => 'draft-1',
     ensure: async () => {},
+    finalizeAssistantMessage: async (_messageId, message) => {
+      observed.push(message)
+      return true
+    },
     getAgentMeta: async () => 0,
     getCrystal: async () => '',
     getPendingMemories: async () => [],
@@ -100,6 +138,7 @@ test('SessionTurnService session_only never falls back to Agent default', async 
     setCrystal: async () => {},
   }
   const service = new SessionTurnService({
+    sessionWorkCoordinator: leaseStub,
     llm: { process: async () => ({ text: 'silent' }) },
     persistenceFactory: async () => memory,
     prisma: {
@@ -137,11 +176,17 @@ test('SessionTurnService session_only never falls back to Agent default', async 
 
 test('SessionTurnService explicit channel mode reports needs_rebind instead of Agent default', async () => {
   const service = new SessionTurnService({
+    sessionWorkCoordinator: leaseStub,
     llm: { process: async () => ({ text: 'rebind' }) },
     persistenceFactory: async () => ({
       agentId: 'agent-1',
+      appendAssistantChunk: async () => null,
       appendToChat: async () => ({ chat: [] }),
+      appendUserMessage: async () => ({ chat: [] }),
+      appendUserMessageOnce: async (_sessionId, message) => ({ id: message.id, inserted: true }),
+      beginAssistantMessage: async () => 'draft-1',
       ensure: async () => {},
+      finalizeAssistantMessage: async () => true,
       getAgentMeta: async () => 0,
       getCrystal: async () => '',
       getPendingMemories: async () => [],
@@ -188,11 +233,17 @@ test('SessionTurnService explicit channel mode reports needs_rebind instead of A
 
 test('SessionTurnService ignores a legacy Web Agent default', async () => {
   const service = new SessionTurnService({
+    sessionWorkCoordinator: leaseStub,
     llm: { process: async () => ({ text: 'web-visible' }) },
     persistenceFactory: async () => ({
       agentId: 'agent-1',
+      appendAssistantChunk: async () => null,
       appendToChat: async () => ({ chat: [] }),
+      appendUserMessage: async () => ({ chat: [] }),
+      appendUserMessageOnce: async (_sessionId, message) => ({ id: message.id, inserted: true }),
+      beginAssistantMessage: async () => 'draft-1',
       ensure: async () => {},
+      finalizeAssistantMessage: async () => true,
       getAgentMeta: async () => 0,
       getCrystal: async () => '',
       getPendingMemories: async () => [],

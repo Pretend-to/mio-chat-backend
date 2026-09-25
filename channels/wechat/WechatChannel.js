@@ -32,7 +32,7 @@ export class WechatChannel extends BaseChannel {
   /**
    * @param {object} opts
    * @param {import('./IlinkClient.js').IlinkClient} opts.client      iLink 协议客户端
-   * @param {import('../memory/MemoryStore.js').MemoryStore} opts.memory     记忆/会话落盘
+   * @param {import('../../lib/chat/persistence/SessionPersistence.js').SessionPersistence} opts.memory     记忆/会话落盘
    * @param {string} opts.masterId   已认证微信账号 UID（仅用于协议级默认目标）
    * @param {object} opts.llm        { async process(ctx) -> { completed } } 处理普通消息
    * @param {boolean} [opts.typing]  是否启用"正在输入"反馈（默认 true）

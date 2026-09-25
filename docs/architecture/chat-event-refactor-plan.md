@@ -403,6 +403,11 @@ ChatEventFactory.create(normalizedInit)
 ## 9. Steering 设计（第二阶段功能）
 
 Steering 不进入基础 Event 迁移的首个切换版本。基础重构稳定后再实现。
+跨 Agent Session 与纯 Web 对话的最新实施方案见
+[`session-work-injection-development-plan.md`](./session-work-injection-development-plan.md)：
+该方案将 Web 插话、Cron/Trigger 和 SubAgent 完成唤醒统一为 ChatEvent 投递，
+由活动 Event 的 `adjust()` 接收；本节 `not_steerable` 的拒绝语义由该方案的
+后端排队或前端续发取代。以下协议字段和 ACK 仅为历史草案，实施以新计划为准。
 
 ### 9.1 支持范围
 

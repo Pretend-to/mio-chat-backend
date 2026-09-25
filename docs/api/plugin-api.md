@@ -569,7 +569,29 @@ Content-Type: application/json
 - 如果工具执行超过5分钟，将返回超时错误
 - 响应中会包含 `timedOut: true` 标识
 
-**超时响应示例**
+**工具自身的超时回执（terminal-pty 的 `bash` 工具）**
+
+上面这个 `timedOut` 属于**调试接口**的 5 分钟保护（`pluginController` 层）。工具自身也会因为自己的等待上限（`waitMs`，上限 20s）而超时，并在 `data.result` 里返回**同名**的 `timedOut: true`。两者层级不同，不要混为一谈：判断工具级超时必须看 `status`。
+
+工具级超时的 `status` 为**三态**，判定依据是「静默时长」与「屏幕末行」：
+
+| `status` | 判定依据 | 含义与处理 |
+|----------|----------|------------|
+| `executing` | 距最后一次 PTY 输出的时长 < 400ms（`FOREGROUND_QUIET_MS`） | 命令仍在持续吐输出，确实在跑 → 继续 `wait(sessionId)` 或 `read_screen` |
+| `waiting_for_input` | 静默 ≥ 400ms，且屏幕末行**整行**匹配续行提示符（正则 `^(?:>|[a-z]+>)$`，即 `>` / `quote>` / `dquote>` / `heredoc>` / `for>` …） | 命令没被 shell 完整收下（未闭合引号、`for…done`、heredoc 等），它不会自己结束 → 先核对 `stdout`/`tailText` 排除命令自己输出的 `>`，确认卡住后用 `bash_input` 发 `\u0003` 取消再重试 |
+| `timed_out` | 静默 ≥ 400ms，且末行不是续行提示符 | 看不出在等什么（静默长命令、卡死），保守上报 → 可 `wait` / `read_screen` 继续观察 |
+
+超时回执另带三个字段：`idleMs`（距最后一次 PTY 输出的毫秒数）、`tailText`（屏幕最后一行非空文本，已去 ANSI）、`timedOut: true`；`waiting_for_input` 时还会附 `hint` 给出取消指引。`timedOut` 是保留的兼容布尔量，语义上从属于 `status`，不要单独拿它判断「还在跑」。
+
+`status` 在其他情形下的取值：命令正常结束为 `finished`（此时回执只含 `cwd` / `exitCode` / `sessionId` / `stdout`，不带上述三个字段）；后台异步启动为 `running`（此时只含 `message` / `sessionId` / `status`）；执行异常为 `error`。
+
+**`read_screen` 的空结果 `hint`**
+
+`read_screen` 结果为空（`lineCount === 0`）时会附 `hint` 说明原因，避免把「管道缓冲」误判成「命令挂了」：后台任务若接了管道（`| tail` / `| head` / `| grep` 等），生产者输出会被管道消费者攒到 EOF 才吐字，执行期间读到的空是**真空白**，不是丢数据；前台会话空屏则只是「当前没有可读文本行」（会话刚创建或已被清屏），不代表命令没有在执行。替代动作：去掉管道重跑，或用 `wait(sessionId)` 等它结束。
+
+---
+
+**超时响应示例（调试接口侧的 `timedOut`，与上面的工具级三态不是一回事）**
 
 ```json
 {

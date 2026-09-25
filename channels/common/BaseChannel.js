@@ -7,10 +7,11 @@
  * 3. 统一高危动作挂起确认拦截器 (ConfirmationManager)；
  * 4. 统一保活与心跳检查管理器 (KeepAliveManager)；
  * 5. 统一流式响应、多模态分发流水线 (Image/Voice/File/Video/Text) 与降级通知；
- * 6. 统一持久化与会话记忆结晶 (MemoryStore)。
+ * 6. 统一持久化与会话记忆结晶。
  */
 
 import { SlashHandler } from './SlashHandler.js'
+import { randomUUID } from 'node:crypto'
 import { ConfirmationManager } from './ConfirmationManager.js'
 import { KeepAliveManager } from './KeepAliveManager.js'
 import {
@@ -30,12 +31,19 @@ import {
   formatWebErrorMessage,
   parseErrorDetails,
 } from './errorFormatter.js'
+import { SessionWorkCoordinator } from '../../lib/chat/sessions/SessionWorkCoordinator.js'
+import { getChatEventDispatcher } from '../../lib/chat/llm/events/ChatEventDispatcher.js'
+
+// 渠道入口等待租约的上限。渠道的历史语义是「一直等」（原为一个
+// `for (;;) sleep 250ms` 自旋），这里保留同一语义：租约 TTL 30s 且只有活着的
+// 持有者会续租，持有者死掉/退出后等待会自然自愈，不需要额外上限。
+const CHANNEL_LEASE_WAIT_MS = Number.POSITIVE_INFINITY
 
 export class BaseChannel {
   /**
    * @param {object} opts
    * @param {object} opts.client      底层协议客户端实现
-   * @param {import('../memory/MemoryStore.js').MemoryStore} opts.memory     会话与记忆存储
+   * @param {import('../../lib/chat/persistence/SessionPersistence.js').SessionPersistence} opts.memory     会话与记忆存储
    * @param {string} opts.masterId   绑定主用户 UID
    * @param {object} opts.llm        LLM 处理器
    * @param {string} [opts.channelType='base'] 渠道标识（如 'wechat', 'feishu', 'dingtalk'）
@@ -66,6 +74,7 @@ export class BaseChannel {
     channelId = null,
     debounceConfig = {},
     debounceEnabled = null,
+    debounceScheduler = { setTimeout, clearTimeout },
     routeTargetResolver = null,
   }) {
     if (!client || !memory || !masterId) {
@@ -106,6 +115,7 @@ export class BaseChannel {
       Boolean(process.env.NODE_TEST_CONTEXT) ||
       process.execArgv.includes('--test')
     this.debounceEnabled = debounceEnabled ?? !isTestEnv
+    this.debounceScheduler = debounceScheduler
     this._sessionYolo = new Map()
 
     this.running = false
@@ -721,11 +731,11 @@ export class BaseChannel {
     )
 
     if (buf.timer) {
-      clearTimeout(buf.timer)
+      this.debounceScheduler.clearTimeout(buf.timer)
     }
 
     return new Promise((resolve, reject) => {
-      buf.timer = setTimeout(async () => {
+      buf.timer = this.debounceScheduler.setTimeout(async () => {
         try {
           // 若仍有媒体任务在异步下载转存中，等待最多 5 秒
           let waitTimes = 0
@@ -1181,6 +1191,8 @@ export class BaseChannel {
       const reply = await this.llm.process({
         agentId: this.memory.agentId,
         bindingId: ctx.bindingId || ctx.channelBindingId || null,
+        deliveryBindingId: ctx.deliveryBindingId || null,
+        deliveryMode: ctx.deliveryMode || null,
         channel: this,
         channelId: ctx.channelId || this.id,
         channelConversationId: ctx.channelConversationId || null,
@@ -1237,6 +1249,63 @@ export class BaseChannel {
   // 核心对话处理、多模态流式流水线与持久化落盘
   // ===============================================================
   async _processChat(text, ctx) {
+    const agentId = this.memory.agentId
+
+    let sessionId = ctx.sid || (await this.memory.getActiveSession())
+    if (!sessionId) {
+      const session = await this.memory.createSession({ title: '默认会话' })
+      await this.memory.setActiveSession(session.id)
+      sessionId = session.id
+      ctx.sid = sessionId
+    }
+
+    if (ctx.sessionLease) {
+      if (
+        ctx.sessionLease.agentId !== agentId ||
+        ctx.sessionLease.sessionId !== sessionId ||
+        typeof ctx.sessionLease.assertLease !== 'function'
+      ) {
+        throw new Error(`Session ${sessionId} lease context does not match target`)
+      }
+      await ctx.sessionLease.assertLease()
+      return this._processChatWithLease(text, ctx)
+    }
+
+    const coordinator = new SessionWorkCoordinator({ prisma: this.memory.prisma })
+    const owner = `channel:${randomUUID()}`
+    // 租约被其它入口（Cron / 哨兵 / Web Agent / 另一个渠道实例）占用时等待。
+    // 原实现是一个 `for (;;) sleep 250ms` 的自旋：每轮至少 4 次 DB 往返、
+    // 无排队语义、多个等待者互相抢。现在复用 SessionWorkCoordinator 的
+    // FIFO 门（waitMs > 0）——同一个门 Web Agent 入口也在用。
+    // 注意：渠道实例内的顺序保障在 _enqueueSession（_sessionLocks +
+    // _sessionWaitingQueues），这里只负责跨入口互斥，不要在这里造顺序。
+    try {
+      return await coordinator.withSessionLease(
+        { agentId, owner, sessionId, waitMs: CHANNEL_LEASE_WAIT_MS },
+        async ({ assertLease, lease }) => {
+          ctx.sessionLease = {
+            agentId,
+            assertLease,
+            fencingToken: lease.fencingToken,
+            owner: lease.leaseOwner,
+            sessionId,
+          }
+          try {
+            return await this._processChatWithLease(text, ctx)
+          } finally {
+            delete ctx.sessionLease
+          }
+        },
+      )
+    } catch (error) {
+      if (error?.code === 'session_busy' && ctx.signal?.aborted) {
+        throw ctx.signal.reason || error
+      }
+      throw error
+    }
+  }
+
+  async _processChatWithLease(text, ctx) {
     // 消息时间由公共管线统一生成，与具体渠道协议解耦。后续的 Web 镜像、
     // session 持久化和 LLM 请求必须复用同一个值，保证跨轮次输入稳定。
     ctx.messageTime = ensureMessageTime(ctx.messageTime)
@@ -1254,14 +1323,17 @@ export class BaseChannel {
       await this.memory.setActiveSession(s.id)
       sid = s.id
     }
+    const assertSessionLease = async () => {
+      if (ctx.sessionLease?.assertLease) await ctx.sessionLease.assertLease()
+    }
     this.log?.info?.(
       `[${this.channelType}:${this.id}] 🧠 进入 LLM 推理处理流水线 | 会话: ${sid} | 来源: ${ctx.from} | 模型: ${this.provider || 'default'}/${this.model || 'default'} | 文本长度: ${text.length}`,
     )
     const crystal = await this.memory.getCrystal(sid)
-    const pendingMemories =
-      typeof this.memory.getPendingMemories === 'function'
-        ? await this.memory.getPendingMemories(sid)
-        : []
+    // 契约：存储必须实现 getPendingMemories（两个现存实现都已具备）。
+    // 不做能力探测 —— 探测失败时 fallback 到 []，等于静默丢掉待处理编辑，
+    // 镜像就只剩结晶，而没人会发现。
+    const pendingMemories = await this.memory.getPendingMemories(sid)
     const session = await this.memory.getSession(sid)
     const chat = session?.chat || []
     ctx.channelId =
@@ -1309,11 +1381,53 @@ export class BaseChannel {
       ctx.messageId ||
       `msg_a_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
 
-    // 当消息来自第三方渠道（!ctx.isWeb）时，若 Web 客户端在线，向其广播用户消息并建立 Blank 占位
-    if (!ctx.isWeb && ctx.persistUserMessage !== false) {
-      const userMsgId = ctx.userMessageId
-      const assistantMsgId = ctx.messageId
+    const emittedBlocks = []
+    let didEmitTextBlock = false
+    const executionMetadata = {
+      ...(ctx.envelope ? channelEnvelopeMetadata(ctx.envelope) : {}),
+      ...(ctx.isTask ? { triggerType: 'task' } : {}),
+      ...(ctx.isWake
+        ? {
+            wakeType:
+              ctx.wakeKind ||
+              (ctx.source === 'subagent' ? 'subagent' : 'trigger'),
+          }
+        : {}),
+    }
+    const persistedExecutionMetadata = Object.keys(executionMetadata).length
+      ? executionMetadata
+      : null
+    let assistantPersistenceId = null
+    let activeChatEvent = null
+    let persistenceQueue = Promise.resolve()
+    const persistUserMessage = ctx.persistUserMessage !== false
 
+    if (persistUserMessage) {
+      await assertSessionLease()
+      const persisted = await this.memory.appendUserMessageOnce(sid, {
+        channel_id: ctx.envelope?.source?.channelId,
+        content: persistedUserContent,
+        external_conversation_id:
+          ctx.envelope?.conversation?.externalConversationId,
+        external_message_id: ctx.envelope?.message?.externalMessageId,
+        from_user_id: ctx.envelope?.actor?.externalUserId || ctx.from,
+        id: ctx.userMessageId,
+        metadata: persistedExecutionMetadata,
+        role: 'user',
+        source_type: ctx.envelope?.source?.adapterId,
+        text: persistedUserText,
+        time: ctx.envelope?.message?.sentAt || ctx.messageTime,
+      })
+      if (!persisted.inserted && ctx.envelope?.message?.externalMessageId) {
+        this.log?.info?.(
+          `[${this.channelType}:${this.id}] 重复外部消息已忽略 | channelId=${ctx.envelope.source.channelId} externalMessageId=${ctx.envelope.message.externalMessageId} existingMessageId=${persisted.id}`,
+        )
+        return { duplicate: true, messageId: persisted.id }
+      }
+    }
+
+    // 持久化成功后再镜像给 Web；重复投递不生成第二个用户气泡或助手占位。
+    if (!ctx.isWeb && persistUserMessage) {
       const onlineWebClients = sessions.getAllAdminClients()
       if (onlineWebClients && onlineWebClients.length > 0) {
         const userMsgContent = [...preparedUserInput.persistedContent]
@@ -1329,7 +1443,7 @@ export class BaseChannel {
           client.send({
             data: {
               agentId: this.memory.agentId,
-              assistantMessageId: assistantMsgId,
+              assistantMessageId: ctx.messageId,
               channelId: ctx.channelId,
               contactorId: ctx.streamContactorId || this.memory.agentId,
               sessionId: sid,
@@ -1338,7 +1452,7 @@ export class BaseChannel {
                 : {}),
               userMessage: {
                 content: userMsgContent,
-                id: userMsgId,
+                id: ctx.userMessageId,
                 role: 'user',
                 text: persistedUserText,
                 time: ctx.messageTime,
@@ -1350,60 +1464,15 @@ export class BaseChannel {
         }
       }
     }
-
-    const emittedBlocks = []
-    let didEmitTextBlock = false
-    const executionMetadata = {
-      ...(ctx.envelope ? channelEnvelopeMetadata(ctx.envelope) : {}),
-      ...(ctx.isTask ? { triggerType: 'task' } : {}),
-      ...(ctx.isWake
-        ? {
-            wakeType: ctx.source === 'subagent' ? 'subagent' : 'trigger',
-          }
-        : {}),
-    }
-    const persistedExecutionMetadata = Object.keys(executionMetadata).length
-      ? executionMetadata
-      : null
-    const supportsPersistenceLifecycle =
-      typeof this.memory.beginAssistantMessage === 'function' &&
-      typeof this.memory.finalizeAssistantMessage === 'function'
-    let assistantPersistenceId = null
-    let persistenceQueue = Promise.resolve()
-    let userPersistedBeforeLlm = false
-    const persistUserMessage = ctx.persistUserMessage !== false
-
-    if (supportsPersistenceLifecycle) {
-      const persistUser =
-        typeof this.memory.appendUserMessage === 'function'
-          ? this.memory.appendUserMessage.bind(this.memory)
-          : this.memory.appendToChat.bind(this.memory)
-      if (persistUserMessage) {
-        await persistUser(sid, {
-          channel_id: ctx.envelope?.source?.channelId,
-          content: persistedUserContent,
-          external_conversation_id:
-            ctx.envelope?.conversation?.externalConversationId,
-          external_message_id: ctx.envelope?.message?.externalMessageId,
-          from_user_id: ctx.envelope?.actor?.externalUserId || ctx.from,
-          id: ctx.userMessageId,
-          metadata: persistedExecutionMetadata,
-          role: 'user',
-          source_type: ctx.envelope?.source?.adapterId,
-          text: persistedUserText,
-          time: ctx.envelope?.message?.sentAt || ctx.messageTime,
-        })
-        userPersistedBeforeLlm = true
-      }
-      assistantPersistenceId = await this.memory.beginAssistantMessage(sid, {
-        content: [],
-        id: ctx.messageId,
-        metadata: persistedExecutionMetadata,
-        role: 'assistant',
-        text: '',
-        time: Date.now(),
-      })
-    }
+    await assertSessionLease()
+    assistantPersistenceId = await this.memory.beginAssistantMessage(sid, {
+      content: [],
+      id: ctx.messageId,
+      metadata: persistedExecutionMetadata,
+      role: 'assistant',
+      text: '',
+      time: Date.now(),
+    })
     const activeJobObj = {
       _abortLlm: null,
       abort: () => {
@@ -1427,17 +1496,15 @@ export class BaseChannel {
       // 流式分发回调：检测到完整文本块或多模态 extraRender 时进入串行发送流水线
       const onEmitTextBlock = (textBlock, meta = {}) => {
         didEmitTextBlock = true
-        if (
-          assistantPersistenceId &&
-          typeof this.memory.appendAssistantChunk === 'function'
-        ) {
+        if (assistantPersistenceId) {
           const rawRender = meta.extraRender
           const render = Array.isArray(rawRender)
             ? rawRender[0] || {}
             : rawRender || {}
           persistenceQueue = persistenceQueue
-            .then(() =>
-              this.memory.appendAssistantChunk(
+            .then(async () => {
+              await assertSessionLease()
+              return this.memory.appendAssistantChunk(
                 assistantPersistenceId,
                 'semantic_block',
                 {
@@ -1459,8 +1526,8 @@ export class BaseChannel {
                   },
                   text: textBlock || '',
                 },
-              ),
-            )
+              )
+            })
             .catch((error) => {
               this.log?.error?.(
                 `[${this.channelType}] 流式语义块持久化失败: ${error.message}`,
@@ -1797,6 +1864,8 @@ export class BaseChannel {
       const reply = await this.llm.process({
         agentId: this.memory.agentId,
         bindingId: ctx.bindingId || ctx.channelBindingId || null,
+        deliveryBindingId: ctx.deliveryBindingId || null,
+        deliveryMode: ctx.deliveryMode || null,
         channel: outputPort || this,
         channelId: ctx.channelId,
         channelConversationId: ctx.channelConversationId || null,
@@ -1820,10 +1889,16 @@ export class BaseChannel {
         memory: this.memory,
         messageTime: ctx.messageTime,
         messageId: ctx.messageId,
+        eventId: ctx.eventId,
+        idempotencyKey: ctx.idempotencyKey,
+        originRef: ctx.originRef,
         model: this.model,
         onEmitTextBlock,
         onRegisterAbort: (abortFn) => {
           activeJobObj._abortLlm = abortFn
+        },
+        onChatEvent: (event) => {
+          activeChatEvent = event
         },
         pendingMemories,
         approvalTarget: ctx.approvalTarget,
@@ -1841,6 +1916,7 @@ export class BaseChannel {
         triggerId: ctx.triggerId,
         isTask: ctx.isTask,
         isWake: ctx.isWake,
+        wakeKind: ctx.wakeKind,
         webClient: ctx.webClient,
       })
 
@@ -1869,17 +1945,6 @@ export class BaseChannel {
         reply?.aborted
       ) {
         const fullAssistantReply = emittedBlocks.join('\n\n')
-
-        const now = Date.now()
-        const userMsg = {
-          content: persistedUserContent,
-          from_user_id: ctx.from,
-          role: 'user',
-          text: persistedUserText,
-          time: ctx.messageTime || now,
-        }
-        if (!userPersistedBeforeLlm && persistUserMessage)
-          await this.memory.appendToChat(sid, userMsg)
 
         const assembledAssistantContent = Array.isArray(reply?.content)
           ? appendRecursiveContextMessages(
@@ -1931,6 +1996,7 @@ export class BaseChannel {
         let updatedSession
         if (assistantPersistenceId) {
           await persistenceQueue
+          await assertSessionLease()
           await this.memory.finalizeAssistantMessage(
             assistantPersistenceId,
             assistantMsg,
@@ -1939,6 +2005,7 @@ export class BaseChannel {
           updatedSession = await this.memory.getSession(sid)
           assistantPersistenceId = null
         } else {
+          await assertSessionLease()
           updatedSession = await this.memory.appendToChat(sid, assistantMsg)
         }
         const currentCount = updatedSession?.chat?.length || 0
@@ -1949,6 +2016,7 @@ export class BaseChannel {
           `[${this.channelType}] 💾 会话历史已成功落盘 | 会话: ${sid} | 本轮交互已追加 (含 ${toolCallCount} 个 ToolCalls${reply?.aborted ? ', 用户中止' : ''}) | 累计条数: ${currentCount} 条`,
         )
         if (reply?.crystal && !reply?.crystalPersisted) {
+          await assertSessionLease()
           await this.memory.setCrystal(sid, reply.crystal)
           this.log?.info?.(
             `[${this.channelType}] 💎 会话结晶已更新 | 会话: ${sid} | 结晶长度: ${reply.crystal.length} 字符`,
@@ -1958,6 +2026,7 @@ export class BaseChannel {
 
       if (assistantPersistenceId) {
         await persistenceQueue
+        await assertSessionLease()
         await this.memory.finalizeAssistantMessage(assistantPersistenceId, {
           content: [],
           role: 'assistant',
@@ -1966,7 +2035,17 @@ export class BaseChannel {
         })
         assistantPersistenceId = null
       }
-      return null
+      if (activeChatEvent) {
+        await getChatEventDispatcher()
+          .finishAbsorbedForEvent(activeChatEvent, {
+            assistantMessageId: ctx.messageId,
+            status: reply?.aborted ? 'needs_attention' : 'completed',
+          })
+          .catch((error) => {
+            this.log?.error?.('[SessionWork] 完成吸收任务状态落盘失败:', error)
+          })
+      }
+      return ctx.isWake ? { aborted: Boolean(reply?.aborted) } : null
     } catch (error) {
       const channelErrorText = formatChannelErrorMessage(error)
       this.log?.error?.(
@@ -2009,6 +2088,7 @@ export class BaseChannel {
       // 3. 收口持久化，将错误记录落盘
       if (assistantPersistenceId) {
         await persistenceQueue
+        await assertSessionLease()
         const partialText = emittedBlocks.join('\n\n')
         const finalContent = partialText
           ? [
@@ -2035,6 +2115,17 @@ export class BaseChannel {
             )
           })
         assistantPersistenceId = null
+      }
+      if (activeChatEvent) {
+        await getChatEventDispatcher()
+          .finishAbsorbedForEvent(activeChatEvent, {
+            assistantMessageId: ctx.messageId,
+            error: error?.message || String(error),
+            status: 'failed',
+          })
+          .catch((statusError) => {
+            this.log?.error?.('[SessionWork] 失败任务状态落盘失败:', statusError)
+          })
       }
       throw error
     } finally {

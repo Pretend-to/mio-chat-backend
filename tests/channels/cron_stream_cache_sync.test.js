@@ -6,7 +6,11 @@ import fs from 'node:fs'
 
 global.logger = global.logger || console
 
-import { MemoryStore } from '../../channels/memory/index.js'
+import { execFileSync } from 'node:child_process'
+import crypto from 'node:crypto'
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
+import { PrismaClient } from '@prisma/client'
+import { DatabaseMemoryStore } from '../../lib/chat/persistence/DatabaseMemoryStore.js'
 import { OneBotChannel } from '../../channels/onebots/OneBotChannel.js'
 import { createBackendLlm } from '../../channels/llm.js'
 import streamCache from '../../lib/server/socket.io/services/streamCache.js'
@@ -27,10 +31,36 @@ function createMockClient() {
   }
 }
 
+async function createPrismaFixture() {
+  const databasePath = path.join(
+    os.tmpdir(),
+    `mio-streamcache-${process.pid}-${crypto.randomUUID()}.db`,
+  )
+  execFileSync(
+    path.join(process.cwd(), 'node_modules/.bin/prisma'),
+    [
+      'db',
+      'push',
+      '--schema',
+      path.join(process.cwd(), 'prisma/schema.prisma'),
+      '--url',
+      `file:${databasePath}`,
+    ],
+    { env: { ...process.env, RUST_LOG: 'debug' }, stdio: 'ignore' },
+  )
+  const prisma = new PrismaClient({
+    adapter: new PrismaBetterSqlite3({ url: `file:${databasePath}` }),
+  })
+  await prisma.$connect()
+  return { databasePath, prisma }
+}
+
 test('Channel 任务流式执行：微信下发与 StreamCache 异步沉淀完全并发且互不影响', async () => {
-  const baseDir = path.join(os.tmpdir(), `mio-streamcache-test-${Date.now()}_${Math.random().toString(36).slice(2, 7)}`)
   const channelId = 'ch_cron_replay_1'
-  const memory = new MemoryStore({ agentId: channelId, baseDir })
+  const { databasePath, prisma } = await createPrismaFixture()
+  await prisma.agent.create({ data: { id: channelId } })
+  const memory = new DatabaseMemoryStore({ agentId: channelId, prisma })
+  await memory.ensure()
   await memory.writeSoul('你是定时任务执行者')
 
   const client = createMockClient()
@@ -110,6 +140,7 @@ test('Channel 任务流式执行：微信下发与 StreamCache 异步沉淀完�
     assert.strictEqual((afterAck || []).filter(m => m.messageId === taskMessageId).length, 0, '客户端 ACK 后缓存被安全清理')
   } finally {
     streamCache.delete('admin', channelId)
-    fs.rmSync(baseDir, { force: true, recursive: true })
+    await prisma.$disconnect()
+    fs.rmSync(databasePath, { force: true })
   }
 })
