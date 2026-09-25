@@ -460,3 +460,92 @@ test('recoverStaleRuns recovers in-flight runs to interrupted on restart, suppor
   assert.equal(abortedOrphan.status, RUN_STATUS.CANCELLED)
   assert.equal(abortedOrphan.cancelReason, 'stop orphan')
 })
+
+test('continue while a run is in flight is a middle state: no completion wake for the interrupted run', async (t) => {
+  const prisma = await fixture(t)
+  const agentId = id('agent')
+  const parentSessionId = id('session')
+  await prisma.agent.create({
+    data: { id: agentId, name: 'Continue Wake Test' },
+  })
+  await prisma.session.create({
+    data: { agentId, id: parentSessionId, kind: 'conversation', title: 'Main' },
+  })
+  const runService = new SubAgentRunService({ prisma })
+
+  let releaseFirstRun
+  const firstRunGate = new Promise((resolve) => {
+    releaseFirstRun = resolve
+  })
+  let firstRunStarted
+  const started = new Promise((resolve) => {
+    firstRunStarted = resolve
+  })
+  const executor = {
+    abort: async () => {
+      // `subagent action=continue` interrupts the live turn, then supersedes it.
+      releaseFirstRun()
+      return true
+    },
+    execute: async (run) => {
+      if (run.attempt === 1) {
+        firstRunStarted()
+        await firstRunGate
+        return {
+          resultJson: { summary: 'interrupted' },
+          resultText: 'interrupted',
+        }
+      }
+      return {
+        resultJson: { summary: 'revised' },
+        resultText: 'revised answer',
+      }
+    },
+  }
+  const wakeRequests = []
+  const dispatcher = new SubAgentDispatcher({
+    executor,
+    runService,
+    dispatcher: {
+      submitWake: async (request) => {
+        wakeRequests.push(request)
+        return { eventId: `event-${wakeRequests.length}`, status: 'accepted' }
+      },
+    },
+  })
+  const group = await runService.createGroup({
+    agentId,
+    allowedToolNames: ['read_mid_test'],
+    jobs: [{ key: 'work', objective: 'Do the work' }],
+    parentSessionId,
+  })
+
+  assert.equal(dispatcher.startGroup(group.id), true)
+  await started
+
+  // Exactly what the subagent tool does for action=continue.
+  await dispatcher.abortRun(group.runs[0].id, 'interrupted_for_continuation')
+  await dispatcher.waitForGroup(group.id)
+
+  // The interrupted run is not a group outcome while its replacement is
+  // pending; a terminal status here wakes the parent and invites a duplicate
+  // worker for the same resource.
+  assert.deepEqual(wakeRequests, [])
+  assert.equal(
+    (await runService.getGroup(group.id)).status,
+    GROUP_STATUS.WAITING_CHILDREN,
+  )
+  const revision = await runService.continueRun(group.runs[0].id, {
+    instruction: 'Redo the work',
+  })
+  assert.equal(dispatcher.startGroup(group.id), true)
+  await dispatcher.waitForGroup(group.id)
+
+  const finished = await runService.getGroup(group.id)
+  assert.equal(finished.status, GROUP_STATUS.COMPLETED)
+  assert.equal(wakeRequests.length, 1)
+  assert.match(wakeRequests[0].instruction, /status: completed/)
+  assert.match(wakeRequests[0].instruction, /activeRuns: 0/)
+  assert.match(wakeRequests[0].instruction, new RegExp(revision.id))
+  assert.doesNotMatch(wakeRequests[0].instruction, /status: cancelled/)
+})
