@@ -4,18 +4,54 @@ import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import crypto from 'node:crypto'
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
+import { PrismaClient } from '@prisma/client'
 import { IlinkClient } from '../../channels/wechat/index.js'
-import { MemoryStore } from '../../channels/memory/index.js'
+import { DatabaseMemoryStore } from '../../lib/chat/persistence/DatabaseMemoryStore.js'
 import { WechatChannel } from '../../channels/wechat/WechatChannel.js'
 import { createEchoLlm } from '../../channels/wechat/llm.js'
 
 /**
  * WechatChannel 端到端集成测试（确定性，手动驱动）
- * 真实 HTTP mock iLink 服务 + 真实 IlinkClient（登录、收、发都走真网络）+ 真 MemoryStore + WechatChannel。
- * 验证「登录 → 收消息 → AI 回复 → 真网络发出 → 记忆落盘 → slash 会话路由 → 单用户边界」全链路。
+ * 真实 HTTP mock iLink 服务 + 真实 IlinkClient（登录、收、发都走真网络）+ 真数据库存储 + WechatChannel。
+ * 验证「登录 → 收消息 → AI 回复 → 真网络发出 → 记忆落库 → slash 会话路由 → 单用户边界」全链路。
  */
 
 const MASTER = 'master@im.wechat'
+
+async function createPrismaFixture(agentId) {
+  const databasePath = path.join(
+    os.tmpdir(),
+    `mio-int-${process.pid}-${crypto.randomUUID()}.db`,
+  )
+  execFileSync(
+    path.join(process.cwd(), 'node_modules/.bin/prisma'),
+    [
+      'db',
+      'push',
+      '--schema',
+      path.join(process.cwd(), 'prisma/schema.prisma'),
+      '--url',
+      `file:${databasePath}`,
+    ],
+    { env: { ...process.env, RUST_LOG: 'debug' }, stdio: 'ignore' },
+  )
+  const prisma = new PrismaClient({
+    adapter: new PrismaBetterSqlite3({ url: `file:${databasePath}` }),
+  })
+  await prisma.$connect()
+  await prisma.agent.create({ data: { id: agentId } })
+  const memory = new DatabaseMemoryStore({ agentId, prisma })
+  await memory.ensure()
+  return { databasePath, memory, prisma }
+}
+
+async function disposeFixture({ databasePath, prisma }) {
+  await prisma.$disconnect()
+  fs.rmSync(databasePath, { force: true })
+}
 
 function buildIlinkServer() {
   const state = { pollCount: 0, sent: [] }
@@ -46,56 +82,68 @@ async function loginAndChannel(svc, { soul = true, typing = false } = {}) {
   await client.pollQrStatus(qr.qrcode)
   const c = await client.pollQrStatus(qr.qrcode, { timeoutMs: 2000 })
   client.setAuth({ token: c.bot_token, botId: c.ilink_bot_id, userId: c.ilink_user_id })
-  const baseDir = path.join(os.tmpdir(), `mio-int-${Date.now()}_${Math.random().toString(36).slice(2, 7)}`)
-  const memory = new MemoryStore({ agentId: 'wechat', baseDir })
-  if (soul) await memory.writeSoul('你叫小助手')
-  const chn = new WechatChannel({ client, memory, masterId: MASTER, llm: createEchoLlm(), typing })
-  return { client, memory, chn, baseDir }
+  const fixture = await createPrismaFixture('wechat')
+  if (soul) await fixture.memory.writeSoul('你叫小助手')
+  const chn = new WechatChannel({ client, memory: fixture.memory, masterId: MASTER, llm: createEchoLlm(), typing })
+  return { client, memory: fixture.memory, chn, fixture }
 }
-const line = (text, from = MASTER, token = 'CTX') => ({ from_user_id: from, message_id: 1, message_type: 1, context_token: token, item_list: [{ type: 1, text }] })
+// 微信协议里 message_id 是每条入站消息的唯一外部标识（db 契约：@@unique([channel_id, external_message_id])，
+// 存储层直接把它写进 external_message_id）。夹具必须为每条模拟入站消息分配唯一 id。
+const line = (text, from = MASTER, token = 'CTX') => ({
+  from_user_id: from,
+  message_id: `int-msg-${++messageSeq}`,
+  message_type: 1,
+  context_token: token,
+  item_list: [{ type: 1, text }],
+})
+let messageSeq = 0
 const lastSent = (state) => state.sent[state.sent.length - 1]?.msg?.item_list?.[0]?.text ?? null
 
 test('WechatChannel 端到端：登录→多用户收发→记忆→slash', async () => {
   const svc = await buildIlinkServer()
-  const { memory, chn, baseDir } = await loginAndChannel(svc)
+  const { memory, chn, fixture } = await loginAndChannel(svc)
 
-  // 绑定者消息 → AI 回复 → 经真实 client 发到 mock 服务 + 记忆落盘
-  await chn._handleMessage(line('你好呀'))
-  assert.strictEqual(svc.state.sent.length, 1, '真网络发出 1 条')
-  assert.strictEqual(lastSent(svc.state), '你好呀', 'echo 回复文本')
-  assert.strictEqual(svc.state.sent[0].msg.context_token, 'CTX', '发送带回 context_token')
-  const sid = await memory.getActiveSession()
-  assert.strictEqual((await memory.getChat(sid)).length, 2, '会话聊天落盘(user+assistant)')
+  try {
+    // 绑定者消息 → AI 回复 → 经真实 client 发到 mock 服务 + 记忆落库
+    await chn._handleMessage(line('你好呀'))
+    assert.strictEqual(svc.state.sent.length, 1, '真网络发出 1 条')
+    assert.strictEqual(lastSent(svc.state), '你好呀', 'echo 回复文本')
+    assert.strictEqual(svc.state.sent[0].msg.context_token, 'CTX', '发送带回 context_token')
+    const sid = await memory.getActiveSession()
+    assert.strictEqual((await memory.getChat(sid)).length, 2, '会话聊天落库(user+assistant)')
 
-  // 同一已认证 Channel 接受新的外部用户；生产路由会为其分配独立 Session。
-  const before = svc.state.sent.length
-  await chn._handleMessage(line('你是谁', 'stranger@im.wechat'))
-  assert.strictEqual(svc.state.sent.length, before + 1, '新外部用户获得回复')
+    // 同一已认证 Channel 接受新的外部用户；生产路由会为其分配独立 Session。
+    const before = svc.state.sent.length
+    await chn._handleMessage(line('你是谁', 'stranger@im.wechat'))
+    assert.strictEqual(svc.state.sent.length, before + 1, '新外部用户获得回复')
 
-  // slash：/sessions 与 /new
-  await chn._handleMessage(line('/sessions'))
-  assert.ok(lastSent(svc.state).includes('默认会话'), '/sessions 列出会话')
-  await chn._handleMessage(line('/new 项目'))
-  const sid2 = await memory.getActiveSession()
-  assert.strictEqual((await memory.getSession(sid2)).title, '项目', '/new 新建并激活')
-
-  fs.rmSync(baseDir, { recursive: true, force: true })
-  svc.server.close()
+    // slash：/sessions 与 /new
+    await chn._handleMessage(line('/sessions'))
+    assert.ok(lastSent(svc.state).includes('默认会话'), '/sessions 列出会话')
+    await chn._handleMessage(line('/new 项目'))
+    const sid2 = await memory.getActiveSession()
+    assert.strictEqual((await memory.getSession(sid2)).title, '项目', '/new 新建并激活')
+  } finally {
+    await disposeFixture(fixture)
+    svc.server.close()
+  }
 })
 
 test('WechatChannel 灵魂引导（无 soul）：走引导、不写 soul、引导对话正常计入会话', async () => {
   const svc = await buildIlinkServer()
-  const { memory, chn, baseDir } = await loginAndChannel(svc, { soul: false })
+  const { memory, chn, fixture } = await loginAndChannel(svc, { soul: false })
 
-  await chn._handleMessage(line('你好'))
-  assert.strictEqual(lastSent(svc.state), '你好', '引导模式 echo 回复')
-  assert.strictEqual(await memory.readSoul(), '', '引导期未写 soul')
-  // 引导已不再单独占据流程层：引导对话与正常对话一样落盘 session chat
-  const chat0 = await memory.getChat(await memory.getActiveSession())
-  assert.strictEqual(chat0.length, 2, '引导对话正常计入会话（user+assistant）')
-  assert.strictEqual(chat0[0].text, '你好', '引导 user 句落盘')
-  assert.strictEqual(chat0[1].text, '你好', '引导 assistant 句落盘')
-
-  fs.rmSync(baseDir, { recursive: true, force: true })
-  svc.server.close()
+  try {
+    await chn._handleMessage(line('你好'))
+    assert.strictEqual(lastSent(svc.state), '你好', '引导模式 echo 回复')
+    assert.strictEqual(await memory.readSoul(), '', '引导期未写 soul')
+    // 引导已不再单独占据流程层：引导对话与正常对话一样落盘 session chat
+    const chat0 = await memory.getChat(await memory.getActiveSession())
+    assert.strictEqual(chat0.length, 2, '引导对话正常计入会话（user+assistant）')
+    assert.strictEqual(chat0[0].text, '你好', '引导 user 句落盘')
+    assert.strictEqual(chat0[1].text, '你好', '引导 assistant 句落盘')
+  } finally {
+    await disposeFixture(fixture)
+    svc.server.close()
+  }
 })

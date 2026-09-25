@@ -9,12 +9,11 @@ import test from 'node:test'
 import { BaseChannel } from '../../channels/common/BaseChannel.js'
 import { normalizeChannelEnvelope } from '../../channels/bindings/ChannelEnvelope.js'
 import { ChannelStore } from '../../channels/ChannelStore.js'
-import { MemoryStore } from '../../channels/memory/MemoryStore.js'
+
 import { restoreRunningChannels } from '../../channels/restoreRunningChannels.js'
 import { TriggerRegistry } from '../../lib/triggers/TriggerRegistry.js'
 import {
   DatabaseMemoryStore,
-  PersistenceMirrorError,
   SessionPersistence,
 } from '../../lib/chat/persistence/index.js'
 
@@ -260,55 +259,6 @@ test('streaming lifecycle finalizes tool projections and recovers interrupted me
   assert.equal(recovered.text, 'partial answer')
 })
 
-test('shadow and database-shadow keep legacy and database representations aligned', async (t) => {
-  const { prisma, root } = await createFixture(t)
-  const legacy = new MemoryStore({
-    agentId: 'agent-shadow',
-    baseDir: path.join(root, 'memory'),
-  })
-  const shadow = new SessionPersistence({
-    agentId: 'agent-shadow',
-    legacyStore: legacy,
-    mode: 'shadow',
-    prisma,
-  })
-
-  await shadow.ensure()
-  await shadow.writeSoul('shadow soul')
-  await shadow.writeGlobal('general', 'shadow global\n')
-  await shadow.createSession({
-    createdAt: 1000,
-    id: 'session-shadow',
-    title: 'Shadow',
-  })
-  await shadow.setActiveSession('session-shadow')
-  await shadow.appendToChat('session-shadow', user('hello', 2000))
-  const messageId = await shadow.beginAssistantMessage('session-shadow')
-  await shadow.finalizeAssistantMessage(messageId, assistant('world', 3000))
-
-  const database = new DatabaseMemoryStore({ agentId: 'agent-shadow', prisma })
-  assert.deepEqual(
-    await database.getSession('session-shadow'),
-    await legacy.getSession('session-shadow'),
-  )
-  assert.equal(await database.readSoul(), await legacy.readSoul())
-  assert.equal(
-    await database.readGlobal('general'),
-    await legacy.readGlobal('general'),
-  )
-
-  const dbPrimary = new SessionPersistence({
-    agentId: 'agent-shadow',
-    legacyStore: legacy,
-    mode: 'database-shadow',
-    prisma,
-  })
-  await dbPrimary.appendToChat('session-shadow', user('again', 4000))
-  assert.deepEqual(
-    await database.getSession('session-shadow'),
-    await legacy.getSession('session-shadow'),
-  )
-})
 
 test('BaseChannel persists user and assistant placeholder before invoking the LLM', async (t) => {
   const { prisma } = await createFixture(t)
@@ -393,77 +343,7 @@ test('BaseChannel persists user and assistant placeholder before invoking the LL
   )
 })
 
-test('mirror failure policy preserves legacy availability and stops database-shadow silently diverging', async () => {
-  const logger = { error() {} }
-  const legacyMessages = []
-  const legacyPrimary = {
-    agentId: 'agent-policy',
-    appendToChat: async (sessionId, message) => {
-      legacyMessages.push({ message, sessionId })
-    },
-    readSoul: async () => 'legacy',
-    writeSoul: async () => true,
-  }
-  const brokenDatabaseMirror = {
-    writeSoul: async () => {
-      throw new Error('database unavailable')
-    },
-  }
-  const shadow = new SessionPersistence({
-    agentId: 'agent-policy',
-    databaseStore: brokenDatabaseMirror,
-    legacyStore: legacyPrimary,
-    logger,
-    mode: 'shadow',
-  })
-  assert.equal(await shadow.writeSoul('still available'), true)
-  const draftId = await shadow.beginAssistantMessage('session-policy')
-  await shadow.finalizeAssistantMessage(
-    draftId,
-    assistant('legacy final', 1000),
-  )
-  assert.equal(legacyMessages.length, 1)
 
-  const finalizationFailure = new SessionPersistence({
-    agentId: 'agent-policy',
-    databaseStore: {
-      beginAssistantMessage: async () => 'database-draft',
-      finalizeAssistantMessage: async () => {
-        throw new Error('finalize unavailable')
-      },
-    },
-    legacyStore: legacyPrimary,
-    logger,
-    mode: 'shadow',
-  })
-  const databaseDraft =
-    await finalizationFailure.beginAssistantMessage('session-policy')
-  await finalizationFailure.finalizeAssistantMessage(
-    databaseDraft,
-    assistant('legacy survives', 2000),
-  )
-  assert.equal(legacyMessages.length, 2)
-
-  const databasePrimary = { writeSoul: async () => true }
-  const brokenLegacyMirror = {
-    agentId: 'agent-policy',
-    writeSoul: async () => {
-      throw new Error('filesystem unavailable')
-    },
-  }
-  const databaseShadow = new SessionPersistence({
-    agentId: 'agent-policy',
-    databaseStore: databasePrimary,
-    legacyStore: brokenLegacyMirror,
-    logger,
-    mode: 'database-shadow',
-  })
-  await assert.rejects(
-    databaseShadow.writeSoul('must alert'),
-    (error) =>
-      error instanceof PersistenceMirrorError && error.method === 'writeSoul',
-  )
-})
 
 test('ChannelStore mirrors transport configuration, strips model fields, and never retains plaintext tokens', async (t) => {
   const { prisma, root } = await createFixture(t)

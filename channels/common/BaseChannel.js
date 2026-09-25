@@ -7,7 +7,7 @@
  * 3. 统一高危动作挂起确认拦截器 (ConfirmationManager)；
  * 4. 统一保活与心跳检查管理器 (KeepAliveManager)；
  * 5. 统一流式响应、多模态分发流水线 (Image/Voice/File/Video/Text) 与降级通知；
- * 6. 统一持久化与会话记忆结晶 (MemoryStore)。
+ * 6. 统一持久化与会话记忆结晶。
  */
 
 import { SlashHandler } from './SlashHandler.js'
@@ -31,10 +31,7 @@ import {
   formatWebErrorMessage,
   parseErrorDetails,
 } from './errorFormatter.js'
-import {
-  getSessionWorkCoordinator,
-  SessionWorkCoordinator,
-} from '../../lib/chat/sessions/SessionWorkCoordinator.js'
+import { SessionWorkCoordinator } from '../../lib/chat/sessions/SessionWorkCoordinator.js'
 import { getChatEventDispatcher } from '../../lib/chat/llm/events/ChatEventDispatcher.js'
 
 // 渠道入口等待租约的上限。渠道的历史语义是「一直等」（原为一个
@@ -46,7 +43,7 @@ export class BaseChannel {
   /**
    * @param {object} opts
    * @param {object} opts.client      底层协议客户端实现
-   * @param {import('../memory/MemoryStore.js').MemoryStore} opts.memory     会话与记忆存储
+   * @param {import('../../lib/chat/persistence/SessionPersistence.js').SessionPersistence} opts.memory     会话与记忆存储
    * @param {string} opts.masterId   绑定主用户 UID
    * @param {object} opts.llm        LLM 处理器
    * @param {string} [opts.channelType='base'] 渠道标识（如 'wechat', 'feishu', 'dingtalk'）
@@ -1250,13 +1247,7 @@ export class BaseChannel {
   // 核心对话处理、多模态流式流水线与持久化落盘
   // ===============================================================
   async _processChat(text, ctx) {
-    const isDatabaseSession =
-      this.memory?.mode === 'database' ||
-      this.memory?.mode === 'database-shadow'
-    const agentId = this.memory?.agentId
-    if (!isDatabaseSession || !agentId) {
-      return this._processChatWithLease(text, ctx)
-    }
+    const agentId = this.memory.agentId
 
     let sessionId = ctx.sid || (await this.memory.getActiveSession())
     if (!sessionId) {
@@ -1278,9 +1269,7 @@ export class BaseChannel {
       return this._processChatWithLease(text, ctx)
     }
 
-    const coordinator = this.memory.database?.prisma
-      ? new SessionWorkCoordinator({ prisma: this.memory.database.prisma })
-      : getSessionWorkCoordinator()
+    const coordinator = new SessionWorkCoordinator({ prisma: this.memory.prisma })
     const owner = `channel:${randomUUID()}`
     // 租约被其它入口（Cron / 哨兵 / Web Agent / 另一个渠道实例）占用时等待。
     // 原实现是一个 `for (;;) sleep 250ms` 的自旋：每轮至少 4 次 DB 往返、
@@ -1448,48 +1437,37 @@ export class BaseChannel {
     const persistedExecutionMetadata = Object.keys(executionMetadata).length
       ? executionMetadata
       : null
-    const supportsPersistenceLifecycle =
-      typeof this.memory.beginAssistantMessage === 'function' &&
-      typeof this.memory.finalizeAssistantMessage === 'function'
     let assistantPersistenceId = null
     let activeChatEvent = null
     let persistenceQueue = Promise.resolve()
-    let userPersistedBeforeLlm = false
     const persistUserMessage = ctx.persistUserMessage !== false
 
-    if (supportsPersistenceLifecycle) {
-      const persistUser =
-        typeof this.memory.appendUserMessage === 'function'
-          ? this.memory.appendUserMessage.bind(this.memory)
-          : this.memory.appendToChat.bind(this.memory)
-      if (persistUserMessage) {
-        await assertSessionLease()
-        await persistUser(sid, {
-          channel_id: ctx.envelope?.source?.channelId,
-          content: persistedUserContent,
-          external_conversation_id:
-            ctx.envelope?.conversation?.externalConversationId,
-          external_message_id: ctx.envelope?.message?.externalMessageId,
-          from_user_id: ctx.envelope?.actor?.externalUserId || ctx.from,
-          id: ctx.userMessageId,
-          metadata: persistedExecutionMetadata,
-          role: 'user',
-          source_type: ctx.envelope?.source?.adapterId,
-          text: persistedUserText,
-          time: ctx.envelope?.message?.sentAt || ctx.messageTime,
-        })
-        userPersistedBeforeLlm = true
-      }
+    if (persistUserMessage) {
       await assertSessionLease()
-      assistantPersistenceId = await this.memory.beginAssistantMessage(sid, {
-        content: [],
-        id: ctx.messageId,
+      await this.memory.appendUserMessage(sid, {
+        channel_id: ctx.envelope?.source?.channelId,
+        content: persistedUserContent,
+        external_conversation_id:
+          ctx.envelope?.conversation?.externalConversationId,
+        external_message_id: ctx.envelope?.message?.externalMessageId,
+        from_user_id: ctx.envelope?.actor?.externalUserId || ctx.from,
+        id: ctx.userMessageId,
         metadata: persistedExecutionMetadata,
-        role: 'assistant',
-        text: '',
-        time: Date.now(),
+        role: 'user',
+        source_type: ctx.envelope?.source?.adapterId,
+        text: persistedUserText,
+        time: ctx.envelope?.message?.sentAt || ctx.messageTime,
       })
     }
+    await assertSessionLease()
+    assistantPersistenceId = await this.memory.beginAssistantMessage(sid, {
+      content: [],
+      id: ctx.messageId,
+      metadata: persistedExecutionMetadata,
+      role: 'assistant',
+      text: '',
+      time: Date.now(),
+    })
     const activeJobObj = {
       _abortLlm: null,
       abort: () => {
@@ -1513,10 +1491,7 @@ export class BaseChannel {
       // 流式分发回调：检测到完整文本块或多模态 extraRender 时进入串行发送流水线
       const onEmitTextBlock = (textBlock, meta = {}) => {
         didEmitTextBlock = true
-        if (
-          assistantPersistenceId &&
-          typeof this.memory.appendAssistantChunk === 'function'
-        ) {
+        if (assistantPersistenceId) {
           const rawRender = meta.extraRender
           const render = Array.isArray(rawRender)
             ? rawRender[0] || {}
@@ -1965,19 +1940,6 @@ export class BaseChannel {
         reply?.aborted
       ) {
         const fullAssistantReply = emittedBlocks.join('\n\n')
-
-        const now = Date.now()
-        const userMsg = {
-          content: persistedUserContent,
-          from_user_id: ctx.from,
-          role: 'user',
-          text: persistedUserText,
-          time: ctx.messageTime || now,
-        }
-        if (!userPersistedBeforeLlm && persistUserMessage) {
-          await assertSessionLease()
-          await this.memory.appendToChat(sid, userMsg)
-        }
 
         const assembledAssistantContent = Array.isArray(reply?.content)
           ? appendRecursiveContextMessages(

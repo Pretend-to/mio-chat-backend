@@ -18,16 +18,44 @@ import assert from 'node:assert'
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import crypto from 'node:crypto'
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
+import { PrismaClient } from '@prisma/client'
 
 global.logger = global.logger || console
 
-import { MemoryStore } from '../../channels/memory/index.js'
+import { DatabaseMemoryStore } from '../../lib/chat/persistence/DatabaseMemoryStore.js'
 import { OneBotChannel } from '../../channels/onebots/OneBotChannel.js'
 import { createBackendLlm } from '../../channels/llm.js'
 
 const MASTER = 'master@im.wechat'
 const CHUNK_A = 'A'.repeat(60)
 const CHUNK_B = 'B'.repeat(60)
+
+async function createPrismaFixture() {
+  const databasePath = path.join(
+    os.tmpdir(),
+    `mio-job-progress-${process.pid}-${crypto.randomUUID()}.db`,
+  )
+  execFileSync(
+    path.join(process.cwd(), 'node_modules/.bin/prisma'),
+    [
+      'db',
+      'push',
+      '--schema',
+      path.join(process.cwd(), 'prisma/schema.prisma'),
+      '--url',
+      `file:${databasePath}`,
+    ],
+    { env: { ...process.env, RUST_LOG: 'debug' }, stdio: 'ignore' },
+  )
+  const prisma = new PrismaClient({
+    adapter: new PrismaBetterSqlite3({ url: `file:${databasePath}` }),
+  })
+  await prisma.$connect()
+  return { databasePath, prisma }
+}
 
 function createMockClient() {
   return {
@@ -39,12 +67,11 @@ function createMockClient() {
 }
 
 test('渠道流式执行：activeJob.lastProgressText 随正文分块累加并截断到 100 字符', async () => {
-  const baseDir = path.join(
-    os.tmpdir(),
-    `mio-job-progress-${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-  )
   const channelId = 'ch_job_progress_1'
-  const memory = new MemoryStore({ agentId: channelId, baseDir })
+  const { databasePath, prisma } = await createPrismaFixture()
+  await prisma.agent.create({ data: { id: channelId } })
+  const memory = new DatabaseMemoryStore({ agentId: channelId, prisma })
+  await memory.ensure()
   await memory.writeSoul('你是进度同步守卫')
 
   let jobFound = false
@@ -111,6 +138,7 @@ test('渠道流式执行：activeJob.lastProgressText 随正文分块累加并�
       '累计 120 字符时必须截断到 100',
     )
   } finally {
-    fs.rmSync(baseDir, { force: true, recursive: true })
+    await prisma.$disconnect()
+    fs.rmSync(databasePath, { force: true })
   }
 })

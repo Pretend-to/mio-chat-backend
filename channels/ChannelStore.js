@@ -42,9 +42,7 @@ export class ChannelStore {
     mode = null,
     prisma = null,
   } = {}) {
-    mode ||=
-      process.env.MIO_CHANNEL_PERSISTENCE_MODE ||
-      (file !== DEFAULT_FILE ? 'legacy' : 'database')
+    mode ||= file !== DEFAULT_FILE ? 'legacy' : 'database'
     if (!['legacy', 'shadow', 'database-shadow', 'database'].includes(mode)) {
       throw new Error(`invalid channel persistence mode ${mode}`)
     }

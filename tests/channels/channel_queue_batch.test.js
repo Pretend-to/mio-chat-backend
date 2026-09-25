@@ -2,8 +2,45 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import os from 'node:os'
 import path from 'node:path'
-import { MemoryStore } from '../../channels/memory/index.js'
+import fs from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import crypto from 'node:crypto'
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
+import { PrismaClient } from '@prisma/client'
+import { DatabaseMemoryStore } from '../../lib/chat/persistence/DatabaseMemoryStore.js'
 import { BaseChannel } from '../../channels/common/BaseChannel.js'
+
+async function createPrismaFixture(agentId) {
+  const databasePath = path.join(
+    os.tmpdir(),
+    `mio-queue-${process.pid}-${crypto.randomUUID()}.db`,
+  )
+  execFileSync(
+    path.join(process.cwd(), 'node_modules/.bin/prisma'),
+    [
+      'db',
+      'push',
+      '--schema',
+      path.join(process.cwd(), 'prisma/schema.prisma'),
+      '--url',
+      `file:${databasePath}`,
+    ],
+    { env: { ...process.env, RUST_LOG: 'debug' }, stdio: 'ignore' },
+  )
+  const prisma = new PrismaClient({
+    adapter: new PrismaBetterSqlite3({ url: `file:${databasePath}` }),
+  })
+  await prisma.$connect()
+  await prisma.agent.create({ data: { id: agentId } })
+  const memory = new DatabaseMemoryStore({ agentId, prisma })
+  await memory.ensure()
+  return { databasePath, memory, prisma }
+}
+
+async function disposeFixture({ databasePath, prisma }) {
+  await prisma.$disconnect()
+  fs.rmSync(databasePath, { force: true })
+}
 
 class TestMockChannel extends BaseChannel {
   constructor(opts) {
@@ -38,8 +75,7 @@ class TestMockChannel extends BaseChannel {
 
 test('BaseChannel: 队列排位反馈、任务批次合并与 /btw 旁路插话', async () => {
   const MASTER = 'master@user.im'
-  const baseDir = path.join(os.tmpdir(), `mio-queue-test-${Date.now()}`)
-  const memory = new MemoryStore({ agentId: 'test-agent', baseDir })
+  const { databasePath, memory, prisma } = await createPrismaFixture('test-agent')
   await memory.writeSoul('我是测试助理')
 
   let runningTaskResolver = null
@@ -69,96 +105,99 @@ test('BaseChannel: 队列排位反馈、任务批次合并与 /btw 旁路插话'
     memory,
   })
 
-  // 1. 发起慢速任务 A
-  const promiseA = channel._route('慢速任务A', {
-    from: MASTER,
-    messageId: 'msg_a',
-  })
+  try {
+    // 1. 发起慢速任务 A
+    const promiseA = channel._route('慢速任务A', {
+      from: MASTER,
+      messageId: 'msg_a',
+    })
 
-  // 稍作等待确保任务 A 已启动并持有主锁与活跃任务
-  let sid = null
-  for (let i = 0; i < 50; i++) {
-    sid = await memory.getActiveSession()
-    if (sid && channel._sessionLocks.has(sid) && channel.activeJobs.has(sid))
-      break
-    await new Promise((r) => setTimeout(r, 10))
+    // 稍作等待确保任务 A 已启动并持有主锁与活跃任务
+    let sid = null
+    for (let i = 0; i < 50; i++) {
+      sid = await memory.getActiveSession()
+      if (sid && channel._sessionLocks.has(sid) && channel.activeJobs.has(sid))
+        break
+      await new Promise((r) => setTimeout(r, 10))
+    }
+    assert.ok(channel._sessionLocks.has(sid), '任务 A 应持有会话锁')
+    assert.ok(channel.activeJobs.has(sid), '会话应处于繁忙活跃状态')
+
+    // 2. 发送任务 B -> 应进入队列，下发 [1/1] 排位反馈
+    const promiseB = channel._route('任务B：查一下明天天气', {
+      from: MASTER,
+      messageId: 'msg_b',
+    })
+    let feedback1 = null
+    for (let i = 0; i < 30; i++) {
+      feedback1 = channel.sentPackets.find((p) => p.text.includes('[1/1]'))
+      if (feedback1) break
+      await new Promise((r) => setTimeout(r, 10))
+    }
+
+    assert.ok(feedback1, '应收到排位 [1/1] 的即时反馈')
+    assert.ok(feedback1.text.includes('当前有任务正在全力处理中'))
+
+    // 3. 发送任务 C -> 应进入队列，下发 [2/2] 排位反馈
+    const promiseC = channel._route('任务C：查一下周五机票', {
+      from: MASTER,
+      messageId: 'msg_c',
+    })
+    let feedback2 = null
+    for (let i = 0; i < 30; i++) {
+      feedback2 = channel.sentPackets.find((p) => p.text.includes('[2/2]'))
+      if (feedback2) break
+      await new Promise((r) => setTimeout(r, 10))
+    }
+
+    assert.ok(feedback2, '应收到排位 [2/2] 的即时反馈')
+
+    // 4. 发送 /btw 旁路插话 -> 应该不排队、不占主锁，立即获得响应
+    await channel._route('/btw 还要多久呀', {
+      from: MASTER,
+      messageId: 'msg_btw',
+    })
+    assert.ok(
+      channel.sentPackets.some((p) => p.text.includes('这是旁路即时插话回复')),
+      '/btw 应触发旁路瞬态回复',
+    )
+
+    // 5. 释放慢速任务 A
+    runningTaskResolver()
+    await promiseA
+
+    // 等待后续合并批次处理完成
+    await Promise.all([promiseB, promiseC])
+
+    // 6. 验证任务合并与通知
+    const mergeNotice = channel.sentPackets.find((p) =>
+      p.text.includes('检测到当前队列中有 2 个待处理任务，开始合并处理'),
+    )
+    assert.ok(mergeNotice, '应收到合并处理通知气泡')
+
+    // 验证合并后的提示词同时包含了任务 B 和任务 C
+    const mergedPrompt = processedPrompts.find((p) =>
+      p.includes('共收到了以下 2 条待处理内容'),
+    )
+    assert.ok(mergedPrompt, 'LLM 应该收到合并拼装的提示词')
+    assert.ok(mergedPrompt.includes('任务B：查一下明天天气'))
+    assert.ok(mergedPrompt.includes('任务C：查一下周五机票'))
+
+    // 7. 验证全部完成后，锁已释放
+    assert.equal(channel._sessionLocks.has(sid), false, '全部完成后会话锁应释放')
+    assert.equal(
+      channel.activeJobs.has(sid),
+      false,
+      '全部完成后 activeJobs 应清空',
+    )
+  } finally {
+    await disposeFixture({ databasePath, prisma })
   }
-  assert.ok(channel._sessionLocks.has(sid), '任务 A 应持有会话锁')
-  assert.ok(channel.activeJobs.has(sid), '会话应处于繁忙活跃状态')
-
-  // 2. 发送任务 B -> 应进入队列，下发 [1/1] 排位反馈
-  const promiseB = channel._route('任务B：查一下明天天气', {
-    from: MASTER,
-    messageId: 'msg_b',
-  })
-  let feedback1 = null
-  for (let i = 0; i < 30; i++) {
-    feedback1 = channel.sentPackets.find((p) => p.text.includes('[1/1]'))
-    if (feedback1) break
-    await new Promise((r) => setTimeout(r, 10))
-  }
-
-  assert.ok(feedback1, '应收到排位 [1/1] 的即时反馈')
-  assert.ok(feedback1.text.includes('当前有任务正在全力处理中'))
-
-  // 3. 发送任务 C -> 应进入队列，下发 [2/2] 排位反馈
-  const promiseC = channel._route('任务C：查一下周五机票', {
-    from: MASTER,
-    messageId: 'msg_c',
-  })
-  let feedback2 = null
-  for (let i = 0; i < 30; i++) {
-    feedback2 = channel.sentPackets.find((p) => p.text.includes('[2/2]'))
-    if (feedback2) break
-    await new Promise((r) => setTimeout(r, 10))
-  }
-
-  assert.ok(feedback2, '应收到排位 [2/2] 的即时反馈')
-
-  // 4. 发送 /btw 旁路插话 -> 应该不排队、不占主锁，立即获得响应
-  await channel._route('/btw 还要多久呀', {
-    from: MASTER,
-    messageId: 'msg_btw',
-  })
-  assert.ok(
-    channel.sentPackets.some((p) => p.text.includes('这是旁路即时插话回复')),
-    '/btw 应触发旁路瞬态回复',
-  )
-
-  // 5. 释放慢速任务 A
-  runningTaskResolver()
-  await promiseA
-
-  // 等待后续合并批次处理完成
-  await Promise.all([promiseB, promiseC])
-
-  // 6. 验证任务合并与通知
-  const mergeNotice = channel.sentPackets.find((p) =>
-    p.text.includes('检测到当前队列中有 2 个待处理任务，开始合并处理'),
-  )
-  assert.ok(mergeNotice, '应收到合并处理通知气泡')
-
-  // 验证合并后的提示词同时包含了任务 B 和任务 C
-  const mergedPrompt = processedPrompts.find((p) =>
-    p.includes('共收到了以下 2 条待处理内容'),
-  )
-  assert.ok(mergedPrompt, 'LLM 应该收到合并拼装的提示词')
-  assert.ok(mergedPrompt.includes('任务B：查一下明天天气'))
-  assert.ok(mergedPrompt.includes('任务C：查一下周五机票'))
-
-  // 7. 验证全部完成后，锁已释放
-  assert.equal(channel._sessionLocks.has(sid), false, '全部完成后会话锁应释放')
-  assert.equal(
-    channel.activeJobs.has(sid),
-    false,
-    '全部完成后 activeJobs 应清空',
-  )
 })
 
 test('BaseChannel: 渠道通用入站大防抖 (5s 文本 / 10s 富媒体)', async () => {
   const MASTER = 'master@user.im'
-  const baseDir = path.join(os.tmpdir(), `mio-debounce-test-${Date.now()}`)
-  const memory = new MemoryStore({ agentId: 'test-agent', baseDir })
+  const { databasePath, memory, prisma } = await createPrismaFixture('test-agent')
 
   const routedMessages = []
   const mockLLM = {
@@ -180,52 +219,61 @@ test('BaseChannel: 渠道通用入站大防抖 (5s 文本 / 10s 富媒体)', asy
     memory,
   })
 
-  // 1. 连续快速发送 2 条文本 -> 应该在防抖窗口内合并为 1 条
-  channel.enqueueInboundDebounce(MASTER, { text: '在吗？' })
-  await new Promise((r) => setTimeout(r, 20))
-  channel.enqueueInboundDebounce(MASTER, { text: '帮我查一下BTC价格' })
+  try {
+    // 1. 连续快速发送 2 条文本 -> 应该在防抖窗口内合并为 1 条
+    channel.enqueueInboundDebounce(MASTER, { text: '在吗？' })
+    await new Promise((r) => setTimeout(r, 20))
+    // 后一次入队会顶掉前一次的定时器（前一个 promise 永不落地），所以要等的是后一次
+    const firstWindow = channel.enqueueInboundDebounce(MASTER, {
+      text: '帮我查一下BTC价格',
+    })
 
-  // 等待 100ms（超过 80ms 纯文本防抖时间）
-  for (let i = 0; i < 30; i++) {
-    if (routedMessages.length > 0) break
-    await new Promise((r) => setTimeout(r, 10))
+    // 等待 100ms（超过 80ms 纯文本防抖时间）
+    for (let i = 0; i < 30; i++) {
+      if (routedMessages.length > 0) break
+      await new Promise((r) => setTimeout(r, 10))
+    }
+    assert.equal(routedMessages.length, 1, '两次文本输入应合并为一次路由')
+    assert.ok(routedMessages[0].text.includes('在吗？'))
+    assert.ok(routedMessages[0].text.includes('帮我查一下BTC价格'))
+
+    // 2. 发送富媒体（图片） -> 自动触发更长的媒体防抖窗口
+    routedMessages.length = 0
+    channel.enqueueInboundDebounce(MASTER, { text: '分析这张图' })
+    await new Promise((r) => setTimeout(r, 30))
+    const mediaWindow = channel.enqueueInboundDebounce(MASTER, {
+      hasMedia: true,
+      images: ['https://example.com/photo.png'],
+      text: '',
+    })
+
+    // 90ms 时（超过了纯文本的 80ms，但仍在富媒体的 150ms 内）
+    await new Promise((r) => setTimeout(r, 60))
+    assert.equal(
+      routedMessages.length,
+      0,
+      '收到富媒体后防抖窗口应延长至 mediaMs，90ms 不应提前触发',
+    )
+
+    // 等待媒体防抖窗口闭合并完成路由
+    for (let i = 0; i < 40; i++) {
+      if (routedMessages.length > 0) break
+      await new Promise((r) => setTimeout(r, 10))
+    }
+    assert.equal(routedMessages.length, 1, '媒体防抖窗口闭合后应成功路由')
+    assert.equal(routedMessages[0].images.length, 1)
+    assert.equal(routedMessages[0].images[0], 'https://example.com/photo.png')
+
+    // 等两轮防抖路由的落库流水线彻底结束，否则测试结束后的残余写会打到已拆除的库上
+    await Promise.all([firstWindow, mediaWindow])
+  } finally {
+    await disposeFixture({ databasePath, prisma })
   }
-  assert.equal(routedMessages.length, 1, '两次文本输入应合并为一次路由')
-  assert.ok(routedMessages[0].text.includes('在吗？'))
-  assert.ok(routedMessages[0].text.includes('帮我查一下BTC价格'))
-
-  // 2. 发送富媒体（图片） -> 自动触发更长的媒体防抖窗口
-  routedMessages.length = 0
-  channel.enqueueInboundDebounce(MASTER, { text: '分析这张图' })
-  await new Promise((r) => setTimeout(r, 30))
-  channel.enqueueInboundDebounce(MASTER, {
-    hasMedia: true,
-    images: ['https://example.com/photo.png'],
-    text: '',
-  })
-
-  // 90ms 时（超过了纯文本的 80ms，但仍在富媒体的 150ms 内）
-  await new Promise((r) => setTimeout(r, 60))
-  assert.equal(
-    routedMessages.length,
-    0,
-    '收到富媒体后防抖窗口应延长至 mediaMs，90ms 不应提前触发',
-  )
-
-  // 等待媒体防抖窗口闭合并完成路由
-  for (let i = 0; i < 40; i++) {
-    if (routedMessages.length > 0) break
-    await new Promise((r) => setTimeout(r, 10))
-  }
-  assert.equal(routedMessages.length, 1, '媒体防抖窗口闭合后应成功路由')
-  assert.equal(routedMessages[0].images.length, 1)
-  assert.equal(routedMessages[0].images[0], 'https://example.com/photo.png')
 })
 
 test('BaseChannel: 渠道无关 typing 状态：防抖中即时反馈、任务运行/排队期间全程维持、全任务收尾后熄灭', async () => {
   const MASTER = 'master@user.im'
-  const baseDir = path.join(os.tmpdir(), `mio-typing-test-${Date.now()}`)
-  const memory = new MemoryStore({ agentId: 'test-agent', baseDir })
+  const { databasePath, memory, prisma } = await createPrismaFixture('test-agent')
   const session = await memory.createSession({ title: 'Typing测试' })
   await memory.setActiveSession(session.id)
   const sid = session.id
@@ -254,81 +302,85 @@ test('BaseChannel: 渠道无关 typing 状态：防抖中即时反馈、任务�
     memory,
   })
 
-  // 1. 发送入站防抖消息（尚未到 150ms，未实际开始跑任务）
-  const p1 = channel.enqueueInboundDebounce(MASTER, { text: '你好呀' })
+  try {
+    // 1. 发送入站防抖消息（尚未到 150ms，未实际开始跑任务）
+    const p1 = channel.enqueueInboundDebounce(MASTER, { text: '你好呀' })
 
-  // 立即检查：虽然在防抖缓冲中、任务尚未真正运行，但必须立刻收到正在输入反馈 (status=1)
-  await new Promise((r) => setTimeout(r, 20))
-  assert.ok(
-    channel.typingLog.some((t) => t.status === 1),
-    '在防抖进程中必须立即触发 typing=1 正在输入反馈',
-  )
-  assert.equal(
-    channel.isSessionBusy(sid, { from: MASTER }),
-    true,
-    '防抖缓冲期间会话应处于繁忙状态',
-  )
+    // 立即检查：虽然在防抖缓冲中、任务尚未真正运行，但必须立刻收到正在输入反馈 (status=1)
+    await new Promise((r) => setTimeout(r, 20))
+    assert.ok(
+      channel.typingLog.some((t) => t.status === 1),
+      '在防抖进程中必须立即触发 typing=1 正在输入反馈',
+    )
+    assert.equal(
+      channel.isSessionBusy(sid, { from: MASTER }),
+      true,
+      '防抖缓冲期间会话应处于繁忙状态',
+    )
 
-  // 等待第一条防抖消息自然执行完成，此时应收到首个 status=2
-  await p1
-  const baselineStatus2Count = channel.typingLog.filter(
-    (t) => t.status === 2,
-  ).length
-  assert.equal(baselineStatus2Count, 1, '首条消息独立执行完后应发送 status=2')
+    // 等待第一条防抖消息自然执行完成，此时应收到首个 status=2
+    await p1
+    const baselineStatus2Count = channel.typingLog.filter(
+      (t) => t.status === 2,
+    ).length
+    assert.equal(baselineStatus2Count, 1, '首条消息独立执行完后应发送 status=2')
 
-  // 2. 发起慢速长任务并持有主锁
-  const pSlow = channel.enqueueInboundDebounce(MASTER, {
-    immediate: true,
-    text: '慢速长任务',
-  })
-  let isBusy = false
-  for (let i = 0; i < 20; i++) {
-    if (channel.isSessionBusy(sid, { from: MASTER })) {
-      isBusy = true
-      break
+    // 2. 发起慢速长任务并持有主锁
+    const pSlow = channel.enqueueInboundDebounce(MASTER, {
+      immediate: true,
+      text: '慢速长任务',
+    })
+    let isBusy = false
+    for (let i = 0; i < 20; i++) {
+      if (channel.isSessionBusy(sid, { from: MASTER })) {
+        isBusy = true
+        break
+      }
+      await new Promise((r) => setTimeout(r, 10))
     }
-    await new Promise((r) => setTimeout(r, 10))
+    assert.equal(
+      isBusy,
+      true,
+      '任务执行期间会话必须处于繁忙状态',
+    )
+
+    // 3. 在慢速长任务处理期间，再来排队任务
+    const p2 = channel._route('排队任务2', { from: MASTER, sid })
+    const p3 = channel._route('排队任务3', { from: MASTER, sid })
+    await new Promise((r) => setTimeout(r, 20))
+    assert.equal(
+      channel._sessionWaitingQueues.get(sid)?.length,
+      2,
+      '任务2和3应进入排队等待队列',
+    )
+
+    // 验证在长任务与排队任务交替期间，绝不能提前熄灭 typing（status=2 计数不应增加）
+    const currentStatus2Count = channel.typingLog.filter(
+      (t) => t.status === 2,
+    ).length
+    assert.equal(
+      currentStatus2Count,
+      baselineStatus2Count,
+      '队列中有未处理完毕任务时，严禁提前发送 status=2 熄灭正在输入状态',
+    )
+
+    // 4. 释放长任务，让后续合并批次执行完毕
+    taskResolver()
+    await pSlow
+    await Promise.all([p2, p3])
+
+    // 5. 验证全部任务执行完毕后，最终熄灭 typing (status=2) 且会话不再繁忙
+    assert.equal(
+      channel.isSessionBusy(sid, { from: MASTER }),
+      false,
+      '所有任务处理完毕后，会话繁忙状态应解除',
+    )
+    assert.equal(
+      channel.typingLog.filter((t) => t.status === 2).length,
+      baselineStatus2Count + 1,
+      '全部任务收尾后必须发送 status=2 恢复空闲',
+    )
+  } finally {
+    await disposeFixture({ databasePath, prisma })
   }
-  assert.equal(
-    isBusy,
-    true,
-    '任务执行期间会话必须处于繁忙状态',
-  )
-
-  // 3. 在慢速长任务处理期间，再来排队任务
-  const p2 = channel._route('排队任务2', { from: MASTER, sid })
-  const p3 = channel._route('排队任务3', { from: MASTER, sid })
-  await new Promise((r) => setTimeout(r, 20))
-  assert.equal(
-    channel._sessionWaitingQueues.get(sid)?.length,
-    2,
-    '任务2和3应进入排队等待队列',
-  )
-
-  // 验证在长任务与排队任务交替期间，绝不能提前熄灭 typing（status=2 计数不应增加）
-  const currentStatus2Count = channel.typingLog.filter(
-    (t) => t.status === 2,
-  ).length
-  assert.equal(
-    currentStatus2Count,
-    baselineStatus2Count,
-    '队列中有未处理完毕任务时，严禁提前发送 status=2 熄灭正在输入状态',
-  )
-
-  // 4. 释放长任务，让后续合并批次执行完毕
-  taskResolver()
-  await pSlow
-  await Promise.all([p2, p3])
-
-  // 5. 验证全部任务执行完毕后，最终熄灭 typing (status=2) 且会话不再繁忙
-  assert.equal(
-    channel.isSessionBusy(sid, { from: MASTER }),
-    false,
-    '所有任务处理完毕后，会话繁忙状态应解除',
-  )
-  assert.equal(
-    channel.typingLog.filter((t) => t.status === 2).length,
-    baselineStatus2Count + 1,
-    '全部任务收尾后必须发送 status=2 恢复空闲',
-  )
 })

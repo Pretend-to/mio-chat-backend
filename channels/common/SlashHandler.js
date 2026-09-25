@@ -31,7 +31,7 @@ import {
 export class SlashHandler {
   /**
    * @param {object} opts
-   * @param {import('../memory/MemoryStore.js').MemoryStore} opts.memory 记忆存储
+   * @param {import('../../lib/chat/persistence/SessionPersistence.js').SessionPersistence} opts.memory 记忆存储
    * @param {import('./BaseChannel.js').BaseChannel} opts.channel 关联的渠道实例
    */
   constructor({ memory, channel }) {

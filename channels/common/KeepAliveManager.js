@@ -6,7 +6,7 @@ export class KeepAliveManager {
   /**
    * @param {object} opts
    * @param {object} opts.client
-   * @param {import('../memory/MemoryStore.js').MemoryStore} opts.memory
+   * @param {import('../../lib/chat/persistence/SessionPersistence.js').SessionPersistence} opts.memory
    * @param {string} opts.masterId
    * @param {object} [opts.config]
    * @param {object} [opts.logger]

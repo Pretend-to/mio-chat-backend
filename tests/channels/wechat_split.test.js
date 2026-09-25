@@ -3,12 +3,49 @@ import assert from 'node:assert'
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
-import { MemoryStore } from '../../channels/memory/index.js'
+import { execFileSync } from 'node:child_process'
+import crypto from 'node:crypto'
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
+import { PrismaClient } from '@prisma/client'
+import { DatabaseMemoryStore } from '../../lib/chat/persistence/DatabaseMemoryStore.js'
 import { WechatChannel } from '../../channels/wechat/WechatChannel.js'
 import { splitWechatText } from '../../channels/wechat/msgHelper.js'
 
 const MASTER = 'master@im.wechat'
-function makeHarness(opts = {}) {
+
+async function createPrismaFixture(agentId) {
+  const databasePath = path.join(
+    os.tmpdir(),
+    `mio-split-${process.pid}-${crypto.randomUUID()}.db`,
+  )
+  execFileSync(
+    path.join(process.cwd(), 'node_modules/.bin/prisma'),
+    [
+      'db',
+      'push',
+      '--schema',
+      path.join(process.cwd(), 'prisma/schema.prisma'),
+      '--url',
+      `file:${databasePath}`,
+    ],
+    { env: { ...process.env, RUST_LOG: 'debug' }, stdio: 'ignore' },
+  )
+  const prisma = new PrismaClient({
+    adapter: new PrismaBetterSqlite3({ url: `file:${databasePath}` }),
+  })
+  await prisma.$connect()
+  await prisma.agent.create({ data: { id: agentId } })
+  const memory = new DatabaseMemoryStore({ agentId, prisma })
+  await memory.ensure()
+  return { databasePath, memory, prisma }
+}
+
+async function disposeFixture({ databasePath, prisma }) {
+  await prisma.$disconnect()
+  fs.rmSync(databasePath, { force: true })
+}
+
+async function makeHarness(opts = {}) {
   const mockClient = {
     botId: 'bot-001',
     sendLog: [],
@@ -22,11 +59,8 @@ function makeHarness(opts = {}) {
     notifyStop: async () => {},
     downloadAndDecryptMedia: async () => Buffer.from('mock-decrypted'),
   }
-  const baseDir = path.join(
-    os.tmpdir(),
-    `mio-split-${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-  )
-  const memory = new MemoryStore({ agentId: 'wechat-master', baseDir })
+  const fixture = await createPrismaFixture('wechat-master')
+  const { memory } = fixture
   const channel = new WechatChannel({
     client: mockClient,
     memory,
@@ -54,13 +88,13 @@ function makeHarness(opts = {}) {
     }
     return {
       from_user_id: MASTER,
-      message_id: Math.floor(Math.random() * 1e6),
+      message_id: `split-msg-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
       message_type: 1,
       context_token: 'CTX',
       item_list: [item],
     }
   }
-  return { channel, mockClient, memory, userMsg, baseDir }
+  return { channel, mockClient, memory, userMsg, fixture }
 }
 
 // =============================================================
@@ -115,183 +149,198 @@ test('splitWechatText：残留半截标签清洗', () => {
 // 集成链路：LLM 输出 → WechatChannel 切分 → 伪队列逐条发送
 // =============================================================
 test('微信分条集成：多 <break/> → 多条气泡且 create_time_ms 单调递增', async () => {
-  const { channel, mockClient, memory, userMsg, baseDir } = makeHarness()
-  await memory.writeSoul('你叫小助手')
-  channel.llm = {
-    process: async () => ({
-      text: '第一<break/>第二<break/>第三',
-    }),
+  const { channel, mockClient, memory, userMsg, fixture } = await makeHarness()
+  try {
+    await memory.writeSoul('你叫小助手')
+    channel.llm = {
+      process: async () => ({
+        text: '第一<break/>第二<break/>第三',
+      }),
+    }
+    await channel._handleMessage(userMsg('a'))
+    assert.deepStrictEqual(
+      mockClient.sendLog.map((p) => p.item_list?.[0]?.text),
+      ['第一', '第二', '第三'],
+    )
+    const times = mockClient.sendLog.map((p) => p.create_time_ms)
+    assert.ok(
+      times.every((t, i) => i === 0 || t > times[i - 1]),
+      'create_time_ms 应严格单调递增',
+    )
+  } finally {
+    await disposeFixture(fixture)
   }
-  await channel._handleMessage(userMsg('a'))
-  assert.deepStrictEqual(
-    mockClient.sendLog.map((p) => p.item_list?.[0]?.text),
-    ['第一', '第二', '第三'],
-  )
-  const times = mockClient.sendLog.map((p) => p.create_time_ms)
-  assert.ok(
-    times.every((t, i) => i === 0 || t > times[i - 1]),
-    'create_time_ms 应严格单调递增',
-  )
-  fs.rmSync(baseDir, { recursive: true, force: true })
 })
 
 test('微信分条集成：<break/> 场景保序', async () => {
-  const { channel, mockClient, memory, userMsg, baseDir } = makeHarness()
-  await memory.writeSoul('你叫小助手')
-  channel.llm = {
-    process: async () => ({ text: '开头<break/>中间<break/>结尾' }),
-  }
-  await channel._handleMessage(userMsg('b'))
-  assert.deepStrictEqual(
-    mockClient.sendLog.map((p) => p.item_list?.[0]?.text),
-    ['开头', '中间', '结尾'],
-  )
+  const { channel, mockClient, memory, userMsg, fixture } = await makeHarness()
+  try {
+    await memory.writeSoul('你叫小助手')
+    channel.llm = {
+      process: async () => ({ text: '开头<break/>中间<break/>结尾' }),
+    }
+    await channel._handleMessage(userMsg('b'))
+    assert.deepStrictEqual(
+      mockClient.sendLog.map((p) => p.item_list?.[0]?.text),
+      ['开头', '中间', '结尾'],
+    )
 
-  mockClient.sendLog.length = 0
-  channel.llm = {
-    process: async () => ({ text: 'A<break/>补充<break/>B<break/>C' }),
+    mockClient.sendLog.length = 0
+    channel.llm = {
+      process: async () => ({ text: 'A<break/>补充<break/>B<break/>C' }),
+    }
+    await channel._handleMessage(userMsg('c'))
+    assert.deepStrictEqual(
+      mockClient.sendLog.map((p) => p.item_list?.[0]?.text),
+      ['A', '补充', 'B', 'C'],
+    )
+  } finally {
+    await disposeFixture(fixture)
   }
-  await channel._handleMessage(userMsg('c'))
-  assert.deepStrictEqual(
-    mockClient.sendLog.map((p) => p.item_list?.[0]?.text),
-    ['A', '补充', 'B', 'C'],
-  )
-  fs.rmSync(baseDir, { recursive: true, force: true })
 })
 
 test('微信分条集成：纯文本保持单条（不破坏原行为）', async () => {
-  const { channel, mockClient, memory, userMsg, baseDir } = makeHarness()
-  await memory.writeSoul('你叫小助手')
-  channel.llm = { process: async () => ({ text: '普通回复内容' }) }
-  await channel._handleMessage(userMsg('d'))
-  assert.deepStrictEqual(
-    mockClient.sendLog.map((p) => p.item_list?.[0]?.text),
-    ['普通回复内容'],
-  )
-  assert.strictEqual(mockClient.sendLog.length, 1)
-  fs.rmSync(baseDir, { recursive: true, force: true })
+  const { channel, mockClient, memory, userMsg, fixture } = await makeHarness()
+  try {
+    await memory.writeSoul('你叫小助手')
+    channel.llm = { process: async () => ({ text: '普通回复内容' }) }
+    await channel._handleMessage(userMsg('d'))
+    assert.deepStrictEqual(
+      mockClient.sendLog.map((p) => p.item_list?.[0]?.text),
+      ['普通回复内容'],
+    )
+    assert.strictEqual(mockClient.sendLog.length, 1)
+  } finally {
+    await disposeFixture(fixture)
+  }
 })
 
 test('微信分条集成：流式交错多阶段输出（文字 -> 工具执行 -> 最终文字）分条且顺序正确', async () => {
-  const { channel, mockClient, memory, userMsg, baseDir } = makeHarness()
-  await memory.writeSoul('你叫小助手')
-  channel.llm = {
-    process: async (ctx) => {
-      // 阶段 1：工具调用前进度文字
-      await ctx.onEmitTextBlock(
-        '收到，正在为你检索中～<break/>已连接服务节点',
-      )
-      // 模拟工具耗时
-      await new Promise((r) => setTimeout(r, 20))
-      // 阶段 2：工具执行后最终文字
-      await ctx.onEmitTextBlock(
-        '查询完毕！<break/>这是详细结果<break/>请确认～',
-      )
-      return { completed: true }
-    },
+  const { channel, mockClient, memory, userMsg, fixture } = await makeHarness()
+  try {
+    await memory.writeSoul('你叫小助手')
+    channel.llm = {
+      process: async (ctx) => {
+        // 阶段 1：工具调用前进度文字
+        await ctx.onEmitTextBlock(
+          '收到，正在为你检索中～<break/>已连接服务节点',
+        )
+        // 模拟工具耗时
+        await new Promise((r) => setTimeout(r, 20))
+        // 阶段 2：工具执行后最终文字
+        await ctx.onEmitTextBlock(
+          '查询完毕！<break/>这是详细结果<break/>请确认～',
+        )
+        return { completed: true }
+      },
+    }
+    await channel._handleMessage(userMsg('查天气'))
+
+    const sentTexts = mockClient.sendLog.map((p) => p.item_list?.[0]?.text)
+    assert.deepStrictEqual(sentTexts, [
+      '收到，正在为你检索中～',
+      '已连接服务节点',
+      '查询完毕！',
+      '这是详细结果',
+      '请确认～',
+    ])
+
+    const times = mockClient.sendLog.map((p) => p.create_time_ms)
+    assert.strictEqual(times.length, 5)
+    assert.ok(
+      times.every((t, i) => i === 0 || t > times[i - 1]),
+      '时序必须单调递增',
+    )
+  } finally {
+    await disposeFixture(fixture)
   }
-  await channel._handleMessage(userMsg('查天气'))
-
-  const sentTexts = mockClient.sendLog.map((p) => p.item_list?.[0]?.text)
-  assert.deepStrictEqual(sentTexts, [
-    '收到，正在为你检索中～',
-    '已连接服务节点',
-    '查询完毕！',
-    '这是详细结果',
-    '请确认～',
-  ])
-
-  const times = mockClient.sendLog.map((p) => p.create_time_ms)
-  assert.strictEqual(times.length, 5)
-  assert.ok(
-    times.every((t, i) => i === 0 || t > times[i - 1]),
-    '时序必须单调递增',
-  )
-
-  fs.rmSync(baseDir, { recursive: true, force: true })
 })
 
 test('微信分条集成：多图连发与图文防抖聚合测试', async () => {
-  const { channel, memory, userMsg, baseDir } = makeHarness({
+  const { channel, memory, userMsg, fixture } = await makeHarness({
     debounceConfig: { mediaMs: 300, textMs: 150 },
     debounceEnabled: true,
   })
-  await memory.writeSoul('你叫小助手')
+  try {
+    await memory.writeSoul('你叫小助手')
 
-  const processedCtxs = []
-  channel.llm = {
-    process: async (ctx) => {
-      processedCtxs.push(ctx)
-      return { text: '已收到图片' }
-    },
+    const processedCtxs = []
+    channel.llm = {
+      process: async (ctx) => {
+        processedCtxs.push(ctx)
+        return { text: '已收到图片' }
+      },
+    }
+
+    // Mock 实例级本地图片转存，避免真实 S3 初始化与上传
+    channel.bufferToImageUrl = async (_buf) =>
+      `/f/up/image/mock_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.png`
+
+    // 模拟微信连续推送（并发触发，不加 await，防止冷启动下载解密耗时拉长发送间隔）
+    channel._handleMessage(userMsg('', true)) // 图片 1
+    await new Promise((r) => setTimeout(r, 50))
+    channel._handleMessage(userMsg('', true)) // 图片 2
+    await new Promise((r) => setTimeout(r, 50))
+    channel._handleMessage(userMsg('帮我看看')) // 文本
+
+    // 等待防抖定时器触发并执行完成
+    await new Promise((r) => setTimeout(r, 1000))
+
+    // 验证大模型仅被调用 1 次
+    assert.strictEqual(processedCtxs.length, 1)
+    const ctx = processedCtxs[0]
+
+    // 验证合并后的文本与图片列表正确
+    assert.strictEqual(ctx.text, '帮我看看')
+    assert.ok(Array.isArray(ctx.images))
+    assert.strictEqual(ctx.images.length, 2)
+    assert.ok(ctx.images.every((url) => url.includes('/f/up/image/')))
+
+    // 验证历史落盘中包含了 Markdown 格式的图片
+    const sid = await memory.getActiveSession()
+    const chat = await memory.getChat(sid)
+    const userChatLog = chat.find((item) => item.role === 'user')
+    assert.ok(userChatLog.text.includes('帮我看看'))
+    assert.ok(userChatLog.text.includes('![图片]'))
+  } finally {
+    await disposeFixture(fixture)
   }
-
-  // Mock 实例级本地图片转存，避免真实 S3 初始化与上传
-  channel.bufferToImageUrl = async (_buf) =>
-    `/f/up/image/mock_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.png`
-
-  // 模拟微信连续推送（并发触发，不加 await，防止冷启动下载解密耗时拉长发送间隔）
-  channel._handleMessage(userMsg('', true)) // 图片 1
-  await new Promise((r) => setTimeout(r, 50))
-  channel._handleMessage(userMsg('', true)) // 图片 2
-  await new Promise((r) => setTimeout(r, 50))
-  channel._handleMessage(userMsg('帮我看看')) // 文本
-
-  // 等待防抖定时器触发并执行完成
-  await new Promise((r) => setTimeout(r, 1000))
-
-  // 验证大模型仅被调用 1 次
-  assert.strictEqual(processedCtxs.length, 1)
-  const ctx = processedCtxs[0]
-
-  // 验证合并后的文本与图片列表正确
-  assert.strictEqual(ctx.text, '帮我看看')
-  assert.ok(Array.isArray(ctx.images))
-  assert.strictEqual(ctx.images.length, 2)
-  assert.ok(ctx.images.every((url) => url.includes('/f/up/image/')))
-
-  // 验证历史落盘中包含了 Markdown 格式的图片
-  const sid = await memory.getActiveSession()
-  const chat = await memory.getChat(sid)
-  const userChatLog = chat.find((item) => item.role === 'user')
-  assert.ok(userChatLog.text.includes('帮我看看'))
-  assert.ok(userChatLog.text.includes('![图片]'))
-
-  fs.rmSync(baseDir, { recursive: true, force: true })
 })
 
 test('微信分条集成：文件上传解密与防抖聚合（附带文件 Markdown 链接供 parse 工具消费）', async () => {
-  const { channel, memory, userMsg, baseDir } = makeHarness({
+  const { channel, memory, userMsg, fixture } = await makeHarness({
     debounceConfig: { mediaMs: 300, textMs: 150 },
     debounceEnabled: true,
   })
-  await memory.writeSoul('你叫小助手')
+  try {
+    await memory.writeSoul('你叫小助手')
 
-  const processedCtxs = []
-  channel.llm = {
-    process: async (ctx) => {
-      processedCtxs.push(ctx)
-      return { text: '已收到文件并解析' }
-    },
+    const processedCtxs = []
+    channel.llm = {
+      process: async (ctx) => {
+        processedCtxs.push(ctx)
+        return { text: '已收到文件并解析' }
+      },
+    }
+
+    // Mock 文件上传转存
+    channel.uploadFile = async (buf, name) => `/f/up/file/mock_${name}`
+
+    // 模拟发送：文件 (PDF) + 文本 "请帮我提取摘要"
+    channel._handleMessage(userMsg('', false, { name: '简历.pdf' }))
+    await new Promise((r) => setTimeout(r, 50))
+    channel._handleMessage(userMsg('请帮我提取摘要'))
+
+    // 等待防抖定时器触发
+    await new Promise((r) => setTimeout(r, 1000))
+
+    assert.strictEqual(processedCtxs.length, 1)
+    const ctx = processedCtxs[0]
+
+    // 验证文本中包含用户的要求以及自动挂载的 [文件: 简历.pdf](/f/up/file/mock_简历.pdf)
+    assert.ok(ctx.text.includes('请帮我提取摘要'))
+    assert.ok(ctx.text.includes('[文件: 简历.pdf](/f/up/file/mock_简历.pdf)'))
+  } finally {
+    await disposeFixture(fixture)
   }
-
-  // Mock 文件上传转存
-  channel.uploadFile = async (buf, name) => `/f/up/file/mock_${name}`
-
-  // 模拟发送：文件 (PDF) + 文本 "请帮我提取摘要"
-  channel._handleMessage(userMsg('', false, { name: '简历.pdf' }))
-  await new Promise((r) => setTimeout(r, 50))
-  channel._handleMessage(userMsg('请帮我提取摘要'))
-
-  // 等待防抖定时器触发
-  await new Promise((r) => setTimeout(r, 1000))
-
-  assert.strictEqual(processedCtxs.length, 1)
-  const ctx = processedCtxs[0]
-
-  // 验证文本中包含用户的要求以及自动挂载的 [文件: 简历.pdf](/f/up/file/mock_简历.pdf)
-  assert.ok(ctx.text.includes('请帮我提取摘要'))
-  assert.ok(ctx.text.includes('[文件: 简历.pdf](/f/up/file/mock_简历.pdf)'))
-
-  fs.rmSync(baseDir, { recursive: true, force: true })
 })
