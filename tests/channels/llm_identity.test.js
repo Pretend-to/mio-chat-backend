@@ -112,7 +112,8 @@ test('backend LLM preserves SubAgent wake identity through the permission event'
     text: 'SubAgent 已完成，请读取结果',
   })
 
-  assert.equal(observed.source, 'subagent')
+  assert.equal(observed.source, 'channel')
+  assert.equal(observed.channelSource, 'subagent')
   assert.equal(observed.isWake, true)
   assert.equal(observed.triggerKind, 'task')
   assert.equal(observed.principal.isAdmin, true)
