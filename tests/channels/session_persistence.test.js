@@ -413,18 +413,15 @@ test('BaseChannel does not invoke LLM for an external message redelivery', async
 
 
 
-test('ChannelStore mirrors transport configuration, strips model fields, and never retains plaintext tokens', async (t) => {
-  const { prisma, root } = await createFixture(t)
-  const file = path.join(root, 'channels.json')
+test('ChannelStore stores transport configuration without plaintext tokens or model fields', async (t) => {
+  const { prisma } = await createFixture(t)
   const encryptionKey = '44'.repeat(32)
-  const shadow = new ChannelStore({
+  const store = new ChannelStore({
     encryptionKey,
-    file,
-    mode: 'shadow',
     prisma,
   })
 
-  const created = await shadow.create({
+  const created = await store.create({
     agentId: 'agent-channel-store',
     config: { receive_mode: 'manual' },
     name: 'Mirror',
@@ -432,32 +429,23 @@ test('ChannelStore mirrors transport configuration, strips model fields, and nev
     protocol: 'onebot.v12',
     token: 'secret',
   })
-  await shadow.update(created.id, { status: 'running' })
+  await store.update(created.id, { status: 'running' })
   const row = await prisma.channel.findUnique({ where: { id: created.id } })
   assert.equal(JSON.parse(row.legacyJson).token, undefined)
   assert.equal(row.status, 'running')
 
-  const database = new ChannelStore({
-    encryptionKey,
-    file,
-    mode: 'database',
-    prisma,
-  })
+  const database = new ChannelStore({ encryptionKey, prisma })
   const restored = await database.get(created.id)
   assert.equal(restored.token, 'secret')
   assert.equal(restored.platform, 'qq')
   assert.equal(restored.protocol, 'onebot.v12')
   assert.deepEqual(restored.config, { receive_mode: 'manual' })
 
-  const databaseShadow = new ChannelStore({
-    encryptionKey,
-    file,
-    mode: 'database-shadow',
-    prisma,
-  })
-  await databaseShadow.update(created.id, { model: 'new-model' })
-  const legacy = JSON.parse(await fs.promises.readFile(file, 'utf8'))
-  assert.equal(legacy[0].model, undefined)
+  await database.update(created.id, { model: 'new-model' })
+  const afterUpdate = await prisma.channel.findUnique({ where: { id: created.id } })
+  assert.equal(JSON.parse(afterUpdate.legacyJson).model, undefined)
+  assert.throws(() => new ChannelStore({ file: 'channels.json', prisma }), /unsupported options: file/)
+  assert.throws(() => new ChannelStore({ mode: 'shadow', prisma }), /unsupported options: mode/)
 })
 
 test('database startup restores running channels from the database rather than stale legacy JSON', async (t) => {
@@ -479,8 +467,6 @@ test('database startup restores running channels from the database rather than s
 
   const store = new ChannelStore({
     encryptionKey: '55'.repeat(32),
-    file,
-    mode: 'database',
     prisma,
   })
   const created = await store.create({
@@ -511,7 +497,8 @@ test('database TriggerRegistry keeps metadata and execution audit in Prisma whil
     data: { agentId: 'agent-trigger-db', id: 'session-trigger-db' },
   })
   const dataDir = path.join(root, 'channels-data/triggers')
-  const registry = new TriggerRegistry({ dataDir, mode: 'database', prisma })
+  const registry = new TriggerRegistry({ dataDir, prisma })
+  assert.throws(() => new TriggerRegistry({ dataDir, mode: 'legacy', prisma }), /unsupported options: mode/)
 
   const created = await registry.create({
     agentId: 'agent-trigger-db',

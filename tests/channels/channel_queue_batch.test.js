@@ -73,6 +73,39 @@ class TestMockChannel extends BaseChannel {
   async doSendVoice() {}
 }
 
+class FakeDebounceScheduler {
+  constructor() {
+    this.now = 0
+    this.tasks = new Set()
+  }
+
+  setTimeout = (callback, delay) => {
+    const task = { callback, at: this.now + delay }
+    this.tasks.add(task)
+    return task
+  }
+
+  clearTimeout = task => this.tasks.delete(task)
+
+  async advance(ms) {
+    this.now += ms
+    const ready = [...this.tasks].filter(task => task.at <= this.now)
+    for (const task of ready) {
+      this.tasks.delete(task)
+      await task.callback()
+    }
+  }
+}
+
+async function until(predicate) {
+  const deadline = Date.now() + 10000
+  while (Date.now() < deadline) {
+    if (predicate()) return
+    await new Promise(resolve => setImmediate(resolve))
+  }
+  assert.fail('asynchronous state did not settle')
+}
+
 test('BaseChannel: 队列排位反馈、任务批次合并与 /btw 旁路插话', async () => {
   const MASTER = 'master@user.im'
   const { databasePath, memory, prisma } = await createPrismaFixture('test-agent')
@@ -200,6 +233,7 @@ test('BaseChannel: 渠道通用入站大防抖 (5s 文本 / 10s 富媒体)', asy
   const { databasePath, memory, prisma } = await createPrismaFixture('test-agent')
 
   const routedMessages = []
+  const debounceScheduler = new FakeDebounceScheduler()
   const mockLLM = {
     process: async (ctx) => {
       routedMessages.push(ctx)
@@ -214,6 +248,7 @@ test('BaseChannel: 渠道通用入站大防抖 (5s 文本 / 10s 富媒体)', asy
       textMs: 80,
     },
     debounceEnabled: true,
+    debounceScheduler,
     llm: mockLLM,
     masterId: MASTER,
     memory,
@@ -222,17 +257,16 @@ test('BaseChannel: 渠道通用入站大防抖 (5s 文本 / 10s 富媒体)', asy
   try {
     // 1. 连续快速发送 2 条文本 -> 应该在防抖窗口内合并为 1 条
     channel.enqueueInboundDebounce(MASTER, { text: '在吗？' })
-    await new Promise((r) => setTimeout(r, 20))
+    await until(() => debounceScheduler.tasks.size === 1)
+    await debounceScheduler.advance(20)
     // 后一次入队会顶掉前一次的定时器（前一个 promise 永不落地），所以要等的是后一次
     const firstWindow = channel.enqueueInboundDebounce(MASTER, {
       text: '帮我查一下BTC价格',
     })
+    await until(() => channel._inboundDebounceBuffers.get(MASTER)?.textParts.length === 2)
 
     // 等待 100ms（超过 80ms 纯文本防抖时间）
-    for (let i = 0; i < 30; i++) {
-      if (routedMessages.length > 0) break
-      await new Promise((r) => setTimeout(r, 10))
-    }
+    await debounceScheduler.advance(80)
     assert.equal(routedMessages.length, 1, '两次文本输入应合并为一次路由')
     assert.ok(routedMessages[0].text.includes('在吗？'))
     assert.ok(routedMessages[0].text.includes('帮我查一下BTC价格'))
@@ -240,15 +274,17 @@ test('BaseChannel: 渠道通用入站大防抖 (5s 文本 / 10s 富媒体)', asy
     // 2. 发送富媒体（图片） -> 自动触发更长的媒体防抖窗口
     routedMessages.length = 0
     channel.enqueueInboundDebounce(MASTER, { text: '分析这张图' })
-    await new Promise((r) => setTimeout(r, 30))
+    await until(() => debounceScheduler.tasks.size === 1)
+    await debounceScheduler.advance(30)
     const mediaWindow = channel.enqueueInboundDebounce(MASTER, {
       hasMedia: true,
       images: ['https://example.com/photo.png'],
       text: '',
     })
+    await until(() => channel._inboundDebounceBuffers.get(MASTER)?.hasMedia)
 
     // 90ms 时（超过了纯文本的 80ms，但仍在富媒体的 150ms 内）
-    await new Promise((r) => setTimeout(r, 60))
+    await debounceScheduler.advance(60)
     assert.equal(
       routedMessages.length,
       0,
@@ -256,10 +292,7 @@ test('BaseChannel: 渠道通用入站大防抖 (5s 文本 / 10s 富媒体)', asy
     )
 
     // 等待媒体防抖窗口闭合并完成路由
-    for (let i = 0; i < 40; i++) {
-      if (routedMessages.length > 0) break
-      await new Promise((r) => setTimeout(r, 10))
-    }
+    await debounceScheduler.advance(90)
     assert.equal(routedMessages.length, 1, '媒体防抖窗口闭合后应成功路由')
     assert.equal(routedMessages[0].images.length, 1)
     assert.equal(routedMessages[0].images[0], 'https://example.com/photo.png')
@@ -279,11 +312,15 @@ test('BaseChannel: 渠道无关 typing 状态：防抖中即时反馈、任务�
   const sid = session.id
 
   let taskResolver = null
+  let signalTaskStarted
+  const taskStarted = new Promise(resolve => { signalTaskStarted = resolve })
+  const debounceScheduler = new FakeDebounceScheduler()
   const mockLLM = {
     process: async (ctx) => {
       if (ctx.text.includes('慢速长任务')) {
         await new Promise((resolve) => {
           taskResolver = resolve
+          signalTaskStarted()
         })
       }
       return { text: `回复: ${ctx.text}` }
@@ -297,6 +334,7 @@ test('BaseChannel: 渠道无关 typing 状态：防抖中即时反馈、任务�
       textMs: 150,
     },
     debounceEnabled: true,
+    debounceScheduler,
     llm: mockLLM,
     masterId: MASTER,
     memory,
@@ -307,7 +345,8 @@ test('BaseChannel: 渠道无关 typing 状态：防抖中即时反馈、任务�
     const p1 = channel.enqueueInboundDebounce(MASTER, { text: '你好呀' })
 
     // 立即检查：虽然在防抖缓冲中、任务尚未真正运行，但必须立刻收到正在输入反馈 (status=1)
-    await new Promise((r) => setTimeout(r, 20))
+    await until(() => channel.typingLog.some(t => t.status === 1))
+    await until(() => debounceScheduler.tasks.size === 1)
     assert.ok(
       channel.typingLog.some((t) => t.status === 1),
       '在防抖进程中必须立即触发 typing=1 正在输入反馈',
@@ -319,6 +358,7 @@ test('BaseChannel: 渠道无关 typing 状态：防抖中即时反馈、任务�
     )
 
     // 等待第一条防抖消息自然执行完成，此时应收到首个 status=2
+    await debounceScheduler.advance(150)
     await p1
     const baselineStatus2Count = channel.typingLog.filter(
       (t) => t.status === 2,
@@ -330,14 +370,8 @@ test('BaseChannel: 渠道无关 typing 状态：防抖中即时反馈、任务�
       immediate: true,
       text: '慢速长任务',
     })
-    let isBusy = false
-    for (let i = 0; i < 20; i++) {
-      if (channel.isSessionBusy(sid, { from: MASTER })) {
-        isBusy = true
-        break
-      }
-      await new Promise((r) => setTimeout(r, 10))
-    }
+    await taskStarted
+    const isBusy = channel.isSessionBusy(sid, { from: MASTER })
     assert.equal(
       isBusy,
       true,
@@ -347,7 +381,7 @@ test('BaseChannel: 渠道无关 typing 状态：防抖中即时反馈、任务�
     // 3. 在慢速长任务处理期间，再来排队任务
     const p2 = channel._route('排队任务2', { from: MASTER, sid })
     const p3 = channel._route('排队任务3', { from: MASTER, sid })
-    await new Promise((r) => setTimeout(r, 20))
+    await until(() => channel._sessionWaitingQueues.get(sid)?.length === 2)
     assert.equal(
       channel._sessionWaitingQueues.get(sid)?.length,
       2,

@@ -8,6 +8,10 @@ import { TriggerRunner } from '../../lib/triggers/TriggerRunner.js'
 import { WakeInjector } from '../../lib/triggers/WakeInjector.js'
 import { TriggerService } from '../../lib/triggers/index.js'
 import SentinelTool from '../../lib/plugins/ai-plugin/tools/sentinel.js'
+import { createPrismaFixture } from '../helpers/prismaFixture.js'
+
+let prisma
+let closePrisma
 
 const TEST_DATA_DIR = path.join(
   process.cwd(),
@@ -17,9 +21,25 @@ const TEST_DATA_DIR = path.join(
 
 test.before(async () => {
   await fs.promises.mkdir(TEST_DATA_DIR, { recursive: true })
+  const fixture = await createPrismaFixture()
+  prisma = fixture.prisma
+  closePrisma = fixture.close
+  for (const [agentId, sessionIds] of [
+    ['wechat-master', ['session_123', 's_test']],
+    ['agent-dedupe', ['session_dedupe']],
+    ['agent-running', ['session_running']],
+    ['agent-reconcile', ['session_reconcile']],
+  ]) {
+    await prisma.agent.create({ data: { id: agentId } })
+    for (const id of sessionIds) await prisma.session.create({ data: { agentId, id } })
+  }
+  await prisma.channel.create({
+    data: { id: 'sentinel-test-channel', status: 'running', type: 'channel' },
+  })
 })
 
 test.after(async () => {
+  await closePrisma()
   await fs.promises.rm(TEST_DATA_DIR, { recursive: true, force: true })
 })
 
@@ -54,7 +74,7 @@ test('WakeProtocol: 标准契约解析与异常保护', () => {
 })
 
 test('TriggerRegistry: 触发器增删改查与脚本文件管理', async () => {
-  const registry = new TriggerRegistry({ dataDir: TEST_DATA_DIR })
+  const registry = new TriggerRegistry({ dataDir: TEST_DATA_DIR, prisma })
 
   // 1. 创建 script 触发器并自动落盘脚本文件
   const created = await registry.create({
@@ -138,6 +158,7 @@ test('TriggerRunner: 真实子进程安全执行与超时保护', async () => {
 test('WakeInjector: once trigger stays queued until absorption', async () => {
   const registry = new TriggerRegistry({
     dataDir: path.join(TEST_DATA_DIR, 'injector'),
+    prisma,
   })
   const submitted = []
   const dispatcher = {
@@ -214,6 +235,7 @@ test('WakeInjector: once trigger stays queued until absorption', async () => {
 test('WakeInjector: queued trigger wake is deduplicated after injector restart', async () => {
   const registry = new TriggerRegistry({
     dataDir: path.join(TEST_DATA_DIR, 'injector-dedupe'),
+    prisma,
   })
   const trigger = await registry.create({
     agentId: 'agent-dedupe',
@@ -258,6 +280,7 @@ test('WakeInjector: queued trigger wake is deduplicated after injector restart',
 test('WakeInjector: persistent counters advance once when work starts', async () => {
   const registry = new TriggerRegistry({
     dataDir: path.join(TEST_DATA_DIR, 'injector-running'),
+    prisma,
   })
   const trigger = await registry.create({
     agentId: 'agent-running',
@@ -315,6 +338,7 @@ test('WakeInjector: persistent counters advance once when work starts', async ()
 test('WakeInjector: startup reconciles an already-running open work item', async () => {
   const registry = new TriggerRegistry({
     dataDir: path.join(TEST_DATA_DIR, 'injector-reconcile'),
+    prisma,
   })
   const trigger = await registry.create({
     agentId: 'agent-reconcile',
@@ -356,6 +380,7 @@ test('WakeInjector: startup reconciles an already-running open work item', async
 test('sentinel Tool: 两步流创建、试跑、管理全生命周期', async () => {
   const registry = new TriggerRegistry({
     dataDir: path.join(TEST_DATA_DIR, 'tool-service'),
+    prisma,
   })
   const service = new TriggerService({
     injector: new WakeInjector({

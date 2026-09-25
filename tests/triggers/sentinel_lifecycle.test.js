@@ -8,8 +8,19 @@ import { TriggerRunner } from '../../lib/triggers/TriggerRunner.js'
 import { TriggerService } from '../../lib/triggers/index.js'
 import { WakeInjector } from '../../lib/triggers/WakeInjector.js'
 import { WakeProtocol } from '../../lib/triggers/WakeProtocol.js'
+import { createPrismaFixture } from '../helpers/prismaFixture.js'
 
 const tempDirs = []
+let prisma
+let closePrisma
+
+test.before(async () => {
+  const fixture = await createPrismaFixture()
+  prisma = fixture.prisma
+  closePrisma = fixture.close
+  await prisma.agent.create({ data: { id: 'agent-a' } })
+  await prisma.session.create({ data: { agentId: 'agent-a', id: 'session-a' } })
+})
 
 async function makeTempDir() {
   const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'mio-sentinel-'))
@@ -18,6 +29,7 @@ async function makeTempDir() {
 }
 
 test.after(async () => {
+  await closePrisma()
   for (const dir of tempDirs) {
     await fs.promises.rm(dir, { force: true, recursive: true })
   }
@@ -39,7 +51,7 @@ test('WakeProtocol: rejects invalid and oversized payloads', () => {
 
 test('TriggerRegistry: mutating operations can be scoped to an agent', async () => {
   const dataDir = await makeTempDir()
-  const registry = new TriggerRegistry({ dataDir })
+  const registry = new TriggerRegistry({ dataDir, prisma })
   await registry.create({
     agentId: 'agent-a',
     id: 'shared-id',
@@ -67,7 +79,7 @@ test('TriggerRegistry: mutating operations can be scoped to an agent', async () 
 
 test('WakeInjector: a rejected dispatcher submission does not claim a wake', async () => {
   const dataDir = await makeTempDir()
-  const registry = new TriggerRegistry({ dataDir })
+  const registry = new TriggerRegistry({ dataDir, prisma })
   const trigger = await registry.create({
     agentId: 'agent-a',
     channelId: 'channel-a',

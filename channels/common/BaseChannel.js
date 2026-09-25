@@ -74,6 +74,7 @@ export class BaseChannel {
     channelId = null,
     debounceConfig = {},
     debounceEnabled = null,
+    debounceScheduler = { setTimeout, clearTimeout },
     routeTargetResolver = null,
   }) {
     if (!client || !memory || !masterId) {
@@ -114,6 +115,7 @@ export class BaseChannel {
       Boolean(process.env.NODE_TEST_CONTEXT) ||
       process.execArgv.includes('--test')
     this.debounceEnabled = debounceEnabled ?? !isTestEnv
+    this.debounceScheduler = debounceScheduler
     this._sessionYolo = new Map()
 
     this.running = false
@@ -729,11 +731,11 @@ export class BaseChannel {
     )
 
     if (buf.timer) {
-      clearTimeout(buf.timer)
+      this.debounceScheduler.clearTimeout(buf.timer)
     }
 
     return new Promise((resolve, reject) => {
-      buf.timer = setTimeout(async () => {
+      buf.timer = this.debounceScheduler.setTimeout(async () => {
         try {
           // 若仍有媒体任务在异步下载转存中，等待最多 5 秒
           let waitTimes = 0
