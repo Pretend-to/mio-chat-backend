@@ -1287,28 +1287,24 @@ export function createBackendLlm(opts = {}) {
                       await ctx.memory.setCrystal(ctx.sessionId, summaryXml)
                       // 上下文压缩闭环：归档 + 裁剪 + 读窗口更新必须在
                       // 下一条排队 user 进入前完成，否则会读到旧上下文。
-                      if (typeof ctx.memory.rotateChat === 'function') {
-                        const keepTurns =
-                          Number(
-                            event.body?.settings?.crystallization_keep_turns,
-                          ) || 1
-                        const rotateRes = await ctx.memory.rotateChat(
-                          ctx.sessionId,
-                          keepTurns,
+                      const keepTurns =
+                        Number(
+                          event.body?.settings?.crystallization_keep_turns,
+                        ) || 1
+                      const rotateRes = await ctx.memory.rotateChat(
+                        ctx.sessionId,
+                        keepTurns,
+                      )
+                      if (rotateRes?.rotated) {
+                        ctx.channel?.log?.info?.(
+                          `[${ctx.channel?.channelType || 'channel'}] 🗜️ 会话历史已归档并裁剪 | 归档: ${rotateRes.archivePath} | 裁剪 ${rotateRes.removedCount} 条, 保留 ${rotateRes.keptCount} 条`,
                         )
-                        if (rotateRes?.rotated) {
-                          ctx.channel?.log?.info?.(
-                            `[${ctx.channel?.channelType || 'channel'}] 🗜️ 会话历史已归档并裁剪 | 归档: ${rotateRes.archivePath} | 裁剪 ${rotateRes.removedCount} 条, 保留 ${rotateRes.keptCount} 条`,
-                          )
-                        }
                       }
-                      // Clear staged memory only after crystal storage and chat
-                      // rotation both succeeded, otherwise retry on next compression.
-                      if (
-                        typeof ctx.memory.clearPendingMemories === 'function'
-                      ) {
-                        await ctx.memory.clearPendingMemories(ctx.sessionId)
-                      }
+                      // 契约：清缓冲必须做，且必须在结晶落盘与裁剪都成功之后
+                      //（失败时不清 → 下轮靠重放兜底，不会丢编辑）。
+                      // 不做能力探测：存储若不实现就直接报错 —— 静默跳过会让同一批
+                      // 编辑在下一轮被重放第二次。
+                      await ctx.memory.clearPendingMemories(ctx.sessionId)
                       crystalPersistenceSucceeded = true
                     })
                     .catch((err) => {

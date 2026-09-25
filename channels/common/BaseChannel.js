@@ -1339,10 +1339,10 @@ export class BaseChannel {
       `[${this.channelType}:${this.id}] 🧠 进入 LLM 推理处理流水线 | 会话: ${sid} | 来源: ${ctx.from} | 模型: ${this.provider || 'default'}/${this.model || 'default'} | 文本长度: ${text.length}`,
     )
     const crystal = await this.memory.getCrystal(sid)
-    const pendingMemories =
-      typeof this.memory.getPendingMemories === 'function'
-        ? await this.memory.getPendingMemories(sid)
-        : []
+    // 契约：存储必须实现 getPendingMemories（两个现存实现都已具备）。
+    // 不做能力探测 —— 探测失败时 fallback 到 []，等于静默丢掉待处理编辑，
+    // 镜像就只剩结晶，而没人会发现。
+    const pendingMemories = await this.memory.getPendingMemories(sid)
     const session = await this.memory.getSession(sid)
     const chat = session?.chat || []
     ctx.channelId =
