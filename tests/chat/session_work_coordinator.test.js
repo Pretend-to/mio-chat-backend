@@ -184,6 +184,37 @@ test('SessionWorkCoordinator enforces fenced leases and reports durable lifecycl
   )
 })
 
+test('SessionWorkCoordinator reuses an existing lease row without another create', async (t) => {
+  const prisma = await fixture(t)
+  const target = await createTarget(prisma)
+  let createCalls = 0
+  const trackedPrisma = {
+    session: {
+      findUnique: (args) => prisma.session.findUnique(args),
+    },
+    sessionWorkLease: {
+      create: (args) => {
+        createCalls += 1
+        return prisma.sessionWorkLease.create(args)
+      },
+      findUnique: (args) => prisma.sessionWorkLease.findUnique(args),
+      updateMany: (args) => prisma.sessionWorkLease.updateMany(args),
+    },
+  }
+  const ownerA = new SessionWorkCoordinator({ prisma: trackedPrisma, leaseOwner: 'owner-a' })
+  const ownerB = new SessionWorkCoordinator({ prisma: trackedPrisma, leaseOwner: 'owner-b' })
+
+  const first = await ownerA.acquireLease(target)
+  assert.equal(createCalls, 1)
+  assert.equal(await ownerB.acquireLease(target), null)
+  assert.equal(createCalls, 1)
+
+  assert.equal(await ownerA.releaseLease({ ...target, fencingToken: first.fencingToken }), true)
+  const second = await ownerB.acquireLease(target)
+  assert.equal(second.fencingToken, first.fencingToken + 1)
+  assert.equal(createCalls, 1)
+})
+
 test('SessionWorkCoordinator resolves the Agent default delivery binding for Session wakes', async (t) => {
   const prisma = await fixture(t)
   const target = await createTarget(prisma)
