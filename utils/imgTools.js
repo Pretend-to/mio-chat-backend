@@ -163,6 +163,35 @@ function isRawBase64Payload(value) {
   return /^[A-Za-z0-9+/]+={0,2}$/.test(value)
 }
 
+/**
+ * 识别常见图片格式的 magic bytes（对头 24 字节的十六进制串做匹配）。
+ * WebP 的签名跨 12 字节：'RIFF' + 4 字节段长度（可变，用 .{8} 跳过）+ 'WEBP'。
+ */
+const IMAGE_MAGIC_SIGNATURES = [
+  { mime: 'image/png', hex: /^89504e47/ },
+  { mime: 'image/jpeg', hex: /^ffd8ff/ },
+  { mime: 'image/gif', hex: /^47494638/ },
+  { mime: 'image/webp', hex: /^52494646.{8}57454250/ },
+]
+
+/**
+ * 从裸 base64 载荷的头部字节推断图片 MIME，识别不出来返回 null。
+ *
+ * 为什么只解头部：识别只需要 magic bytes。base64 每 4 字符 = 3 字节，
+ * 取前 32 字符即 24 字节，已覆盖最长的签名（WebP 需要 12 字节），
+ * 没必要为了看一眼签名就把几 MB 的载荷整体解码。
+ *
+ * 为什么识别不出来时返回 null 而不是猜一个（旧实现硬编码 image/jpeg）：
+ * 裸载荷既没有扩展名也没有 Content-Type，字节本身是唯一真相。贴错 MIME 的代价是
+ * 上游要么 400、要么按错误格式解码 —— 整轮请求被一张图打挂（blob: 分支历史上就是这么炸的）；
+ * 返回 null 的代价只是丢掉这一张图。两害相权，不猜。
+ */
+function sniffImageMime(rawBase64) {
+  const headHex = Buffer.from(rawBase64.slice(0, 32), 'base64').toString('hex')
+  const hit = IMAGE_MAGIC_SIGNATURES.find(({ hex }) => hex.test(headHex))
+  return hit ? hit.mime : null
+}
+
 async function resolveImageAsBase64(url, id = 'default') {
   if (!url || typeof url !== 'string') return null
   if (url.startsWith('data:')) return url
@@ -197,9 +226,17 @@ async function resolveImageAsBase64(url, id = 'default') {
     return url
   }
 
-  // 3. 纯 Base64 字符串（不带 data: 前缀）
+  // 3. 纯 Base64 字符串（不带 data: 前缀）：MIME 必须从载荷字节推断，不能硬编码。
+  //    硬编码 image/jpeg 会把 PNG/WebP 载荷声明成 jpeg，上游 400 或按错误格式解码。
   if (isRawBase64Payload(url)) {
-    return `data:image/jpeg;base64,${url}`
+    const mime = sniffImageMime(url)
+    if (!mime) {
+      logger.warn(
+        `[${id}] 裸 base64 载荷不是可识别的图片格式（PNG/JPEG/GIF/WebP），已跳过：${url.slice(0, 32)}...`,
+      )
+      return null
+    }
+    return `data:${mime};base64,${url}`
   }
 
   // 4. 既不是可解析地址、也不是合法 base64：直接丢弃。
