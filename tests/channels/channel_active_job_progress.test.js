@@ -1,7 +1,7 @@
 /**
  * 护栏：渠道流式执行期间，activeJob.lastProgressText 必须随正文分块更新。
  *
- * 为什么单独为它写测试（docs/architecture/session-work-injection-convergence-plan.md §Phase 2）：
+ * 为什么单独为它写测试：
  * 这段逻辑现在藏在 `channels/llm.js` 里桥接对象的 `update` 闭包中
  * （`job.lastProgressText = currentTextBlock.slice(0, 100)`）。
  * Phase 2 要把它搬进 `ChannelChatEvent`——搬移的风险在于

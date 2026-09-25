@@ -1,7 +1,7 @@
 /**
  * P0-1：Web Agent 入口在租约被占用时的行为。
  *
- * 背景（详见 docs/architecture/session-work-injection-convergence-plan.md）：
+ * 背景：
  * Web 有两层含义，对应两个 socket 协议：
  *   - `llm_message`   = 纯前端 Web，历史由前端持有，服务端不落 Session，不取租约
  *   - `agent_message` = Web → 服务端持久化 Agent，经 SessionTurnService.runTurn

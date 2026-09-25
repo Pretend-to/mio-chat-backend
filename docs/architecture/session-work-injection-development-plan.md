@@ -4,8 +4,8 @@
 > 日期：2026-09-24  
 > 范围：Agent Session、纯 Web 对话、Cron、Trigger/Sentinel 和 SubAgent 完成唤醒；涉及 `mio-chat-backend` 与 `mio-chat-frontend`。  
 > 相关文档：[Agent/Session 规格](./channel-agent-refactor/Spec.md)、[ChatEvent 重构计划](./chat-event-refactor-plan.md)、[Session 持久化](./session-persistence.md)、[Trigger 规格](./trigger-system.md)。
-> **执行计划**：[收敛实施计划](./session-work-injection-convergence-plan.md) —— 从当前代码到本文档目标的顺序、分阶段验收、明确不做的事。
-> **现状事实**：[现状架构图 as-is](./session-work-injection-current-state.md) —— 按当前代码绘制。本文档与它冲突之处，**以它为准**（本文档描述意图，代码是事实）。
+> **执行计划**：收敛实施计划 —— 从当前代码到本文档目标的顺序、分阶段验收、明确不做的事。**该文档是一次性工作文档，按仓库约定放在 `tmp/docs/` 下（不进版本库）。**
+> **现状事实**：现状架构图 as-is —— 按当前代码绘制；本文档与它冲突之处**以它为准**（本文档描述意图，代码是事实）。同为 `tmp/docs/` 下的工作文档。
 
 ## 1. 决策
 
@@ -155,7 +155,7 @@ assistant: 下一轮模型输出
 | 纯 Web 插话后刷新或断线 | 独立用户消息与分段助手输出可恢复，下一轮模型历史包含注入内容且不重复发送 |
 | 两个 Web 用户使用相同 contactorId | 对话键含 principalId，无法跨用户调整 Event 或复用待发送输入 |
 | 不同来源同时命中一个 Agent Session | **Web Agent（协议 `agent_message`）**、Channel、headless 共用写入租约，消息 seq 和 assistant 生命周期不交错 |
-| 抢不到租约 | 必须排队等待或延后，**不得返回用户可见失败**（当前 Web Agent 入口会发 `failed` 帧，见[收敛实施计划](./session-work-injection-convergence-plan.md) P0-1） |
+| 抢不到租约 | 必须排队等待或延后，**不得返回用户可见失败**（当前 Web Agent 入口会发 `failed` 帧；Phase 1 已修：`withSessionLease` 增加 `waitMs` 排队，`waitMs = 0` 保持原语义） |
 | 纯 Web 直连（协议 `llm_message`） | 不落 Agent Session，不参与 Session 租约；其插话需求由 `WebChatEvent.adjust()` 满足 |
 | 不同权限或输出路由 | 拒绝并入活动 Event，按来源自己的身份与路由独立运行 |
 | 提交与 Event 终态竞态、进程重启、重复 wake | 只选并入或排队之一；同一幂等键不生成两个工作，未完成项可恢复 |
