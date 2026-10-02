@@ -54,7 +54,7 @@ async handleChatRequest(e) {
       }
       
       // 记录首字延迟
-      if (!timeMetrics.firstTokenTime) timeMetrics.firstTokenTime = Date.now();
+      if (!timeMetrics.firstTokenTime) this.markFirstTokenTime(e, timeMetrics);
       
       // 保存最后的 usage
       if (chunk.usage) e.lastUsage = chunk.usage;
