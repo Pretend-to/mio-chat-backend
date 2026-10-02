@@ -716,13 +716,32 @@ export function createBackendLlm(opts = {}) {
       const event = {
         body: { messages, settings },
         settings,
-        update: () => {},
+        update: (chunk) => ctx.onUpdate?.(chunk),
       }
-      const result = await CrystallizationService.compress(
-        event,
-        adapter,
-        boundaryIndex,
-      )
+      ctx.onUpdate?.({
+        content: { status: 'running', summary: '' },
+        type: 'crystallize',
+      })
+      let result
+      try {
+        result = await CrystallizationService.compress(
+          event,
+          adapter,
+          boundaryIndex,
+        )
+      } catch (error) {
+        ctx.onUpdate?.({
+          content: { commit: false, error: error?.message, status: 'failed' },
+          type: 'crystallize',
+        })
+        throw error
+      }
+      if (!result) {
+        ctx.onUpdate?.({
+          content: { commit: false, status: 'failed' },
+          type: 'crystallize',
+        })
+      }
       return result
         ? {
             compacted: true,

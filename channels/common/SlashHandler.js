@@ -685,6 +685,7 @@ export class SlashHandler {
           crystal,
           keepTurns: 0,
           model: this.channel.model,
+          onUpdate: (chunk) => ctx.onCompactUpdate?.(chunk),
           pendingMemories,
           provider: this.channel.provider,
         })
@@ -692,9 +693,30 @@ export class SlashHandler {
           return wrap('当前上下文过短或压缩结果为空，未做任何修改')
         }
 
-        await this.memory.setCrystal(cur, result.summary)
-        const rotation = await this.memory.rotateChat(cur, 0)
-        await this.memory.clearPendingMemories(cur)
+        let rotation
+        try {
+          await this.memory.setCrystal(cur, result.summary)
+          rotation = await this.memory.rotateChat(cur, 0)
+          await this.memory.clearPendingMemories(cur)
+        } catch (error) {
+          ctx.onCompactUpdate?.({
+            content: {
+              commit: false,
+              error: error?.message || String(error),
+              status: 'failed',
+            },
+            type: 'crystallize',
+          })
+          throw error
+        }
+        ctx.onCompactUpdate?.({
+          content: {
+            commit: true,
+            status: 'finished',
+            summary: result.summary,
+          },
+          type: 'crystallize',
+        })
         return wrap(
           `✅ 上下文压缩完成：已生成 ${result.summary.length} 字符的会话结晶，归档 ${rotation?.removedCount || 0} 条原始消息。下一轮将不再携带旧对话 few-shot。`,
         )
