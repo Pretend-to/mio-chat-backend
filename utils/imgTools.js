@@ -110,10 +110,6 @@ async function getLocalFileAsBase64(url) {
       const type = parts[3]
       const name = parts[4]
       filePath = path.join(process.cwd(), 'output', 'uploaded', type, name)
-    } else if (url.startsWith('/f/gen/')) {
-      const parts = url.split('/')
-      const name = parts[4]
-      filePath = path.join(process.cwd(), 'output', 'generated', 'file', name)
     } else if (path.isAbsolute(url)) {
       filePath = url
     } else if (url.startsWith('./') || url.startsWith('../') || url.startsWith('output/')) {
@@ -204,11 +200,10 @@ async function resolveImageAsBase64(url, id = 'default') {
     return null
   }
 
-  // 1. 本地文件（file:// 协议、虚拟存储 /f/up/...、/f/gen/...、绝对路径或相对路径）
+  // 1. 本地文件（file:// 协议、虚拟存储 /f/up/...、绝对路径或相对路径）
   if (
     url.startsWith('file://') ||
     url.startsWith('/f/up/') ||
-    url.startsWith('/f/gen/') ||
     url.startsWith('output/') ||
     url.startsWith('./') ||
     (path.isAbsolute(url) && fs.existsSync(url))
