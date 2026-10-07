@@ -1894,6 +1894,26 @@ export class BaseChannel {
         originRef: ctx.originRef,
         model: this.model,
         onEmitTextBlock,
+        // tool_call 增量落库：必须由持有 assistantPersistenceId 的本层回调驱动。
+        // 不能靠 llm.js 去 ctx.channel.activeJobs 里取——后台执行时 ctx.channel 是 outputPort。
+        onToolCallPersist: (snapshotMessage) => {
+          if (!assistantPersistenceId) return
+          // 与文本 chunk 共用 persistenceQueue：finalize 前的 await persistenceQueue 能一并等完
+          persistenceQueue = persistenceQueue
+            .then(async () => {
+              await assertSessionLease()
+              await this.memory.persistAssistantProgress(
+                assistantPersistenceId,
+                snapshotMessage,
+              )
+            })
+            .catch((error) => {
+              this.log?.warn?.(
+                `[${this.channelType || 'channel'}] tool_call 增量落库失败（不阻断本轮）:`,
+                error,
+              )
+            })
+        },
         onRegisterAbort: (abortFn) => {
           activeJobObj._abortLlm = abortFn
         },

@@ -983,6 +983,29 @@ export function createBackendLlm(opts = {}) {
         if (job) job.lastProgressText = text
       }
       eventCtx.onToolStatus = (status) => {
+        // 增量落库必须排在 job 守卫之前：后台执行路径里 ctx.channel 是 outputPort，
+        // 上面没有 BaseChannel.activeJobs，会被下面的 `if (!job) return` 整段短路。
+        if (
+          typeof ctx.onToolCallPersist === 'function' &&
+          (status?.action === 'running' || status?.action === 'finished')
+        ) {
+          try {
+            // ChannelChatEvent 派发本回调前已把本次 chunk push 进 collectedChunks，快照含当前调用。
+            // ⚠️ assembleStructuredContent 返回的是「内容数组」，必须包成 message 对象再传：
+            //    直接传数组会被 canonicalContent 判定为无 content，写出空快照并清空 tool_calls。
+            ctx.onToolCallPersist({
+              content: assembleStructuredContent(event.collectedChunks),
+              role: 'assistant',
+              time: Date.now(),
+            })
+          } catch (error) {
+            ctx.channel?.log?.warn?.(
+              '[channel] tool_call 增量落库投递失败（不阻断本轮）:',
+              error?.message || error,
+            )
+          }
+        }
+
         const job = ctx.channel?.activeJobs?.get(ctx.sessionId)
         if (!job) return
         if (status?.action === 'running') {
