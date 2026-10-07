@@ -99,7 +99,9 @@ export class BaseChannel {
     this.onActivity = onActivity
     this.onConfigUpdate = onConfigUpdate
     this.routeTargetResolver = routeTargetResolver
-    this.activeJobs = new Map() // sessionId -> { startTime, text, currentTool, toolCount, lastProgressText }
+    // sessionId -> { startTime, text, currentTool, lastProgressText, abort() }
+    // 消费方：/btw 插话进度(_handleTransientFollowup)、/stop 与 ChannelRuntime 中止、busy 判定
+    this.activeJobs = new Map()
     this._sessionQueues = new Map() // sessionId -> Promise chain (FIFO 互斥队列兼容)
     this._sessionLocks = new Set() // sessionId -> 互斥单飞锁
     this._sessionWaitingQueues = new Map() // sessionId -> QueueItem[] 排队与合并队列
@@ -1484,7 +1486,6 @@ export class BaseChannel {
       lastProgressText: '',
       startTime: Date.now(),
       text,
-      toolCount: 0,
     }
     this.activeJobs.set(sid, activeJobObj)
     this.startTyping(ctx, { sessionId: sid })

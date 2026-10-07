@@ -1010,7 +1010,6 @@ export function createBackendLlm(opts = {}) {
         if (!job) return
         if (status?.action === 'running') {
           job.currentTool = status.name || '工具'
-          job.toolCount = (job.toolCount || 0) + 1
         } else if (status?.action === 'finished') {
           job.currentTool = null
         }
