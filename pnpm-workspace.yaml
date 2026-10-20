@@ -1,10 +1,14 @@
 packages:
-  - 'lib/plugins/*'
-  - 'plugins/*'
+  - "lib/plugins/*"
+  - "plugins/*"
 # pnpm 10.32+/11: allowBuilds 取代 onlyBuiltDependencies / ignoredBuiltDependencies（v11 已移除旧 key）
 allowBuilds:
-  '@prisma/client': true
-  '@prisma/engines': true
+  "better-sqlite3": true
+  "tree-sitter": true
+  "tree-sitter-bash": true
+  "tree-sitter-powershell": true
+  "@prisma/client": true
+  "@prisma/engines": true
   prisma: true
   node-pty: true
   es5-ext: false
