@@ -7,6 +7,10 @@
 >
 > 状态：database-only 实现与自动迁移已完成，待合并
 > 日期：2026-08-31
+>
+> 2026-09-25 更新：文件存储（`channels/memory/MemoryStore.js`）与 legacy /
+> shadow / database-shadow 三种模式已彻底删除，持久化只剩数据库一种实现；
+> 环境变量 `MIO_CHANNEL_PERSISTENCE_MODE` 已废弃（仍然设置就直接报错）。详见 §7.6。
 > 范围：Channel 会话、流式回复、结晶和旧 JSON 数据迁移
 > 可执行 schema：[`session-persistence-schema.prisma`](./session-persistence-schema.prisma)
 
@@ -26,6 +30,9 @@ Prisma/SQLite。迁移后的基本存储单位是“一条逻辑消息”，不�
 反向覆盖 `content`。
 
 ## 2. 当前问题与真实代码锚点
+
+> 历史锚点（2026-09-25）：以下描述的是迁移前的文件存储实现，该实现已删除；
+> 保留本节用于解释设计动机。
 
 当前 `MemoryStore.appendToChat()` 每追加一条消息都会读出并重写整个 session
 JSON。结晶、pending memory 和裁剪也会重写同一个文件，因此既有写放大，也有
@@ -157,9 +164,9 @@ await prisma.$transaction(async tx => {
 
 ## 6. 服务边界
 
-新增 `lib/chat/persistence/SessionPersistence.js` 作为唯一数据库入口。第一阶段提供
-与当前 `MemoryStore` 相容的 facade，以降低 BaseChannel、SlashHandler 和工具层的
-切换风险：
+新增 `lib/chat/persistence/SessionPersistence.js` 作为唯一数据库入口（2026-09-25 起
+底层只有 `DatabaseMemoryStore`，文件存储已删除）。facade 方法面保持稳定，
+以降低 BaseChannel、SlashHandler 和工具层的切换风险：
 
 - `listSessions/getSession/createSession/deleteSession`
 - `appendToChat/getChat/clearChat/rotateChat`
@@ -255,20 +262,19 @@ await prisma.$transaction(async tx => {
 完成门槛是 `manifest discovered == completed` 且 blocked/failed 均为 0。单一
 `legacy_migrated=true` 不构成完成证据。
 
-### 7.6 在线切换与回滚
+### 7.6 模式与开关（已收敛为 database-only）
 
-Channel 与 Session 兼容层仍保留四种显式诊断模式：
+**2026-09-25 起：文件存储已删除，没有诊断模式，也没有开关。**
 
-- `legacy`：JSON 主写；
-- `shadow`：JSON 主写，DB 镜像并持续逐源比对；
-- `database-shadow`：DB 主写，同时生成可回滚的 JSON 镜像；
-- `database`：DB 单独主写。
+- 唯一模式是 `database`；`legacy` / `shadow` / `database-shadow` 均已移除。
+- 旧环境变量 `MIO_CHANNEL_PERSISTENCE_MODE` 已废弃：运行时只要它还存在于环境里，
+  `createSessionPersistence()` 就直接报错 —— 显式失败，而不是静默忽略一个已经
+  不起作用的开关。请从 `.env` / 运行环境里删掉它。
+- 给 `SessionPersistence` 传 `mode` 时只有 `database` 合法，其它值报错。
+- Channel 停止时的 HTTP/Socket 管理接口和 Channel 工具仍然必须经过同一个存储工厂
+  （`createSessionPersistence`），不得自行实例化存储对象。
 
-当前运行时开关是环境变量 `MIO_CHANNEL_PERSISTENCE_MODE`。新实例和完成自动迁移的
-存量实例默认使用 `database`，生产正常运行不进入 shadow 模式。允许值只有上述四项，
-非法值会在 Channel 启动时直接报错。Channel 停止时
-使用的 HTTP/Socket 管理接口和 Channel 工具也必须经过同一个存储工厂，不能绕过
-开关直接实例化 `MemoryStore`。
+迁移期的四种模式对照与实证证据见 §2、§6（历史锚点）。
 
 运行时消息契约只使用 `messages.content`、`messages.text`、`messages.business_time`
 等规范列。`messages.legacy_json` / `messages.legacy_source` 只属于一次性迁移导入的

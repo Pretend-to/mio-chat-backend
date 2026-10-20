@@ -1,5 +1,8 @@
 import { afterEach, test } from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 
 import BaseImageAdapter from '../../lib/chat/image/BaseImageAdapter.js'
 import { ImageService } from '../../lib/chat/image/ImageService.js'
@@ -16,12 +19,32 @@ afterEach(() => {
 
 test('BaseImageAdapter accepts standard raw base64 containing slash characters', async () => {
   const adapter = new BaseImageAdapter()
-  const raw = Buffer.from([255, 255, 255, 255, 0, 1, 2, 3, 4, 5, 6, 7]).toString('base64')
+  const raw = Buffer.from([255, 216, 255, 255, 255, 255, 0, 1, 2, 3, 4, 5]).toString('base64')
   assert.match(raw, /\//)
 
   const resolved = await adapter._resolveImageBase64(raw)
   assert.equal(resolved.base64, raw)
   assert.equal(resolved.dataUri, `data:image/jpeg;base64,${raw}`)
+})
+
+test('BaseImageAdapter rejects unknown bytes instead of inventing JPEG MIME', async () => {
+  const adapter = new BaseImageAdapter()
+  const unknown = Buffer.from('this is not an image').toString('base64')
+  await assert.rejects(adapter._resolveImageBase64(unknown), /无法识别参考图格式/)
+  assert.equal(adapter._detectMimeType(Buffer.from('not an image')), null)
+})
+
+test('BaseImageAdapter validates local and remote image bytes despite JPEG labels', async t => {
+  const adapter = new BaseImageAdapter()
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mio-image-mime-'))
+  t.after(() => fs.rm(directory, { force: true, recursive: true }))
+  const file = path.join(directory, 'invalid.jpg')
+  await fs.writeFile(file, 'not an image')
+  await assert.rejects(adapter._resolveImageBase64(file), /无法识别参考图格式/)
+  global.fetch = async () => new Response('not an image', {
+    headers: { 'content-type': 'image/jpeg' },
+  })
+  await assert.rejects(adapter._resolveImageBase64('https://example.test/invalid.jpg'), /无法识别参考图格式/)
 })
 
 test('ImageService rejects reference images before calling an unsupported adapter', async () => {

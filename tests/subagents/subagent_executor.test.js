@@ -139,3 +139,76 @@ test('SubAgent stream is routed to its child contact in real time', async (t) =>
   assert.equal(cached?.metaData?.contactorId, contactorId)
   assert.deepEqual(cached?.metaData?.subagentContact, subagentContact)
 })
+
+test('SubAgentExecutor keeps process narration out of the final answer', async () => {
+  const finalAssistant = {
+    content: [
+      {
+        data: { text: "I'll start by reproducing the failure." },
+        type: 'text',
+      },
+      {
+        data: { name: 'bash_mid_test', result: 'exit 1' },
+        type: 'tool_call',
+      },
+      { data: { text: 'Now let me fix it.' }, type: 'text' },
+      {
+        data: { name: 'write_mid_test', result: 'ok' },
+        type: 'tool_call',
+      },
+      {
+        data: { text: 'Root cause: the cache key ignored the tenant id.' },
+        type: 'text',
+      },
+      {
+        data: { text: 'Fix: prefix the key with the tenant id.' },
+        type: 'text',
+      },
+    ],
+    id: 'msg-child-1',
+    role: 'assistant',
+    // The persisted flatten of the whole turn: narration glued to answer.
+    text: "I'll start by reproducing the failure.\nNow let me fix it.\nRoot cause: the cache key ignored the tenant id.\nFix: prefix the key with the tenant id.",
+  }
+  let reads = 0
+  const memory = {
+    getSession: async () => {
+      reads += 1
+      return {
+        chat:
+          reads === 1
+            ? [{ role: 'user', text: 'go' }]
+            : [{ role: 'user', text: 'go' }, finalAssistant],
+      }
+    },
+  }
+  const sessionTurns = {
+    getMemory: async () => memory,
+    runTurn: async () => ({ deliveryStatus: 'not_requested', reply: null }),
+  }
+  const executor = new SubAgentExecutor({ sessionTurns })
+  const result = await executor.execute({
+    agentId: 'agent-1',
+    id: 'run-trace',
+    groupId: 'group-trace',
+    inputJson: '{}',
+    jobKey: 'trace',
+    objective: 'Split trace from answer',
+    outputContractJson: '{}',
+    parentSessionId: 'parent-1',
+    sessionId: 'child-trace',
+    toolNamesJson: JSON.stringify(['bash_mid_test']),
+  })
+
+  assert.equal(
+    result.resultText,
+    'Root cause: the cache key ignored the tenant id.\nFix: prefix the key with the tenant id.',
+  )
+  assert.equal(result.resultJson.summary, result.resultText)
+  assert.equal(
+    result.resultJson.trace,
+    "I'll start by reproducing the failure.\nNow let me fix it.",
+  )
+  assert.equal(result.resultJson.truncated, false)
+  assert.equal(result.resultJson.traceTruncated, false)
+})

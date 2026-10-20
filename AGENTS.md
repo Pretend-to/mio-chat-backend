@@ -269,6 +269,7 @@ this.name = `${name}_mid_${this.hash}`;
 | **Agent / Session / Channel（权威）** | `docs/architecture/channel-agent-refactor/Spec.md`                          |
 | SubAgent 异步编排实施计划           | `docs/architecture/channel-agent-refactor/SubAgentAsyncDevelopmentPlan.md`  |
 | 定时任务与 Trigger                  | `docs/architecture/trigger-system.md`                                       |
+| ChatEvent 统一唤起与运行时调整      | `docs/architecture/session-work-injection-development-plan.md`             |
 | 渠道模型历史演进                    | `docs/architecture/channel-v1.0.md`、`docs/architecture/onebots-deep-dive-research.md` |
 | 前端契约（socket/API）              | 前端仓库 `docs/*.md`（`message-rendering-pipeline.md`、`config-api.md` 等） |
 

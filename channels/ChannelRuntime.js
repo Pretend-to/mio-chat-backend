@@ -27,7 +27,6 @@ export class ChannelRuntime {
    * @param {object} opts
    * @param {import('./ChannelStore.js').ChannelStore} opts.channelStore 渠道配置存储
    * @param {object} [opts.llm]  llmProcessor（默认 createBackendLlm）
-   * @param {string} [opts.memoryBase] memory 根目录（默认 'memory'）
    * @param {(channel)=>object} [opts.clientFactory] 自定义 client 工厂（测试注入 mock）
    * @param {object} [opts.onebotsGateway] OneBots 网关（可注入，默认按需加载）
    * @param {(options)=>object|Promise<object>} [opts.onebotChannelFactory] OneBotChannel 工厂
@@ -39,9 +38,7 @@ export class ChannelRuntime {
     onebotsGateway = null,
     onebotChannelFactory = null,
     llm,
-    memoryBase = 'memory',
     persistenceFactory = createSessionPersistence,
-    persistenceMode = process.env.MIO_CHANNEL_PERSISTENCE_MODE || 'database',
     prisma = null,
     bindingResolver = null,
     routeResolver = null,
@@ -54,13 +51,11 @@ export class ChannelRuntime {
     this.channelStore = channelStore
     this.logger = customLogger || logger
     this.llm = llm || createBackendLlm()
-    this.memoryBase = memoryBase
     this.clientFactory = clientFactory
     this.onebotsGateway = onebotsGateway
     this.onebotChannelFactory = onebotChannelFactory
     this._onebotsInitialized = false
     this.persistenceFactory = persistenceFactory
-    this.persistenceMode = persistenceMode
     this.prisma = prisma
     this.bindingResolver = bindingResolver
     this.routeResolver = routeResolver || new ChannelRouteResolver({ prisma })
@@ -176,8 +171,6 @@ export class ChannelRuntime {
   async createMemory(agentId, { recover = false } = {}) {
     const memory = await this.persistenceFactory({
       agentId,
-      baseDir: this.memoryBase,
-      mode: this.persistenceMode,
       prisma: this.prisma,
     })
     await memory.ensure()

@@ -9,12 +9,11 @@ import test from 'node:test'
 import { BaseChannel } from '../../channels/common/BaseChannel.js'
 import { normalizeChannelEnvelope } from '../../channels/bindings/ChannelEnvelope.js'
 import { ChannelStore } from '../../channels/ChannelStore.js'
-import { MemoryStore } from '../../channels/memory/MemoryStore.js'
+
 import { restoreRunningChannels } from '../../channels/restoreRunningChannels.js'
 import { TriggerRegistry } from '../../lib/triggers/TriggerRegistry.js'
 import {
   DatabaseMemoryStore,
-  PersistenceMirrorError,
   SessionPersistence,
 } from '../../lib/chat/persistence/index.js'
 
@@ -207,6 +206,38 @@ test('DatabaseMemoryStore preserves the MemoryStore contract and archive semanti
   assert.equal(retryDbRows[0].id, userMsgId)
 })
 
+test('external message id is idempotent across retries and sessions', async (t) => {
+  const { prisma } = await createFixture(t)
+  const memory = new DatabaseMemoryStore({ agentId: 'agent-external-id', prisma })
+  await memory.createSession({ id: 'external-first' })
+  await memory.createSession({ id: 'external-second' })
+
+  const first = {
+    ...user('original', 1_000),
+    channel_id: 'wechat-1',
+    external_message_id: 'dup-1',
+    id: 'incoming-first',
+  }
+  assert.equal(await memory.appendUserMessage('external-first', first), 'incoming-first')
+
+  const duplicate = {
+    ...user('redelivered', 2_000),
+    channel_id: 'wechat-1',
+    external_message_id: 'dup-1',
+    id: 'incoming-second',
+  }
+  assert.equal(await memory.appendUserMessage('external-second', duplicate), 'incoming-first')
+  assert.equal(await prisma.message.count({ where: { channelId: 'wechat-1', externalMessageId: 'dup-1' } }), 1)
+  assert.equal((await memory.getChat('external-first'))[0].text, 'original')
+  assert.deepEqual(await memory.getChat('external-second'), [])
+
+  assert.equal(
+    await memory.appendUserMessage('external-second', { ...duplicate, channel_id: 'wechat-2' }),
+    'incoming-second',
+  )
+  assert.equal(await prisma.message.count({ where: { externalMessageId: 'dup-1' } }), 2)
+})
+
 test('streaming lifecycle finalizes tool projections and recovers interrupted messages', async (t) => {
   const { prisma } = await createFixture(t)
   const memory = new DatabaseMemoryStore({ agentId: 'agent-stream', prisma })
@@ -260,55 +291,6 @@ test('streaming lifecycle finalizes tool projections and recovers interrupted me
   assert.equal(recovered.text, 'partial answer')
 })
 
-test('shadow and database-shadow keep legacy and database representations aligned', async (t) => {
-  const { prisma, root } = await createFixture(t)
-  const legacy = new MemoryStore({
-    agentId: 'agent-shadow',
-    baseDir: path.join(root, 'memory'),
-  })
-  const shadow = new SessionPersistence({
-    agentId: 'agent-shadow',
-    legacyStore: legacy,
-    mode: 'shadow',
-    prisma,
-  })
-
-  await shadow.ensure()
-  await shadow.writeSoul('shadow soul')
-  await shadow.writeGlobal('general', 'shadow global\n')
-  await shadow.createSession({
-    createdAt: 1000,
-    id: 'session-shadow',
-    title: 'Shadow',
-  })
-  await shadow.setActiveSession('session-shadow')
-  await shadow.appendToChat('session-shadow', user('hello', 2000))
-  const messageId = await shadow.beginAssistantMessage('session-shadow')
-  await shadow.finalizeAssistantMessage(messageId, assistant('world', 3000))
-
-  const database = new DatabaseMemoryStore({ agentId: 'agent-shadow', prisma })
-  assert.deepEqual(
-    await database.getSession('session-shadow'),
-    await legacy.getSession('session-shadow'),
-  )
-  assert.equal(await database.readSoul(), await legacy.readSoul())
-  assert.equal(
-    await database.readGlobal('general'),
-    await legacy.readGlobal('general'),
-  )
-
-  const dbPrimary = new SessionPersistence({
-    agentId: 'agent-shadow',
-    legacyStore: legacy,
-    mode: 'database-shadow',
-    prisma,
-  })
-  await dbPrimary.appendToChat('session-shadow', user('again', 4000))
-  assert.deepEqual(
-    await database.getSession('session-shadow'),
-    await legacy.getSession('session-shadow'),
-  )
-})
 
 test('BaseChannel persists user and assistant placeholder before invoking the LLM', async (t) => {
   const { prisma } = await createFixture(t)
@@ -393,90 +375,53 @@ test('BaseChannel persists user and assistant placeholder before invoking the LL
   )
 })
 
-test('mirror failure policy preserves legacy availability and stops database-shadow silently diverging', async () => {
-  const logger = { error() {} }
-  const legacyMessages = []
-  const legacyPrimary = {
-    agentId: 'agent-policy',
-    appendToChat: async (sessionId, message) => {
-      legacyMessages.push({ message, sessionId })
-    },
-    readSoul: async () => 'legacy',
-    writeSoul: async () => true,
-  }
-  const brokenDatabaseMirror = {
-    writeSoul: async () => {
-      throw new Error('database unavailable')
-    },
-  }
-  const shadow = new SessionPersistence({
-    agentId: 'agent-policy',
-    databaseStore: brokenDatabaseMirror,
-    legacyStore: legacyPrimary,
-    logger,
-    mode: 'shadow',
-  })
-  assert.equal(await shadow.writeSoul('still available'), true)
-  const draftId = await shadow.beginAssistantMessage('session-policy')
-  await shadow.finalizeAssistantMessage(
-    draftId,
-    assistant('legacy final', 1000),
-  )
-  assert.equal(legacyMessages.length, 1)
-
-  const finalizationFailure = new SessionPersistence({
-    agentId: 'agent-policy',
-    databaseStore: {
-      beginAssistantMessage: async () => 'database-draft',
-      finalizeAssistantMessage: async () => {
-        throw new Error('finalize unavailable')
+test('BaseChannel does not invoke LLM for an external message redelivery', async (t) => {
+  const { prisma } = await createFixture(t)
+  const memory = new DatabaseMemoryStore({ agentId: 'agent-redelivery', prisma })
+  await memory.createSession({ id: 'redelivery-session' })
+  let llmCalls = 0
+  const channel = new BaseChannel({
+    client: { botId: 'bot' },
+    llm: {
+      process: async () => {
+        llmCalls++
+        return { content: [{ data: { text: 'answer' }, type: 'text' }], text: 'answer' }
       },
     },
-    legacyStore: legacyPrimary,
-    logger,
-    mode: 'shadow',
+    masterId: 'master',
+    memory,
   })
-  const databaseDraft =
-    await finalizationFailure.beginAssistantMessage('session-policy')
-  await finalizationFailure.finalizeAssistantMessage(
-    databaseDraft,
-    assistant('legacy survives', 2000),
-  )
-  assert.equal(legacyMessages.length, 2)
-
-  const databasePrimary = { writeSoul: async () => true }
-  const brokenLegacyMirror = {
-    agentId: 'agent-policy',
-    writeSoul: async () => {
-      throw new Error('filesystem unavailable')
-    },
+  const envelope = normalizeChannelEnvelope({
+    actor: { externalUserId: 'external-user' },
+    conversation: { externalConversationId: 'external-user', type: 'private' },
+    message: { externalMessageId: 'dup-1', receivedAt: 1_000 },
+    source: { adapterId: 'wechat', channelId: 'channel-1' },
+  })
+  for (const suffix of ['first', 'redelivered']) {
+    await channel._processChat('hello', {
+      envelope,
+      from: 'external-user',
+      isWeb: true,
+      messageId: `assistant-${suffix}`,
+      sid: 'redelivery-session',
+      userMessageId: `user-${suffix}`,
+    })
   }
-  const databaseShadow = new SessionPersistence({
-    agentId: 'agent-policy',
-    databaseStore: databasePrimary,
-    legacyStore: brokenLegacyMirror,
-    logger,
-    mode: 'database-shadow',
-  })
-  await assert.rejects(
-    databaseShadow.writeSoul('must alert'),
-    (error) =>
-      error instanceof PersistenceMirrorError && error.method === 'writeSoul',
-  )
+  assert.equal(llmCalls, 1)
+  assert.equal(await prisma.message.count({ where: { sessionId: 'redelivery-session' } }), 2)
 })
 
-test('ChannelStore mirrors transport configuration, strips model fields, and never retains plaintext tokens', async (t) => {
-  const { prisma, root } = await createFixture(t)
-  const file = path.join(root, 'channels.json')
+
+
+test('ChannelStore stores transport configuration without plaintext tokens or model fields', async (t) => {
+  const { prisma } = await createFixture(t)
   const encryptionKey = '44'.repeat(32)
-  const shadow = new ChannelStore({
+  const store = new ChannelStore({
     encryptionKey,
-    file,
-    mode: 'shadow',
     prisma,
   })
 
-  const created = await shadow.create({
+  const created = await store.create({
     agentId: 'agent-channel-store',
     config: { receive_mode: 'manual' },
     name: 'Mirror',
@@ -484,32 +429,23 @@ test('ChannelStore mirrors transport configuration, strips model fields, and nev
     protocol: 'onebot.v12',
     token: 'secret',
   })
-  await shadow.update(created.id, { status: 'running' })
+  await store.update(created.id, { status: 'running' })
   const row = await prisma.channel.findUnique({ where: { id: created.id } })
   assert.equal(JSON.parse(row.legacyJson).token, undefined)
   assert.equal(row.status, 'running')
 
-  const database = new ChannelStore({
-    encryptionKey,
-    file,
-    mode: 'database',
-    prisma,
-  })
+  const database = new ChannelStore({ encryptionKey, prisma })
   const restored = await database.get(created.id)
   assert.equal(restored.token, 'secret')
   assert.equal(restored.platform, 'qq')
   assert.equal(restored.protocol, 'onebot.v12')
   assert.deepEqual(restored.config, { receive_mode: 'manual' })
 
-  const databaseShadow = new ChannelStore({
-    encryptionKey,
-    file,
-    mode: 'database-shadow',
-    prisma,
-  })
-  await databaseShadow.update(created.id, { model: 'new-model' })
-  const legacy = JSON.parse(await fs.promises.readFile(file, 'utf8'))
-  assert.equal(legacy[0].model, undefined)
+  await database.update(created.id, { model: 'new-model' })
+  const afterUpdate = await prisma.channel.findUnique({ where: { id: created.id } })
+  assert.equal(JSON.parse(afterUpdate.legacyJson).model, undefined)
+  assert.throws(() => new ChannelStore({ file: 'channels.json', prisma }), /unsupported options: file/)
+  assert.throws(() => new ChannelStore({ mode: 'shadow', prisma }), /unsupported options: mode/)
 })
 
 test('database startup restores running channels from the database rather than stale legacy JSON', async (t) => {
@@ -531,8 +467,6 @@ test('database startup restores running channels from the database rather than s
 
   const store = new ChannelStore({
     encryptionKey: '55'.repeat(32),
-    file,
-    mode: 'database',
     prisma,
   })
   const created = await store.create({
@@ -563,7 +497,8 @@ test('database TriggerRegistry keeps metadata and execution audit in Prisma whil
     data: { agentId: 'agent-trigger-db', id: 'session-trigger-db' },
   })
   const dataDir = path.join(root, 'channels-data/triggers')
-  const registry = new TriggerRegistry({ dataDir, mode: 'database', prisma })
+  const registry = new TriggerRegistry({ dataDir, prisma })
+  assert.throws(() => new TriggerRegistry({ dataDir, mode: 'legacy', prisma }), /unsupported options: mode/)
 
   const created = await registry.create({
     agentId: 'agent-trigger-db',

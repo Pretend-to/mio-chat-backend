@@ -4,6 +4,7 @@
  * 支持通用指令：
  *   - /help 帮助菜单
  *   - /abort /crush /stop /cancel /interrupt /cut /break 任务中止与强插开启新对话
+ *   - /adjust <指令> 在当前任务检查点插入补充指令
  *   - /tools 查看固定的 Channel 工具策略
  *   - /think /reasoning 思考推理强度调节
  *   - /yolo Shell 审批跳过开关（按当前会话）
@@ -21,7 +22,9 @@
  *   - /context 当前话题记忆结晶查看
  *   - /delete 删除会话
  */
+import { randomUUID } from 'node:crypto'
 import { getAgentToolNames } from '../../lib/chat/llm/toolPolicy.js'
+import { getChatEventDispatcher } from '../../lib/chat/llm/events/ChatEventDispatcher.js'
 import { getTriggerService } from '../../lib/triggers/index.js'
 import {
   getSessionYolo,
@@ -31,7 +34,7 @@ import {
 export class SlashHandler {
   /**
    * @param {object} opts
-   * @param {import('../memory/MemoryStore.js').MemoryStore} opts.memory 记忆存储
+   * @param {import('../../lib/chat/persistence/SessionPersistence.js').SessionPersistence} opts.memory 记忆存储
    * @param {import('./BaseChannel.js').BaseChannel} opts.channel 关联的渠道实例
    */
   constructor({ memory, channel }) {
@@ -101,6 +104,7 @@ export class SlashHandler {
             '  • /help 帮助菜单',
             '  • /admin [status/claim <管理员码>] 查看或认证管理员身份',
             '  • /abort [新话语] 停止任务（后接文字时立即以此开启新对话，支持别名 /crush）',
+            '  • /adjust <补充指令> 在当前任务的工具检查点插入调整',
             '',
             '【模型与能力管理】',
             '  • /model [ls/名称/reset] 查看或切换模型',
@@ -140,9 +144,12 @@ export class SlashHandler {
         }
         let count = 0
         if (this.channel?.activeJobs && this.channel.activeJobs.size > 0) {
-          for (const [jobSid, job] of Array.from(
-            this.channel.activeJobs.entries(),
-          )) {
+          const targetSid = ctx.isWeb ? ctx.sid || ctx.sessionId : null
+          const jobs = targetSid
+            ? [[targetSid, this.channel.activeJobs.get(targetSid)]]
+            : Array.from(this.channel.activeJobs.entries())
+          for (const [jobSid, job] of jobs) {
+            if (!job) continue
             try {
               if (typeof job.abort === 'function') {
                 job.abort()
@@ -168,6 +175,39 @@ export class SlashHandler {
           return wrap(`⏹️ 已成功中止正在运行的任务 (${count} 个)`)
         }
         return wrap('当前没有正在执行的任务')
+      }
+
+      case 'adjust': {
+        if (!arg) return wrap('用法：/adjust <补充指令>')
+        const agentId = String(
+          ctx.agentId || this.memory?.agentId || this.channel?.memory?.agentId || '',
+        )
+        const sessionId = String((await active()) || '')
+        if (!agentId || !sessionId) {
+          return wrap('当前入口没有可调整的 Agent Session。')
+        }
+        const eventId = `adjust_${randomUUID()}`
+        const result = await getChatEventDispatcher().adjustActive({
+          agentId,
+          conversationKey: `agent:${agentId}:session:${sessionId}`,
+          eventId,
+          idempotencyKey: eventId,
+          instruction: arg,
+          principalId: ctx.principal?.id || null,
+          requestId: eventId,
+          sessionId,
+          source: ctx.isWeb ? 'web' : 'channel',
+        })
+        if (result?.status === 'accepted_for_checkpoint') {
+          return wrap('已将补充指令插入当前任务，将在当前工具步骤结束后并入后续处理。')
+        }
+        if (result?.status === 'defer_to_next_turn') {
+          return wrap('当前任务暂不在可插话阶段；这条指令没有插入，请等当前回复结束后再发送。')
+        }
+        if (result?.status === 'closed') {
+          return wrap('当前没有正在运行的任务可调整。')
+        }
+        return wrap('当前任务无法接收这条调整指令。')
       }
 
       case 'tools': {
@@ -639,15 +679,13 @@ export class SlashHandler {
         const session = await this.memory.getSession(cur)
         if (!session?.chat?.length) return wrap('当前会话没有可压缩的对话')
         const crystal = await this.memory.getCrystal(cur)
-        const pendingMemories =
-          typeof this.memory.getPendingMemories === 'function'
-            ? await this.memory.getPendingMemories(cur)
-            : []
+        const pendingMemories = await this.memory.getPendingMemories(cur)
         const result = await this.channel.llm.compact({
           chat: session.chat,
           crystal,
           keepTurns: 0,
           model: this.channel.model,
+          onUpdate: (chunk) => ctx.onCompactUpdate?.(chunk),
           pendingMemories,
           provider: this.channel.provider,
         })
@@ -655,11 +693,30 @@ export class SlashHandler {
           return wrap('当前上下文过短或压缩结果为空，未做任何修改')
         }
 
-        await this.memory.setCrystal(cur, result.summary)
-        const rotation = await this.memory.rotateChat(cur, 0)
-        if (typeof this.memory.clearPendingMemories === 'function') {
+        let rotation
+        try {
+          await this.memory.setCrystal(cur, result.summary)
+          rotation = await this.memory.rotateChat(cur, 0)
           await this.memory.clearPendingMemories(cur)
+        } catch (error) {
+          ctx.onCompactUpdate?.({
+            content: {
+              commit: false,
+              error: error?.message || String(error),
+              status: 'failed',
+            },
+            type: 'crystallize',
+          })
+          throw error
         }
+        ctx.onCompactUpdate?.({
+          content: {
+            commit: true,
+            status: 'finished',
+            summary: result.summary,
+          },
+          type: 'crystallize',
+        })
         return wrap(
           `✅ 上下文压缩完成：已生成 ${result.summary.length} 字符的会话结晶，归档 ${rotation?.removedCount || 0} 条原始消息。下一轮将不再携带旧对话 few-shot。`,
         )

@@ -8,6 +8,10 @@ import { TriggerRunner } from '../../lib/triggers/TriggerRunner.js'
 import { WakeInjector } from '../../lib/triggers/WakeInjector.js'
 import { TriggerService } from '../../lib/triggers/index.js'
 import SentinelTool from '../../lib/plugins/ai-plugin/tools/sentinel.js'
+import { createPrismaFixture } from '../helpers/prismaFixture.js'
+
+let prisma
+let closePrisma
 
 const TEST_DATA_DIR = path.join(
   process.cwd(),
@@ -17,9 +21,25 @@ const TEST_DATA_DIR = path.join(
 
 test.before(async () => {
   await fs.promises.mkdir(TEST_DATA_DIR, { recursive: true })
+  const fixture = await createPrismaFixture()
+  prisma = fixture.prisma
+  closePrisma = fixture.close
+  for (const [agentId, sessionIds] of [
+    ['wechat-master', ['session_123', 's_test']],
+    ['agent-dedupe', ['session_dedupe']],
+    ['agent-running', ['session_running']],
+    ['agent-reconcile', ['session_reconcile']],
+  ]) {
+    await prisma.agent.create({ data: { id: agentId } })
+    for (const id of sessionIds) await prisma.session.create({ data: { agentId, id } })
+  }
+  await prisma.channel.create({
+    data: { id: 'sentinel-test-channel', status: 'running', type: 'channel' },
+  })
 })
 
 test.after(async () => {
+  await closePrisma()
   await fs.promises.rm(TEST_DATA_DIR, { recursive: true, force: true })
 })
 
@@ -54,7 +74,7 @@ test('WakeProtocol: 标准契约解析与异常保护', () => {
 })
 
 test('TriggerRegistry: 触发器增删改查与脚本文件管理', async () => {
-  const registry = new TriggerRegistry({ dataDir: TEST_DATA_DIR })
+  const registry = new TriggerRegistry({ dataDir: TEST_DATA_DIR, prisma })
 
   // 1. 创建 script 触发器并自动落盘脚本文件
   const created = await registry.create({
@@ -135,34 +155,29 @@ test('TriggerRunner: 真实子进程安全执行与超时保护', async () => {
   assert.equal(silentRes.wake, false)
 })
 
-test('WakeInjector: 会话注入、冷却限制与 once 生命周期自动销毁', async () => {
+test('WakeInjector: once trigger stays queued until absorption', async () => {
   const registry = new TriggerRegistry({
     dataDir: path.join(TEST_DATA_DIR, 'injector'),
+    prisma,
   })
-  const injectedMessages = []
-
-  const mockChannel = {
-    appendUserMessage: async (sid, text, opts) => {
-      injectedMessages.push({ sid, text, opts })
+  const submitted = []
+  const dispatcher = {
+    onWorkItemStatus() {
+      return () => {}
     },
-    memory: {
-      agentId: 'wechat-master',
-      getActiveSession: async () => 'session_123',
+    async submitWake(request) {
+      submitted.push(request)
+      return {
+        eventId: 'event_trigger_once',
+        status: 'accepted',
+        workItemId: 'work_trigger_once',
+      }
     },
-  }
-
-  const mockRuntime = {
-    running: new Map([['c_1', { chn: mockChannel }]]),
   }
 
   const injector = new WakeInjector({
+    dispatcher,
     registry,
-    channelRuntime: mockRuntime,
-    sessionTurnService: {
-      runTurn: async ({ sessionId, text, ...opts }) => {
-        injectedMessages.push({ opts, sid: sessionId, text })
-      },
-    },
   })
 
   // 1. 创建 once 触发器
@@ -181,31 +196,204 @@ test('WakeInjector: 会话注入、冷却限制与 once 生命周期自动销毁
     data: { price: 79000 },
   })
 
-  assert.equal(wakeRes.injected, true)
-  assert.equal(injectedMessages.length, 1)
-  assert.ok(injectedMessages[0].text.includes('system：trigger 系统监测到事件'))
-  assert.ok(injectedMessages[0].text.includes('【警报】BTC拉升 (价格: 79000)'))
+  assert.equal(wakeRes.accepted, true)
+  assert.equal(wakeRes.injected, false)
+  assert.equal(wakeRes.status, 'queued')
+  assert.equal(submitted.length, 1)
+  assert.equal(submitted[0].agentId, 'wechat-master')
+  assert.equal(submitted[0].sessionId, 'session_123')
+  assert.equal(submitted[0].wakeKind, 'trigger_wake')
+  assert.ok(submitted[0].instruction.includes('system：trigger 系统监测到事件'))
+  assert.ok(submitted[0].instruction.includes('【警报】BTC拉升 (价格: 79000)'))
 
-  // 3. 验证 once 模式触发器已自动销毁
+  // queued is durable acceptance, but does not consume once until actual start.
   const afterTrigger = await registry.get('trg_once_test')
-  assert.equal(afterTrigger, null, 'once 模式触发器唤醒后应自动销毁')
+  assert.ok(afterTrigger, 'queued once trigger must remain until work starts')
+  assert.equal(afterTrigger.wakeCount, 0)
 
-  // 4. 验证审计日志依然保留
+  // Actual absorption updates the source audit and consumes the once trigger.
+  const [queuedExecution] = await registry.listExecutions('trg_once_test')
+  assert.equal(queuedExecution.status, 'queued')
+  assert.equal(queuedExecution.wake, false)
+  await injector._handleWorkItemStatus({
+    previousStatus: 'queued',
+    status: 'absorbed',
+    workItem: {
+      agentId: 'wechat-master',
+      eventId: 'event_trigger_once',
+      originRef: submitted[0].originRef,
+      sessionId: 'session_123',
+    },
+  })
+  assert.equal(await registry.get('trg_once_test'), null)
   const logs = await registry.listExecutions('trg_once_test')
   assert.equal(logs.length, 1)
-  assert.equal(logs[0].status, 'woken')
+  assert.equal(logs[0].status, 'absorbed')
+  assert.equal(logs[0].wake, true)
+})
+
+test('WakeInjector: queued trigger wake is deduplicated after injector restart', async () => {
+  const registry = new TriggerRegistry({
+    dataDir: path.join(TEST_DATA_DIR, 'injector-dedupe'),
+    prisma,
+  })
+  const trigger = await registry.create({
+    agentId: 'agent-dedupe',
+    id: 'trg_dedupe',
+    mode: 'once',
+    sessionId: 'session_dedupe',
+  })
+  let openItem = null
+  let submitCount = 0
+  const dispatcher = {
+    onWorkItemStatus: () => () => {},
+    listOpenWorkItems: async () => (openItem ? [openItem] : []),
+    submitWake: async (request) => {
+      submitCount += 1
+      openItem = {
+        agentId: request.agentId,
+        eventId: 'event_dedupe',
+        id: 'work_dedupe',
+        originRef: request.originRef,
+        sessionId: request.sessionId,
+        status: 'queued',
+      }
+      return {
+        eventId: openItem.eventId,
+        status: 'accepted',
+        workItemId: openItem.id,
+      }
+    },
+  }
+  const first = new WakeInjector({ dispatcher, registry })
+  const firstResult = await first.processWake(trigger, { reason: 'once' })
+  const restarted = new WakeInjector({ dispatcher, registry })
+  const secondResult = await restarted.processWake(trigger, { reason: 'once' })
+
+  assert.equal(firstResult.status, 'queued')
+  assert.equal(secondResult.status, 'queued')
+  assert.equal(secondResult.eventId, 'event_dedupe')
+  assert.equal(submitCount, 1)
+  assert.equal((await registry.listExecutions(trigger.id)).length, 1)
+})
+
+test('WakeInjector: persistent counters advance once when work starts', async () => {
+  const registry = new TriggerRegistry({
+    dataDir: path.join(TEST_DATA_DIR, 'injector-running'),
+    prisma,
+  })
+  const trigger = await registry.create({
+    agentId: 'agent-running',
+    id: 'trg_running',
+    mode: 'persistent',
+    sessionId: 'session_running',
+  })
+  let submitted
+  const injector = new WakeInjector({
+    dispatcher: {
+      onWorkItemStatus: () => () => {},
+      submitWake: async (request) => {
+        submitted = request
+        return {
+          eventId: 'event_running',
+          status: 'accepted',
+          workItemId: 'work_running',
+        }
+      },
+    },
+    registry,
+  })
+
+  await injector.processWake(trigger, { reason: 'started' })
+  const [queued] = await registry.listExecutions(trigger.id)
+  assert.equal(queued.wake, false)
+  assert.equal((await registry.get(trigger.id)).wakeCount, 0)
+
+  const workItem = {
+    agentId: trigger.agentId,
+    eventId: 'event_running',
+    originRef: submitted.originRef,
+    sessionId: trigger.sessionId,
+  }
+  await injector._handleWorkItemStatus({
+    previousStatus: 'queued',
+    status: 'running',
+    workItem,
+  })
+  await injector._handleWorkItemStatus({
+    previousStatus: 'running',
+    status: 'running',
+    workItem,
+  })
+
+  const started = await registry.get(trigger.id)
+  const [execution] = await registry.listExecutions(trigger.id)
+  assert.equal(started.wakeCount, 1)
+  assert.equal(started.fireCount, 1)
+  assert.ok(started.lastFiredAt)
+  assert.equal(execution.status, 'running')
+  assert.equal(execution.wake, true)
+})
+
+test('WakeInjector: startup reconciles an already-running open work item', async () => {
+  const registry = new TriggerRegistry({
+    dataDir: path.join(TEST_DATA_DIR, 'injector-reconcile'),
+    prisma,
+  })
+  const trigger = await registry.create({
+    agentId: 'agent-reconcile',
+    id: 'trg_reconcile',
+    mode: 'persistent',
+    sessionId: 'session_reconcile',
+  })
+  const execution = await registry.recordExecution({
+    reason: 'recovered wake',
+    status: 'queued',
+    triggerId: trigger.id,
+    wake: false,
+  })
+  const openWorkItem = {
+    agentId: trigger.agentId,
+    eventId: 'event_reconcile',
+    id: 'work_reconcile',
+    originRef: `trigger_execution:${execution.id}:trigger:${trigger.id}`,
+    sessionId: trigger.sessionId,
+    status: 'running',
+  }
+  const dispatcher = {
+    onWorkItemStatus: () => () => {},
+    listOpenWorkItems: async () => [openWorkItem],
+  }
+  const injector = new WakeInjector({ dispatcher, registry })
+
+  const reconciled = await injector.reconcileOpenWorkItems()
+
+  assert.equal(reconciled, 1)
+  const updatedTrigger = await registry.get(trigger.id)
+  const [updatedExecution] = await registry.listExecutions(trigger.id)
+  assert.equal(updatedTrigger.wakeCount, 1)
+  assert.equal(updatedTrigger.fireCount, 1)
+  assert.equal(updatedExecution.status, 'running')
+  assert.equal(updatedExecution.wake, true)
 })
 
 test('sentinel Tool: 两步流创建、试跑、管理全生命周期', async () => {
   const registry = new TriggerRegistry({
     dataDir: path.join(TEST_DATA_DIR, 'tool-service'),
+    prisma,
   })
   const service = new TriggerService({
     injector: new WakeInjector({
-      registry,
-      sessionTurnService: {
-        runTurn: async () => ({ deliveryStatus: 'not_requested' }),
+      dispatcher: {
+        listOpenWorkItems: async () => [],
+        onWorkItemStatus: () => () => {},
+        submitWake: async () => ({
+          eventId: 'event_sentinel_tool',
+          status: 'accepted',
+          workItemId: 'work_sentinel_tool',
+        }),
       },
+      registry,
     }),
     registry,
   })
@@ -323,7 +511,14 @@ test('sentinel Tool: 两步流创建、试跑、管理全生命周期', async ()
   const found = listRes.triggers.find((t) => t.id === 'tool_test_trg')
   assert.ok(found)
   assert.ok(
-    ['running', 'waking', 'woken', 'restarting', 'stopped'].includes(found.status),
+    [
+      'running',
+      'waking',
+      'wake_queued',
+      'woken',
+      'restarting',
+      'stopped',
+    ].includes(found.status),
     JSON.stringify(found),
   )
 

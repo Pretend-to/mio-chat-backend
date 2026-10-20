@@ -1,13 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert'
-import os from 'node:os'
-import path from 'node:path'
-import fs from 'node:fs'
 import { ChannelStore } from '../../channels/index.js'
+import { createPrismaFixture } from '../helpers/prismaFixture.js'
 
-test('ChannelStore 渠道配置持久化', async () => {
-  const file = path.join(os.tmpdir(), `channels-${Date.now()}.json`)
-  const store = new ChannelStore({ file })
+test('ChannelStore 渠道配置持久化', async t => {
+  const { prisma } = await createPrismaFixture(t)
+  const store = new ChannelStore({ encryptionKey: '11'.repeat(32), prisma })
 
   await test('默认字段保持平台无关，token 不明文返回', async () => {
     const c = await store.create({ name: '我的微信' })
@@ -53,5 +51,4 @@ test('ChannelStore 渠道配置持久化', async () => {
     assert.strictEqual(await store.remove(c.id), false, '删不存在的返回 false')
   })
 
-  fs.rmSync(file, { force: true })
 })

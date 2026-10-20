@@ -1,9 +1,29 @@
 import logger from './utils/logger.js'
+import { monitorEventLoopDelay } from 'node:perf_hooks'
 // Import taskScheduler from './lib/corn.js'
 
 // 全局变量存储服务器实例
 let httpServer = null
 let isShuttingDown = false
+let stopSessionWorkRunner = null
+
+function startEventLoopDelayMonitor() {
+  const delay = monitorEventLoopDelay({ resolution: 20 })
+  delay.enable()
+
+  const timer = setInterval(() => {
+    const maxMs = delay.max / 1e6
+    if (maxMs >= 250) {
+      const p99Ms = delay.percentile(99) / 1e6
+      logger.warn(
+        `[EventLoop] 最近约5秒检测到主线程延迟: p99=${p99Ms.toFixed(1)}ms max=${maxMs.toFixed(1)}ms`,
+      )
+    }
+    delay.reset()
+  }, 5000)
+
+  timer.unref()
+}
 
 /**
  * 检查并执行自动迁移（包括 OneBot 配置迁移）
@@ -264,6 +284,9 @@ async function gracefulShutdown(signal) {
       logger.warn('清理哨兵进程时警告:', error.message)
     }
 
+    stopSessionWorkRunner?.()
+    stopSessionWorkRunner = null
+
     // 1. 关闭 Socket.IO 服务器
     try {
       if (global.middleware && global.middleware.socketServer) {
@@ -366,6 +389,8 @@ async function gracefulShutdown(signal) {
 
 // 应用启动流程
 async function startApp() {
+  startEventLoopDelayMonitor()
+
   try {
     // 自动初始化：从 lib/initialization 导入并执行
     const { performFullInitialization } =
@@ -421,9 +446,46 @@ async function startApp() {
         logger.warn('[ChannelRuntime] 自动恢复渠道时出错:', e.message)
       }
 
-      // 渠道恢复完成后再启动哨兵，避免启动窗口把目标 Channel 误判为不可用。
       const { getTriggerService } = await import('./lib/triggers/index.js')
-      await getTriggerService().startScheduler()
+      const triggerService = getTriggerService()
+      triggerService.injector.startListening?.()
+
+      // Install the durable Session work runner at the composition root so
+      // accepted work resumes even if no Cron or Trigger module is imported
+      // before the pending inbox is drained.
+      try {
+        const [{ SessionTurnService }, { getChatEventDispatcher }] =
+          await Promise.all([
+            import('./lib/chat/sessions/SessionTurnService.js'),
+            import('./lib/chat/llm/events/ChatEventDispatcher.js'),
+          ])
+        const sessionTurnService = new SessionTurnService({ channelRuntime })
+        const dispatcher = getChatEventDispatcher()
+        // 装不上 runner 是结构性故障：启动失败是正确行为。
+        stopSessionWorkRunner = dispatcher.registerWakeRunner((workItem) =>
+          sessionTurnService.runWorkItem(workItem),
+        )
+        // 恢复个别待处理工作失败 != 服务不可用：记录并继续启动。
+        // 这些工作项保持原状态，等下次启动或人工对账再收。
+        // 让它把整个进程拖垮，等于拿一次局部故障换一次全站不可用。
+        try {
+          const resumed = await dispatcher.resumePending()
+          if (resumed > 0) {
+            logger.info(`[SessionWork] 已恢复 ${resumed} 条待处理工作`)
+          }
+        } catch (recoveryError) {
+          logger.error(
+            '[SessionWork] 恢复待处理工作失败（服务继续启动）:',
+            recoveryError.message,
+          )
+        }
+      } catch (e) {
+        logger.error('[SessionWork] 安装 Session 工作 runner 失败:', e.message)
+        throw e
+      }
+
+      // 渠道恢复完成后再启动哨兵，避免启动窗口把目标 Channel 误判为不可用。
+      await triggerService.startScheduler()
 
       await taskScheduler.initialize(global.middleware.llm, channelRuntime)
     } else {

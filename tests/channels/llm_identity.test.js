@@ -5,15 +5,45 @@ import { BaseChannel } from '../../channels/common/BaseChannel.js'
 import { createBackendLlm } from '../../channels/llm.js'
 import SessionTurnService from '../../lib/chat/sessions/SessionTurnService.js'
 
+// SessionTurnService 的调用方（Web Agent / Task / Trigger 入口）自己持租约，并把它
+// 传进这一轮 turn。单元测试里存储层是假的，但「谁持租约」不是可选项 —— 用一个 stub
+// 明确声明这个前置条件，而不是让渠道去构造需要真 prisma 的 coordinator。
+const leaseStub = {
+  withSessionLease: async ({ agentId, sessionId }, fn) =>
+    await fn({
+      sessionLease: { agentId, assertLease: async () => {}, sessionId },
+    }),
+}
+
 function createMemory(agentId = 'agent-1') {
   const messages = []
+  const drafts = new Set()
+  let draftSeq = 0
+  const append = (message) => {
+    messages.push(message)
+    return { chat: [...messages] }
+  }
   return {
     agentId,
-    appendToChat: async (_sessionId, message) => {
-      messages.push(message)
-      return { chat: [...messages] }
+    appendAssistantChunk: async () => null,
+    appendToChat: async (_sessionId, message) => append(message),
+    appendUserMessage: async (_sessionId, message) => append(message),
+    appendUserMessageOnce: async (_sessionId, message) => {
+      append(message)
+      return { id: message.id, inserted: true }
+    },
+    beginAssistantMessage: async () => {
+      draftSeq += 1
+      const messageId = `draft-${draftSeq}`
+      drafts.add(messageId)
+      return messageId
     },
     ensure: async () => {},
+    finalizeAssistantMessage: async (messageId, message) => {
+      drafts.delete(messageId)
+      append(message)
+      return true
+    },
     getAgentMeta: async () => 0,
     getCrystal: async () => '',
     getPendingMemories: async () => [],
@@ -82,7 +112,8 @@ test('backend LLM preserves SubAgent wake identity through the permission event'
     text: 'SubAgent 已完成，请读取结果',
   })
 
-  assert.equal(observed.source, 'subagent')
+  assert.equal(observed.source, 'channel')
+  assert.equal(observed.channelSource, 'subagent')
   assert.equal(observed.isWake, true)
   assert.equal(observed.triggerKind, 'task')
   assert.equal(observed.principal.isAdmin, true)
@@ -94,6 +125,7 @@ test('SessionTurnService defaults identity only for trusted runtime sources', as
   const observed = []
   const memory = createMemory()
   const service = new SessionTurnService({
+    sessionWorkCoordinator: leaseStub,
     llm: {
       process: async (context) => {
         observed.push(context)
@@ -153,6 +185,7 @@ test('TaskScheduler must inject a backend bridge into SessionTurnService', async
   )
 
   const service = new SessionTurnService({
+    sessionWorkCoordinator: leaseStub,
     llm: createBackendLlm({ llmService: rawLlmService }),
     persistenceFactory: async () => memory,
     prisma: {
@@ -193,6 +226,7 @@ test('SessionTurnService executes with the fresh Agent model and uses a live Cha
   const memory = createMemory()
   const boundChannel = createOutputPort()
   const service = new SessionTurnService({
+    sessionWorkCoordinator: leaseStub,
     channelRuntime: {
       running: new Map([
         [
@@ -267,6 +301,7 @@ test('SessionTurnService executes and persists without a binding or with an offl
     outboundEnabled: true,
   }
   const service = new SessionTurnService({
+    sessionWorkCoordinator: leaseStub,
     channelRuntime: { running: new Map() },
     llm: {
       process: async (context) => {
@@ -315,6 +350,7 @@ test('SessionTurnService never sends through a binding with outbound disabled', 
   const boundChannel = createOutputPort()
   let llmCalls = 0
   const service = new SessionTurnService({
+    sessionWorkCoordinator: leaseStub,
     channelRuntime: {
       running: new Map([
         [
@@ -376,6 +412,7 @@ test('SessionTurnService reloads Agent model changes without mutating Channel mi
     provider: 'provider-v1',
   }
   const service = new SessionTurnService({
+    sessionWorkCoordinator: leaseStub,
     llm: {
       process: async ({ model, provider }) => {
         selectedModels.push(`${provider}/${model}`)
@@ -433,6 +470,11 @@ test('BaseChannel outboundEnabled blocks realtime protocol output but not execut
   await channel.appendUserMessage('session-1', 'realtime inbound', {
     from: 'recipient-1',
     isWeb: false,
+    sessionLease: {
+      agentId: 'agent-1',
+      assertLease: async () => {},
+      sessionId: 'session-1',
+    },
   })
 
   assert.equal(sends, 0)

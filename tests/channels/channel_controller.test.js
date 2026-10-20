@@ -6,6 +6,7 @@ import path from 'node:path'
 
 import { ChannelStore } from '../../channels/index.js'
 import * as controller from '../../lib/server/http/controllers/channelController.js'
+import { createPrismaFixture } from '../helpers/prismaFixture.js'
 
 function response() {
   const res = { body: null, statusCode: 200 }
@@ -32,7 +33,8 @@ test('Channel 管理 API 使用严格 DTO 创建并认证原生 iLink 连接', a
     path.join(os.tmpdir(), 'channel-controller-ilink-'),
   )
   t.after(() => fs.promises.rm(tempDir, { force: true, recursive: true }))
-  const store = new ChannelStore({ file: path.join(tempDir, 'channels.json') })
+  const { prisma } = await createPrismaFixture(t)
+  const store = new ChannelStore({ encryptionKey: '33'.repeat(32), prisma })
   const qrClient = {
     async getLoginQrCode() {
       return {

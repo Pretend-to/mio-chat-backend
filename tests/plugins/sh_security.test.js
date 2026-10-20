@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import ShSecurityHook from '../../lib/plugins/terminal-pty/hooks/shSecurity.js'
 import { shellPolicyService } from '../../lib/database/services/ShellPolicyService.js'
+import { ChatEventFactory } from '../../lib/chat/llm/events/ChatEventFactory.js'
 
 test('bash_input cannot use either automatic allow path and taints its PTY', async (t) => {
   const originalEvaluate = shellPolicyService.evaluate
@@ -105,6 +106,55 @@ test('SubAgent tasks may wait for parent-window approval while scheduled tasks f
   assert.equal(subagentAllowed, true)
   assert.equal(scheduledAllowed, false)
   assert.match(scheduledContext.ctx?.error || scheduledContext.error, /后台任务/)
+  assert.equal(approvals, 1)
+})
+
+test('factory-created channel events preserve the SubAgent shell approval distinction', async (t) => {
+  const originalEvaluate = shellPolicyService.evaluate
+  shellPolicyService.evaluate = async () => ({
+    reason: 'no-rule-hit',
+    verdict: 'unknown',
+  })
+  t.after(() => {
+    shellPolicyService.evaluate = originalEvaluate
+  })
+
+  const makeEvent = (subagentRunId) => ChatEventFactory.createForChannel({
+    ctx: {
+      agentId: 'agent-shell',
+      channel: { channelType: 'session' },
+      from: 'runtime',
+      isTask: true,
+      messageId: `message-${subagentRunId || 'scheduled'}`,
+      principal: { id: 'system:shell', isAdmin: true, role: 'system_admin' },
+      sessionId: 'session-shell',
+      subagentRunId,
+    },
+    messages: [],
+    settings: {},
+  })
+  const hook = new ShSecurityHook({ namespace: 'terminal-pty' })
+  let approvals = 0
+  const tool = {
+    name: 'bash',
+    requestUserApproval: async () => {
+      approvals += 1
+      return { approved: true }
+    },
+  }
+  const subagentAllowed = await hook.execute({
+    event: makeEvent('run-shell'),
+    params: { command: 'custom-command' },
+    tool,
+  })
+  const scheduledAllowed = await hook.execute({
+    event: makeEvent(null),
+    params: { command: 'custom-command' },
+    tool,
+  })
+
+  assert.equal(subagentAllowed, true)
+  assert.equal(scheduledAllowed, false)
   assert.equal(approvals, 1)
 })
 

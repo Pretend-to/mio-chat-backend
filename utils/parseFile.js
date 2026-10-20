@@ -78,18 +78,12 @@ export async function parseFileWithUrl(fileUrl) {
       return await parseFile(filePath)
     }
 
-    // 2. 处理虚拟存储路径 /f/up/... 或 /f/gen/... 或本地绝对/相对路径
+    // 2. 处理虚拟存储路径 /f/up/... 或本地绝对/相对路径
     if (fileUrl.startsWith('/f/up/')) {
       const parts = fileUrl.split('/')
       const type = parts[3]
       const name = parts[4]?.split('?')[0]
       const filePath = path.join(process.cwd(), 'output', 'uploaded', type, name)
-      return await parseFile(filePath)
-    }
-    if (fileUrl.startsWith('/f/gen/')) {
-      const parts = fileUrl.split('/')
-      const name = parts[4]?.split('?')[0]
-      const filePath = path.join(process.cwd(), 'output', 'generated', 'file', name)
       return await parseFile(filePath)
     }
     if (path.isAbsolute(fileUrl) || fileUrl.startsWith('./') || fileUrl.startsWith('../')) {

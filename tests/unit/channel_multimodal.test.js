@@ -1,9 +1,56 @@
-import { test, describe } from 'node:test'
+import { test, describe, after } from 'node:test'
 import assert from 'node:assert/strict'
+import os from 'node:os'
+import path from 'node:path'
+import fs from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import crypto from 'node:crypto'
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
+import { PrismaClient } from '@prisma/client'
 import { createBackendLlm } from '../../channels/llm.js'
-import { MemoryStore } from '../../channels/memory/MemoryStore.js'
+import { DatabaseMemoryStore } from '../../lib/chat/persistence/DatabaseMemoryStore.js'
 import { WechatChannel } from '../../channels/wechat/WechatChannel.js'
 import { convertAudioToSilk } from '../../channels/wechat/audioHelper.js'
+
+// 每个用例一个临时 sqlite 库；这里统一持有句柄，after 里一次性拆除，
+// 用例中途断言失败也不会漏掉 $disconnect。
+const fixtures = []
+
+async function createPrismaFixture(agentId) {
+  const databasePath = path.join(
+    os.tmpdir(),
+    `mio-mm-${process.pid}-${crypto.randomUUID()}.db`,
+  )
+  execFileSync(
+    path.join(process.cwd(), 'node_modules/.bin/prisma'),
+    [
+      'db',
+      'push',
+      '--schema',
+      path.join(process.cwd(), 'prisma/schema.prisma'),
+      '--url',
+      `file:${databasePath}`,
+    ],
+    { env: { ...process.env, RUST_LOG: 'debug' }, stdio: 'ignore' },
+  )
+  const prisma = new PrismaClient({
+    adapter: new PrismaBetterSqlite3({ url: `file:${databasePath}` }),
+  })
+  await prisma.$connect()
+  await prisma.agent.create({ data: { id: agentId } })
+  const memory = new DatabaseMemoryStore({ agentId, prisma })
+  await memory.ensure()
+  const fixture = { databasePath, memory, prisma }
+  fixtures.push(fixture)
+  return fixture
+}
+
+after(async () => {
+  for (const { databasePath, prisma } of fixtures) {
+    await prisma.$disconnect()
+    fs.rmSync(databasePath, { force: true })
+  }
+})
 
 describe('Channel Multi-Modal & ExtraRender Pipeline Test', () => {
   test('convertAudioToSilk should successfully transcode silent PCM/WAV to Silk v3 format with 0x02 prefix', async () => {
@@ -26,10 +73,7 @@ describe('Channel Multi-Modal & ExtraRender Pipeline Test', () => {
   })
 
   test('WechatChannel should send audio extraRender as a shared file (mp3/wav) since native VOICE is disabled', async () => {
-    const memory = new MemoryStore({
-      agentId: 'test-multimodal-agent',
-      storageDir: './data/test-channels',
-    })
+    const { memory } = await createPrismaFixture('test-multimodal-agent')
     const session = await memory.createSession({
       title: 'Test MultiModal Session',
     })
@@ -140,10 +184,7 @@ describe('Channel Multi-Modal & ExtraRender Pipeline Test', () => {
   })
 
   test('WechatChannel should degrade file extraRender to download-link notice since native FILE send is disabled', async () => {
-    const memory = new MemoryStore({
-      agentId: 'test-multimodal-agent-2',
-      storageDir: './data/test-channels',
-    })
+    const { memory } = await createPrismaFixture('test-multimodal-agent-2')
     const session = await memory.createSession({
       title: 'Test Share File Session',
     })
@@ -231,10 +272,7 @@ describe('Channel Multi-Modal & ExtraRender Pipeline Test', () => {
   })
 
   test('WechatChannel should include webpage URL when publish extraRender of type link is emitted', async () => {
-    const memory = new MemoryStore({
-      agentId: 'test-multimodal-agent-3',
-      storageDir: './data/test-channels',
-    })
+    const { memory } = await createPrismaFixture('test-multimodal-agent-3')
     const session = await memory.createSession({
       title: 'Test Publish Webpage Session',
     })
@@ -332,10 +370,7 @@ describe('Channel Multi-Modal & ExtraRender Pipeline Test', () => {
   })
 
   test('Channel adapter should receive full structured data in doSendLink when extraRender of type link is emitted', async () => {
-    const memory = new MemoryStore({
-      agentId: 'test-multimodal-agent-4',
-      storageDir: './data/test-channels',
-    })
+    const { memory } = await createPrismaFixture('test-multimodal-agent-4')
     const session = await memory.createSession({
       title: 'Test Structured Link Session',
     })

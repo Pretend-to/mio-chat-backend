@@ -5,6 +5,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { ChannelStore } from '../../channels/index.js'
 import { ChannelRuntime } from '../../channels/ChannelRuntime.js'
+import { createPrismaFixture } from '../helpers/prismaFixture.js'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -101,9 +102,9 @@ test('ChannelRuntime keeps realtime model fields as synchronized Agent compatibi
 })
 
 test('ChannelStore + ChannelRuntime：渠道配置持久化 + 运行时启停', async (t) => {
-  const file = path.join(os.tmpdir(), `ch-${Date.now()}.json`)
+  const { prisma, close } = await createPrismaFixture()
   const base = path.join(os.tmpdir(), `mem-${Date.now()}`)
-  const store = new ChannelStore({ file })
+  const store = new ChannelStore({ encryptionKey: '22'.repeat(32), prisma })
   const bindings = new Map()
   const runtime = new ChannelRuntime({
     bindingResolver: async (channelId) => bindings.get(channelId) || [],
@@ -113,11 +114,6 @@ test('ChannelStore + ChannelRuntime：渠道配置持久化 + 运行时启停', 
     llm: { process: async () => ({ text: 'echo' }) },
     identityService,
     persistenceMode: 'legacy',
-  })
-  t.after(async () => {
-    await runtime.stopAll()
-    fs.rmSync(file, { force: true })
-    fs.rmSync(base, { recursive: true, force: true })
   })
 
   await test('渠道配置：create 默认字段 + 脱敏', async () => {
@@ -269,6 +265,9 @@ test('ChannelStore + ChannelRuntime：渠道配置持久化 + 运行时启停', 
     assert.strictEqual(await store.remove(c.id), true)
   })
 
-  fs.rmSync(file, { force: true })
-  fs.rmSync(base, { recursive: true, force: true })
+  t.after(async () => {
+    await runtime.stopAll()
+    await close()
+    fs.rmSync(base, { recursive: true, force: true })
+  })
 })

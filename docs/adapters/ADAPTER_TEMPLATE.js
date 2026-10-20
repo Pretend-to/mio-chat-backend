@@ -59,7 +59,7 @@ export default class CustomAdapter extends BaseLLMAdapter {
         if (chunk.content) {
           e.update({ type: 'content', content: chunk.content })
         }
-        if (!timeMetrics.firstTokenTime) timeMetrics.firstTokenTime = Date.now()
+        if (!timeMetrics.firstTokenTime) this.markFirstTokenTime(e, timeMetrics)
         if (chunk.usage) e.lastUsage = chunk.usage // 非常重要，用于后续审计
       }
       */

@@ -203,14 +203,15 @@ test('Crystallization - Memory Tool integration', async (t) => {
     assert.strictEqual(result.zone, 'long_term_profile');
     assert.ok(result.summary.includes('<long_term_profile>\nUser is a developer\n</long_term_profile>'));
     assert.strictEqual(event.body.settings.previous_summary, '');
-    assert.strictEqual(event.body.settings.pending_memory_preview, result.summary);
+    // 返回值里必须带上那条事件：前端靠 toolcall 的返回结果更新自己的镜像
+    assert.deepStrictEqual(result.event, pending[0]);
     assert.deepStrictEqual(pending, [{
       action: 'add', content: 'User is a developer', target: '', zone: 'long_term_profile',
     }]);
     assert.deepStrictEqual(event.body.settings.pending_memory_events, pending);
   });
 
-  await t.test('multiple memory calls compose only in the request-local preview', async () => {
+  await t.test('multiple memory calls compose through the event buffer', async () => {
     const tool = new Memory();
     const pending = [];
     const committed = '<long_term_profile>Existing fact</long_term_profile>';

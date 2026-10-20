@@ -1,12 +1,16 @@
 import { test } from 'node:test'
 import assert from 'node:assert'
+import crypto from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
+import { PrismaClient } from '@prisma/client'
 
 global.logger = global.logger || console
 
-import { MemoryStore } from '../../channels/memory/index.js'
+import { DatabaseMemoryStore } from '../../lib/chat/persistence/DatabaseMemoryStore.js'
 import { OneBotChannel } from '../../channels/onebots/OneBotChannel.js'
 import sessions from '../../lib/server/socket.io/services/sessions.js'
 
@@ -23,6 +27,30 @@ function createMockClient() {
     },
     sent,
   }
+}
+
+async function createPrismaFixture(name) {
+  const databasePath = path.join(
+    os.tmpdir(),
+    `mio-${name}-${process.pid}-${crypto.randomUUID()}.db`,
+  )
+  execFileSync(
+    path.join(process.cwd(), 'node_modules/.bin/prisma'),
+    [
+      'db',
+      'push',
+      '--schema',
+      path.join(process.cwd(), 'prisma/schema.prisma'),
+      '--url',
+      `file:${databasePath}`,
+    ],
+    { env: { ...process.env, RUST_LOG: 'debug' }, stdio: 'ignore' },
+  )
+  const prisma = new PrismaClient({
+    adapter: new PrismaBetterSqlite3({ url: `file:${databasePath}` }),
+  })
+  await prisma.$connect()
+  return { databasePath, prisma }
 }
 
 async function waitForAgentMeta(memory, key, expected) {
@@ -43,11 +71,9 @@ async function waitForSentCount(client, expected, timeoutMs = 1500) {
 }
 
 test('集成测试 1：渠道用户消息入站与 LLM 流式推流实时广播至 Web 客户端', async () => {
-  const baseDir = path.join(
-    os.tmpdir(),
-    `mio-sync-test-${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-  )
-  const memory = new MemoryStore({ agentId: 'ch_wechat_100', baseDir })
+  const { databasePath, prisma } = await createPrismaFixture('sync-test')
+  const memory = new DatabaseMemoryStore({ agentId: 'ch_wechat_100', prisma })
+  await memory.ensure()
   await memory.writeSoul('你是桐乃助手')
 
   const client = createMockClient()
@@ -149,7 +175,7 @@ test('集成测试 1：渠道用户消息入站与 LLM 流式推流实时广播�
     assert.strictEqual(
       savedToken,
       'CTX_TOKEN_ABC',
-      'contextToken 必须成功持久化到 MemoryStore',
+      'contextToken 必须成功持久化到记忆存储',
     )
   } catch (err) {
     console.error('TEST 1 ERROR:', err)
@@ -157,16 +183,15 @@ test('集成测试 1：渠道用户消息入站与 LLM 流式推流实时广播�
   } finally {
     sessions.pool.delete('user_admin_1')
     sessions.cache.delete('user_admin_1')
-    fs.rmSync(baseDir, { force: true, recursive: true })
+    await prisma.$disconnect()
+    fs.rmSync(databasePath, { force: true })
   }
 })
 
 test('集成测试 2：高危操作/全局记忆审批挂起与微信端【确认】系统回显', async () => {
-  const baseDir = path.join(
-    os.tmpdir(),
-    `mio-approval-test-${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-  )
-  const memory = new MemoryStore({ agentId: 'ch_approval_200', baseDir })
+  const { databasePath, prisma } = await createPrismaFixture('approval-test')
+  const memory = new DatabaseMemoryStore({ agentId: 'ch_approval_200', prisma })
+  await memory.ensure()
   const client = createMockClient()
   const channelId = 'ch_approval_200'
 
@@ -247,16 +272,15 @@ test('集成测试 2：高危操作/全局记忆审批挂起与微信端【确�
     console.error('TEST 2 ERROR:', err)
     throw err
   } finally {
-    fs.rmSync(baseDir, { force: true, recursive: true })
+    await prisma.$disconnect()
+    fs.rmSync(databasePath, { force: true })
   }
 })
 
 test('集成测试 3：不可记住的 Shell 审批在渠道端展示完整命令 payload', async () => {
-  const baseDir = path.join(
-    os.tmpdir(),
-    `mio-approval-command-test-${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-  )
-  const memory = new MemoryStore({ agentId: 'ch_approval_300', baseDir })
+  const { databasePath, prisma } = await createPrismaFixture('approval-command-test')
+  const memory = new DatabaseMemoryStore({ agentId: 'ch_approval_300', prisma })
+  await memory.ensure()
   const client = createMockClient()
   const chn = new OneBotChannel({
     channelId: 'ch_approval_300',
@@ -297,16 +321,15 @@ test('集成测试 3：不可记住的 Shell 审批在渠道端展示完整命�
     })
     assert.equal((await pending).approved, true)
   } finally {
-    fs.rmSync(baseDir, { force: true, recursive: true })
+    await prisma.$disconnect()
+    fs.rmSync(databasePath, { force: true })
   }
 })
 
 test('集成测试 4：Web 端主动发消息，工具调用+文本流+完成帧正常推送，旧 Socket 废弃重连时动态路由至新客户端', async () => {
-  const baseDir = path.join(
-    os.tmpdir(),
-    `mio-web-send-test-${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-  )
-  const memory = new MemoryStore({ agentId: 'ch_web_send_400', baseDir })
+  const { databasePath, prisma } = await createPrismaFixture('web-send-test')
+  const memory = new DatabaseMemoryStore({ agentId: 'ch_web_send_400', prisma })
+  await memory.ensure()
   const channelId = 'ch_web_send_400'
   const session = await memory.createSession({ title: 'Web发起的测试会话' })
   await memory.setActiveSession(session.id)
@@ -452,16 +475,15 @@ test('集成测试 4：Web 端主动发消息，工具调用+文本流+完成帧
   } finally {
     sessions.pool.delete('admin_user_400')
     sessions.cache.delete('admin_user_400')
-    fs.rmSync(baseDir, { force: true, recursive: true })
+    await prisma.$disconnect()
+    fs.rmSync(databasePath, { force: true })
   }
 })
 
 test('集成测试 5：Web 端连续发送消息触发批处理合并 (Batch Merging)，被合并的消息均收到 complete 广播', async () => {
-  const baseDir = path.join(
-    os.tmpdir(),
-    `mio-batch-test-${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-  )
-  const memory = new MemoryStore({ agentId: 'ch_batch_500', baseDir })
+  const { databasePath, prisma } = await createPrismaFixture('batch-test')
+  const memory = new DatabaseMemoryStore({ agentId: 'ch_batch_500', prisma })
+  await memory.ensure()
   const channelId = 'ch_batch_500'
   const session = await memory.createSession({ title: '批处理测试会话' })
   await memory.setActiveSession(session.id)
@@ -569,6 +591,7 @@ test('集成测试 5：Web 端连续发送消息触发批处理合并 (Batch Mer
   } finally {
     sessions.pool.delete('admin_user_500')
     sessions.cache.delete('admin_user_500')
-    fs.rmSync(baseDir, { force: true, recursive: true })
+    await prisma.$disconnect()
+    fs.rmSync(databasePath, { force: true })
   }
 })
