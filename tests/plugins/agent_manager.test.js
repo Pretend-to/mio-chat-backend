@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 
 import AgentModelTool from '../../lib/plugins/agent-manager-plugin/tools/agent_model.js'
 import AgentProfileTool from '../../lib/plugins/agent-manager-plugin/tools/agent_profile.js'
+import AgentSoulTool from '../../lib/plugins/agent-manager-plugin/tools/agent_soul.js'
+import AgentDeliveryTool from '../../lib/plugins/agent-manager-plugin/tools/agent_delivery.js'
 import AgentSessionTool from '../../lib/plugins/agent-manager-plugin/tools/agent_session.js'
 
 test('agent_profile persists fields on the current Agent', async () => {
@@ -29,22 +31,15 @@ test('agent_profile persists fields on the current Agent', async () => {
       action: 'update',
       description: 'Research',
       name: 'Mio',
-      soul: 'Careful',
     },
   })
   assert.equal(updated.success, true)
-  assert.equal(updated.agent.name, 'Mio')
-  assert.equal(updated.agent.description, 'Research')
-  assert.equal(updated.agent.soul, 'Careful')
-
-  const appended = await tool.execute({
-    agentId: 'agent-a',
-    params: { action: 'append_soul', soul: 'Concise' },
-  })
-  assert.equal(appended.agent.soul, 'Careful\n\nConcise')
+  assert.equal(updated.profile.name, 'Mio')
+  assert.equal(updated.profile.description, 'Research')
+  assert.deepEqual(updated.changed.name, { before: 'Old name', after: 'Mio' })
 })
 
-test('agent_profile updates the public default delivery Channel ID', async () => {
+test('agent_delivery sets and explicitly clears the public default delivery Channel ID', async () => {
   let patchSeen = null
   const service = {
     async get() {
@@ -55,20 +50,19 @@ test('agent_profile updates the public default delivery Channel ID', async () =>
       return { id: 'agent-a', defaultDeliveryBindingId: null }
     },
   }
-  const tool = new AgentProfileTool({ service })
+  const tool = new AgentDeliveryTool({ service })
   await tool.execute({
     agentId: 'agent-a',
     params: {
-      action: 'update',
-      defaultDeliveryChannelId: 'feishu',
+      action: 'set',
+      channelId: 'feishu',
     },
   })
   assert.deepEqual(patchSeen, { defaultDeliveryChannelId: 'feishu' })
   await tool.execute({
     agentId: 'agent-a',
     params: {
-      action: 'update',
-      defaultDeliveryChannelId: null,
+      action: 'clear',
     },
   })
   assert.deepEqual(patchSeen, { defaultDeliveryChannelId: null })
@@ -238,4 +232,26 @@ test('agent_session cannot create or directly delete SubAgent Sessions', async (
   })
   assert.equal(deleted.success, false)
   assert.match(deleted.error, /SubAgent Run/)
+})
+
+test('self-management tools reject action/field mismatches without applying changes', async () => {
+  const service = {
+    get: async () => ({ id: 'agent-a' }),
+    update: async () => assert.fail('invalid update must not be applied'),
+  }
+  const profile = new AgentProfileTool({ service })
+  const soul = new AgentSoulTool({ service })
+  const delivery = new AgentDeliveryTool({ service })
+  for (const [tool, params] of [
+    [profile, { action: 'read', name: 'ignored' }],
+    [profile, { action: 'update', soul: 'wrong tool' }],
+    [profile, { action: 'update' }],
+    [profile, { name: 'missing action' }],
+    [soul, { action: 'clear', soul: 'contradictory' }],
+    [soul, { action: 'append', soul: '' }],
+    [delivery, { action: 'set' }],
+    [delivery, { action: 'clear', channelId: 'ignored' }],
+  ]) {
+    await assert.rejects(() => tool.execute({ agentId: 'agent-a', params }))
+  }
 })

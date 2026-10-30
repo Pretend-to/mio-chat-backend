@@ -18,6 +18,7 @@ import {
   getSessionYolo,
   setSessionYolo,
 } from '../../lib/chat/sessionExecutionState.js'
+import { buildMessageContext } from '../../lib/chat/messageContext.js'
 import { ensureMessageTime } from '../../lib/chat/messageTimestamp.js'
 import {
   appendFileReferences,
@@ -787,7 +788,7 @@ export class BaseChannel {
 
   /** 统一消息路由入口：拦截确认 -> Slash 指令 -> 主路会话排队 */
   async _route(text, ctx) {
-    ctx.messageTime = ensureMessageTime(ctx.messageTime)
+    ctx.messageTime = ensureMessageTime(ctx.messageTime || ctx.envelope?.message?.sentAt)
 
     if (ctx?.contextToken) {
       this.latestContextToken = ctx.contextToken
@@ -812,35 +813,29 @@ export class BaseChannel {
     if (text.trim().startsWith('/')) {
       const trimmed = text.trim()
       // 专属于旁路即时插话的 /btw 指令
-      if (
-        trimmed === '/btw' ||
-        trimmed.startsWith('/btw ') ||
-        trimmed.startsWith('/btw\n')
-      ) {
+      let slashRes
+      if (/^\/btw(?:\s|$)/.test(trimmed)) {
         const followupText = trimmed.slice(4).trim()
         const sid = ctx.sid || (await this.memory.getActiveSession())
         const activeJob = sid ? this.activeJobs.get(sid) : null
         if (activeJob) {
-          return this._handleTransientFollowup(
+          slashRes = await this._handleTransientFollowup(
             followupText || '汇报一下当前任务的最新进度',
             activeJob,
             ctx,
           )
         } else {
-          return this._safeSend(
-            ctx.from,
-            ctx.contextToken,
-            '当前没有正在执行的后台任务哦～如有问题可直接发送给我～',
-          )
+          slashRes = { text: '当前没有正在执行的后台任务哦～如有问题可直接发送给我～' }
         }
+      } else {
+        slashRes = await this.slashHandler.handle(trimmed, ctx)
       }
-
-      const slashRes = await this.slashHandler.handle(text.trim(), ctx)
       if (slashRes?.text) {
         if (ctx.isWeb && ctx.webClient && ctx.messageId) {
           const metaData = {
             contactorId: ctx.channelId,
             messageId: ctx.messageId,
+            sessionId: ctx.sessionId || ctx.sid,
           }
           ctx.webClient.sendOpenaiMessage(
             'update',
@@ -855,6 +850,9 @@ export class BaseChannel {
             'complete',
             {
               metaData,
+              ...(ctx.sid && ctx.sid !== ctx.sessionId
+                ? { selectedSessionId: ctx.sid }
+                : {}),
             },
             ctx.messageId,
           )
@@ -1150,7 +1148,7 @@ export class BaseChannel {
     if (!ctx.contextToken && this.latestContextToken) {
       ctx.contextToken = this.latestContextToken
     }
-    ctx.messageTime = ensureMessageTime(ctx.messageTime)
+    ctx.messageTime = ensureMessageTime(ctx.messageTime || ctx.envelope?.message?.sentAt)
     this.log?.info?.(
       `[${this.channelType}] 📥 接收外部/唤醒消息并加入会话队列 | 会话: ${targetSid} | 来源: ${options.source || options.from || 'trigger'} | 目标接收者: ${ctx.from}`,
     )
@@ -1165,7 +1163,7 @@ export class BaseChannel {
 
   /** 处理任务执行中途的用户即时插话 */
   async _handleTransientFollowup(text, activeJob, ctx) {
-    ctx.messageTime = ensureMessageTime(ctx.messageTime)
+    ctx.messageTime = ensureMessageTime(ctx.messageTime || ctx.envelope?.message?.sentAt)
     const elapsedSec = Math.floor((Date.now() - activeJob.startTime) / 1000)
     const promptStatus = [
       `【系统上下文 - 即时任务状态】`,
@@ -1217,6 +1215,7 @@ export class BaseChannel {
         model: this.model,
         messageTime: ctx.messageTime,
         onEmitTextBlock: async (msgContent) => {
+          if (ctx.isWeb) return
           if (msgContent?.trim()) {
             await this._safeSend(
               ctx.from,
@@ -1230,6 +1229,7 @@ export class BaseChannel {
         soul: (await this.memory.readSoul()) || '',
         text: promptStatus,
       })
+      if (ctx.isWeb) return { text: reply?.text?.trim() || '当前任务仍在执行中。' }
       if (reply?.text?.trim()) {
         await this._safeSend(
           ctx.from,
@@ -1239,11 +1239,9 @@ export class BaseChannel {
       }
     } catch (e) {
       this.log?.warn?.(`[${this.channelType}] 临时插话回复失败: ${e.message}`)
-      await this._safeSend(
-        ctx.from,
-        ctx.contextToken || this.latestContextToken,
-        `我正在后台全力处理刚才的任务（已运行 ${elapsedSec}s），马上就好哦～`,
-      )
+      const fallback = `我正在后台全力处理刚才的任务（已运行 ${elapsedSec}s），马上就好哦～`
+      if (ctx.isWeb) return { text: fallback }
+      await this._safeSend(ctx.from, ctx.contextToken || this.latestContextToken, fallback)
     }
   }
 
@@ -1310,7 +1308,7 @@ export class BaseChannel {
   async _processChatWithLease(text, ctx) {
     // 消息时间由公共管线统一生成，与具体渠道协议解耦。后续的 Web 镜像、
     // session 持久化和 LLM 请求必须复用同一个值，保证跨轮次输入稳定。
-    ctx.messageTime = ensureMessageTime(ctx.messageTime)
+    ctx.messageTime = ensureMessageTime(ctx.messageTime || ctx.envelope?.message?.sentAt)
     text = appendFileReferences(text, ctx.files)
     const outputPort = this._resolveOutputPort(ctx)
 
@@ -1383,7 +1381,9 @@ export class BaseChannel {
       ctx.messageId ||
       `msg_a_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
 
-    const emittedBlocks = []
+    ctx.envelope = buildMessageContext({ ...ctx, sessionId: sid })
+
+    let emittedBlocks = []
     let didEmitTextBlock = false
     const executionMetadata = {
       ...(ctx.envelope ? channelEnvelopeMetadata(ctx.envelope) : {}),
@@ -1920,6 +1920,46 @@ export class BaseChannel {
         },
         onChatEvent: (event) => {
           activeChatEvent = event
+        },
+        onAdjustmentCheckpoint: async ({ content = [] } = {}) => {
+          if (!assistantPersistenceId) return
+          await persistenceQueue
+          await assertSessionLease()
+          const fullAssistantReply = emittedBlocks.join('\n\n')
+          const assistantContent = Array.isArray(content) ? [...content] : []
+          if (
+            fullAssistantReply.trim() &&
+            !assistantContent.some(
+              (block) => block.type === 'text' && block.data?.text?.trim(),
+            )
+          ) {
+            assistantContent.push({
+              data: { text: fullAssistantReply.trim() },
+              type: 'text',
+            })
+          }
+          await this.memory.finalizeAssistantMessage(
+            assistantPersistenceId,
+            {
+              content: assistantContent,
+              role: 'assistant',
+              text: fullAssistantReply,
+              time: Date.now(),
+            },
+            'final',
+          )
+          assistantPersistenceId = null
+          emittedBlocks = []
+        },
+        onAdjustmentSegmentStart: async ({ messageId } = {}) => {
+          await assertSessionLease()
+          assistantPersistenceId = await this.memory.beginAssistantMessage(sid, {
+            content: [],
+            id: String(messageId || `msg_a_${Date.now()}`),
+            role: 'assistant',
+            text: '',
+            time: Date.now(),
+          })
         },
         pendingMemories,
         approvalTarget: ctx.approvalTarget,

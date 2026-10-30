@@ -22,10 +22,10 @@
  *   - /context 当前话题记忆结晶查看
  *   - /delete 删除会话
  */
-import { randomUUID } from 'node:crypto'
 import { getAgentToolNames } from '../../lib/chat/llm/toolPolicy.js'
 import { getChatEventDispatcher } from '../../lib/chat/llm/events/ChatEventDispatcher.js'
 import { getTriggerService } from '../../lib/triggers/index.js'
+import { randomUUID } from 'node:crypto'
 import {
   getSessionYolo,
   setSessionYolo,
@@ -186,28 +186,33 @@ export class SlashHandler {
         if (!agentId || !sessionId) {
           return wrap('当前入口没有可调整的 Agent Session。')
         }
-        const eventId = `adjust_${randomUUID()}`
+        const eventId = ctx.isWeb && ctx.messageId
+          ? String(ctx.messageId)
+          : `adjust_${randomUUID()}`
         const result = await getChatEventDispatcher().adjustActive({
           agentId,
           conversationKey: `agent:${agentId}:session:${sessionId}`,
           eventId,
           idempotencyKey: eventId,
           instruction: arg,
+          envelope: ctx.envelope,
+          messageTime: ctx.messageTime,
+          adjustmentText: arg,
+          messageId: eventId,
+          contactorId: ctx.channelId || agentId,
           principalId: ctx.principal?.id || null,
           requestId: eventId,
           sessionId,
           source: ctx.isWeb ? 'web' : 'channel',
+          userMessageId: ctx.userMessageId || `msg_u_adjust_${eventId}`,
         })
         if (result?.status === 'accepted_for_checkpoint') {
-          return wrap('已将补充指令插入当前任务，将在当前工具步骤结束后并入后续处理。')
+          return null
         }
-        if (result?.status === 'defer_to_next_turn') {
-          return wrap('当前任务暂不在可插话阶段；这条指令没有插入，请等当前回复结束后再发送。')
+        if (typeof this.channel?._processChat === 'function') {
+          return await this.channel._processChat(arg, ctx)
         }
-        if (result?.status === 'closed') {
-          return wrap('当前没有正在运行的任务可调整。')
-        }
-        return wrap('当前任务无法接收这条调整指令。')
+        return wrap('当前入口无法将调整作为新消息提交。')
       }
 
       case 'tools': {

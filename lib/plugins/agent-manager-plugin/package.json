@@ -1,7 +1,7 @@
 {
   "name": "agent-manager-plugin",
   "version": "1.0.0",
-  "description": "Core tools for Agent profile, model, Session and SubAgent run management",
+  "description": "Core tools for Agent profile, persona, delivery, model, Session and SubAgent run management",
   "type": "module",
   "main": "index.js",
   "author": "mio",

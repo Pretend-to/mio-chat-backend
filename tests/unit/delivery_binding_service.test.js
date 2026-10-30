@@ -45,6 +45,10 @@ function prismaFixture({
           : {
               id: 'agent-1',
               defaultDeliveryBindingId,
+              channelBindings: bindings.map((binding, index) => ({
+                ...binding,
+                createdAt: new Date(index),
+              })),
             },
     },
     agentChannelBinding: {
@@ -93,7 +97,7 @@ test('delivery resolver accepts public Channel ID and supports session_only', as
   assert.deepEqual(
     channels.map((channel) => [channel.channelId, channel.isDefault]),
     [
-      ['wechat', false],
+      ['wechat', true],
       ['feishu', false],
     ],
   )
@@ -106,7 +110,7 @@ test('Web is filtered and never becomes an external delivery target', async () =
     deliveryMode: DELIVERY_MODES.DEFAULT,
     prisma,
   })
-  assert.equal(fallback.binding, null)
+  assert.equal(fallback.binding.channelId, 'wechat')
   await assert.rejects(
     resolveDeliveryBinding({
       agentId: 'agent-1',
@@ -154,11 +158,28 @@ test('default resolver backfills exactly one legacy external binding', async () 
   assert.equal(result.binding.id, 'binding-wechat')
 })
 
-test('default resolver does not guess among multiple legacy external bindings', async () => {
+test('default resolver selects the oldest bound external channel among multiple candidates', async () => {
   const result = await resolveDeliveryBinding({
     agentId: 'agent-1',
     deliveryMode: DELIVERY_MODES.DEFAULT,
     prisma: prismaFixture({ defaultDeliveryBindingId: null }),
   })
-  assert.equal(result.binding, null)
+  assert.equal(result.binding.channelId, 'wechat')
+})
+
+test('autonomous scheduling uses the latest Agent default instead of its previous channel', async () => {
+  const prisma = prismaFixture({ defaultDeliveryBindingId: 'binding-wechat' })
+  const inherited = { bindingId: 'binding-feishu', triggerKind: 'task' }
+  const result = await resolveDeliveryBinding({
+    agentId: 'agent-1',
+    event: inherited,
+    prisma,
+  })
+  assert.equal(result.binding.id, 'binding-wechat')
+  const wrapped = await resolveDeliveryBinding({
+    agentId: 'agent-1',
+    event: { bindingId: 'binding-feishu', parentEvent: { isWake: true } },
+    prisma,
+  })
+  assert.equal(wrapped.binding.id, 'binding-wechat')
 })

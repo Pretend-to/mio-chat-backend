@@ -184,6 +184,8 @@ Agent
 | HTTP 路由 | 126 | `lib/server/http/index.js` |
 | Socket 协议 | 4 | `llm` / `onebot` / `system` / `logs` |
 
+Agent 自我管理工具按资料、长期人格和默认投递拆分；后台 Agent 可沿用默认外部渠道安排下一次工作。详见 [自我管理与默认投递](docs/architecture/agent-self-management.md)。
+
 ## Hooks 机制
 
 Mio-Chat V3 采用面向切面编程的设计理念。通过一系列生命周期钩子，你可以精准控制 Agent 的每一步操作。**7 个核心挂载点**（全系统共 16 个）：

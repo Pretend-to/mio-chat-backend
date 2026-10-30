@@ -44,11 +44,12 @@ test('channel metadata envelope is stable, allowlisted, and attribute-escaped', 
   }
   const wrapped = wrapUserMessageWithMetadata('hello', time, envelope)
 
-  assert.match(wrapped, /^<message version="2" channel="工作微信"/)
-  assert.match(wrapped, /user_id="user&lt;1&gt;"/)
-  assert.match(wrapped, /user_name="A &amp; &quot;B&quot;"/)
+  assert.match(wrapped, /^<message version="3" kind="message">/)
+  assert.match(wrapped, /channel_name="工作微信"/)
+  assert.match(wrapped, /id="user&lt;1&gt;"/)
+  assert.match(wrapped, /name="A &amp; &quot;B&quot;"/)
   assert.doesNotMatch(wrapped, /must-not-leak|secret/)
-  assert.equal(wrapUserMessageWithMetadata(wrapped, time, envelope), wrapped)
+  assert.match(wrapUserMessageWithMetadata(wrapped, time, envelope), /&lt;message/)
 })
 
 test('channel history wraps persisted user times without mutating stored messages', () => {
@@ -68,10 +69,9 @@ test('channel history wraps persisted user times without mutating stored message
   ]
   const before = JSON.stringify(history)
   const converted = convertChatHistoryToLLMMessages(history)
-  const iso = formatMessageTime(history[0].time)
 
   assert.equal(converted[0].role, 'user')
-  assert.equal(converted[0].content[0].text, `<message time="${iso}">\nhello\n</message>`)
+  assert.equal(converted[0].content[0].text, wrapUserMessageWithMetadata('hello', history[0].time))
   assert.equal(JSON.stringify(history), before)
 })
 
@@ -114,10 +114,10 @@ test('current channel input and persisted history use stable timestamp envelopes
     text: 'current',
   })
 
-  const expected = `<message time="${formatMessageTime(messageTime)}">`
+  const expected = new Date(messageTime).toISOString()
   assert.ok(result.content.some((item) => item.type === 'text' && item.data?.text === 'ok'))
-  assert.ok(observed.some((m) => m.role === 'user' && m.content[0]?.text?.includes(`${expected}\nprevious`)))
-  assert.ok(observed.some((m) => m.role === 'user' && m.content[0]?.text?.includes(`${expected}\ncurrent`)))
+  assert.ok(observed.some((m) => m.role === 'user' && m.content[0]?.text?.includes(expected) && m.content[0]?.text?.includes('\nprevious\n')))
+  assert.ok(observed.some((m) => m.role === 'user' && m.content[0]?.text?.includes(expected) && m.content[0]?.text?.includes('\ncurrent\n')))
 })
 
 test('multimodal channel input round-trips to the identical request content', () => {

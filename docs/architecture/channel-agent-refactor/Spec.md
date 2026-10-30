@@ -113,6 +113,12 @@ model Agent {
 - `defaultSessionId` 仅表示新入口的默认选择，不表示所有入口共享的“当前会话”。
 - Agent 删除是明确的破坏性操作，见第 9 节。
 
+### 4.1.1 默认投递与自我管理工具
+
+Agent 的默认投递目标从自身已绑定、启用且允许出站的非 Web 渠道中，按绑定创建时间选择最早一个；没有候选时为空。已有手工选择优先，显式清空保持为空，恢复自动选择使用明确操作。临时离线不改变目标；投递为空不阻止 Agent / Session 执行或创建下一次自主定时任务。
+
+资料、长期人格、默认投递分别由 `agent_profile`、`agent_soul`、`agent_delivery` 管理。创建定时任务、唤起兼容判定与实际执行必须共用默认解析规则。详细动作契约和现有 Agent 的处理规则见 [Agent 自我管理与默认投递](../agent-self-management.md)。
+
 ### 4.2 Channel
 
 ```prisma
@@ -786,3 +792,7 @@ schema diff 增量同步，未受影响的表和记录应保留；涉及列删�
 8. 新建 Agent UI 不出现任何内部身份字段；
 9. 旧 API 使用量归零或具备明确延期批准；
 10. [TestPlan.md](./TestPlan.md) 中所有 P0/P1 验收项通过。
+
+### 服务端 Agent 消息来源与浏览器能力
+
+Web、外部渠道、任务唤起与插话的模型输入采用统一消息上下文；在线浏览器是每轮运行时能力。字段与目标选择规则见 [agent-message-context.md](../agent-message-context.md)。

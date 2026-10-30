@@ -218,7 +218,7 @@ test('SessionWorkCoordinator reuses an existing lease row without another create
 test('SessionWorkCoordinator resolves the Agent default delivery binding for Session wakes', async (t) => {
   const prisma = await fixture(t)
   const target = await createTarget(prisma)
-  await prisma.channel.create({ data: { id: 'channel-default', type: 'web' } })
+  await prisma.channel.create({ data: { id: 'channel-default', type: 'wechat' } })
   await prisma.agentChannelBinding.create({
     data: {
       agentId: target.agentId,

@@ -209,6 +209,8 @@ model LLMCallLog {
   tps               Float? // 端到端输出吞吐 (candidates tokens / request latency seconds)
   status            String   @default("SUCCESS") // 状态: SUCCESS (成功) | FAILED (异常失败) | ABORTED (用户中止)
   errorMessage      String?  @map("error_message") // 失败异常时的错误堆栈/原因
+  errorStack        String?  @map("error_stack") // 异常调用栈
+  requestBody       String?  @map("request_body") // 失败轮次的脱敏请求快照 JSON
   createdAt         DateTime @default(now()) @map("created_at")
 
   @@index([requestId])
