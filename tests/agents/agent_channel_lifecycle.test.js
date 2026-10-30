@@ -110,7 +110,8 @@ test('create Agent atomically creates initial Session and Web binding without cl
     new Set(result.bindings.map((item) => item.channelId)),
     new Set([WEB_CHANNEL_ID, 'wechat']),
   )
-  assert.equal(result.agent.defaultDeliveryBindingId, null)
+  assert.equal(result.agent.defaultDeliveryBindingId,
+    result.bindings.find(binding => binding.channelId === 'wechat').id)
   assert.deepEqual(
     result.agent.deliveryChannels.map((item) => item.channelId),
     ['wechat'],

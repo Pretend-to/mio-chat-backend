@@ -183,6 +183,8 @@ Offline autonomy with a visual inspection dashboard.
 | HTTP routes | 126 | `lib/server/http/index.js` |
 | Socket protocols | 4 | `llm` / `onebot` / `system` / `logs` |
 
+Agent self-management separates profile, long-term persona, and default delivery. Background Agents can schedule their next work using their default external channel. See [self-management and delivery](docs/architecture/agent-self-management.md).
+
 ## Hooks
 
 Mio-Chat V3 is built around aspect-oriented interception. The **7 core mount points** (16 in total system-wide) let you control every step of the agent:

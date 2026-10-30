@@ -206,7 +206,7 @@ test('BaseLLMAdapter injects adjustments after ordered tool results', async (t) 
     return { result: `result:${toolCallData.name}` }
   }
 
-  const active = createRunningEvent()
+  const active = createRunningEvent({ agentId: 'agent-1' })
   const incoming = createAdjustment({
     conversationKey: active.conversationKey,
     sessionId: active.sessionId,
@@ -246,7 +246,9 @@ test('BaseLLMAdapter injects adjustments after ordered tool results', async (t) 
   const continuation = messages.at(-1)
   assert.equal(checkpointSawResults, true)
   assert.equal(continuation.role, 'user')
-  assert.equal(continuation.content, incoming.instruction)
+  assert.match(continuation.content, /^<message version="3" kind="adjustment">/)
+  assert.ok(continuation.content.includes(incoming.instruction))
+  assert.match(continuation.content, /message_id="work-1"/)
   assert.equal(continuation._is_recursive_context, true)
   assert.equal(continuation._workEventId, incoming.eventId)
   assert.equal(continuation._wakeKind, incoming.wakeKind)

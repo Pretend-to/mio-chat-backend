@@ -82,6 +82,12 @@ export function normalizeChannelEnvelope(input = {}) {
 
 export function channelEnvelopeMetadata(envelope) {
   const normalized = normalizeChannelEnvelope(envelope)
+  if (envelope.version === 3) {
+    normalized.version = 3
+    normalized.kind = envelope.kind
+    normalized.client = envelope.client
+    normalized.network = envelope.network
+  }
   const { raw: _raw, ...safe } = normalized
   return safe
 }
